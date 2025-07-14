@@ -374,8 +374,11 @@ This is a private repository. For maintenance:
 
 ## 📄 License
 
-Private - All rights reserved
-Copyright (c) 2024 scthornton
+## License
+
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
+
+Copyright (c) 2025 Scott C Thornton, scthornton
 
 ## 🆘 Support
 
