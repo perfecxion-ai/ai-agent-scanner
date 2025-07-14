@@ -1,0 +1,127 @@
+{
+  "openai": {
+    "name": "OpenAI API",
+    "paths": ["/v1/chat/completions", "/v1/completions", "/v1/models", "/v1/"],
+    "headers": ["openai-organization", "openai-version", "openai-model"],
+    "response_patterns": [
+      "openai",
+      "gpt-",
+      "text-davinci",
+      "text-curie",
+      "text-babbage",
+      "text-ada",
+      "code-davinci",
+      "whisper",
+      "dall-e"
+    ],
+    "ports": [443, 80],
+    "risk_level": "high"
+  },
+  "anthropic": {
+    "name": "Anthropic Claude API",
+    "paths": ["/v1/messages", "/v1/complete", "/v1/"],
+    "headers": ["anthropic-version", "x-api-key"],
+    "response_patterns": [
+      "anthropic",
+      "claude",
+      "assistant",
+      "human",
+      "ai"
+    ],
+    "ports": [443, 80],
+    "risk_level": "high"
+  },
+  "google": {
+    "name": "Google AI Services",
+    "paths": ["/v1/models", "/v1/generateContent", "/v1beta/models"],
+    "headers": ["x-goog-api-key", "authorization"],
+    "response_patterns": [
+      "google",
+      "gemini",
+      "palm",
+      "bard",
+      "generativeai"
+    ],
+    "ports": [443, 80],
+    "risk_level": "high"
+  },
+  "azure": {
+    "name": "Azure OpenAI Service",
+    "paths": ["/openai/deployments", "/cognitive/openai"],
+    "headers": ["ocp-apim-subscription-key", "api-key"],
+    "response_patterns": [
+      "azure",
+      "openai",
+      "cognitive",
+      "deployments"
+    ],
+    "ports": [443, 80],
+    "risk_level": "high"
+  },
+  "huggingface": {
+    "name": "Hugging Face API",
+    "paths": ["/models", "/api/models", "/pipeline"],
+    "headers": ["authorization"],
+    "response_patterns": [
+      "huggingface",
+      "transformers",
+      "pipeline",
+      "model_id"
+    ],
+    "ports": [443, 80, 8000],
+    "risk_level": "medium"
+  },
+  "cohere": {
+    "name": "Cohere API",
+    "paths": ["/v1/generate", "/v1/embed", "/v1/classify"],
+    "headers": ["authorization", "cohere-version"],
+    "response_patterns": [
+      "cohere",
+      "generations",
+      "embeddings",
+      "classifications"
+    ],
+    "ports": [443, 80],
+    "risk_level": "high"
+  },
+  "replicate": {
+    "name": "Replicate API",
+    "paths": ["/v1/predictions", "/v1/models"],
+    "headers": ["authorization"],
+    "response_patterns": [
+      "replicate",
+      "predictions",
+      "version"
+    ],
+    "ports": [443, 80],
+    "risk_level": "medium"
+  },
+  "ollama": {
+    "name": "Ollama Local AI",
+    "paths": ["/api/generate", "/api/chat", "/api/tags"],
+    "headers": ["content-type"],
+    "response_patterns": [
+      "ollama",
+      "llama",
+      "model",
+      "done"
+    ],
+    "ports": [11434, 8080, 3000],
+    "risk_level": "medium"
+  },
+  "custom_chatbot": {
+    "name": "Custom Chatbot",
+    "paths": ["/chat", "/api/chat", "/bot", "/assistant"],
+    "headers": ["content-type"],
+    "response_patterns": [
+      "chatbot",
+      "bot",
+      "assistant",
+      "ai",
+      "message",
+      "response"
+    ],
+    "ports": [443, 80, 8000, 3000],
+    "risk_level": "medium"
+  }
+}

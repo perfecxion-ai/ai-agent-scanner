@@ -1,0 +1,96 @@
+# AI Agent Scanner - Git Ignore
+# Author: scthornton
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Virtual environments
+venv/
+env/
+ENV/
+ai-scanner-env/
+.env
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+ai_agent_scanner.db
+
+# Logs
+*.log
+logs/
+log/
+
+# Security-sensitive files
+.env.local
+.env.production
+secrets.txt
+api_keys.txt
+credentials.json
+
+# Test coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Scan results (optional - uncomment if you don't want to track results)
+# results/
+# scan_results/
+# *.json
+
+# Configuration overrides (keep templates, ignore local configs)
+config/local/
+local_config.py

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent Scanner - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <header class="bg-white shadow-sm border-b">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🤖</span>
+                    <h1 class="text-xl font-bold text-gray-900">AI Agent Scanner</h1>
+                </div>
+                <nav class="flex space-x-6">
+                    <a href="#dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
+                    <a href="#agents" class="text-gray-600 hover:text-gray-900">Agents</a>
+                    <a href="#scans" class="text-gray-600 hover:text-gray-900">Scans</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <!-- Dashboard Overview -->
+        <div class="mb-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-6">Security Overview</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-blue-100 rounded-lg">
+                            <span class="text-2xl">🤖</span>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Agents Found</p>
+                            <p class="text-2xl font-bold text-gray-900" id="agents-count">-</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-red-100 rounded-lg">
+                            <span class="text-2xl">⚠️</span>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Vulnerabilities</p>
+                            <p class="text-2xl font-bold text-red-600" id="vulns-count">-</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-yellow-100 rounded-lg">
+                            <span class="text-2xl">📊</span>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Risk Score</p>
+                            <p class="text-2xl font-bold text-yellow-600" id="risk-score">-</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-green-100 rounded-lg">
+                            <span class="text-2xl">🔍</span>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Last Scan</p>
+                            <p class="text-sm font-bold text-gray-900" id="last-scan">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Start New Scan -->
+        <div class="bg-white rounded-lg shadow-lg p-8 mb-8">
+            <h3 class="text-2xl font-bold mb-6">🔍 Start New Scan</h3>
+            
+            <form id="scanForm" class="space-y-6">
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Scan Name</label>
+                        <input type="text" id="scanName" 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                               placeholder="Network Security Scan">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Scan Type</label>
+                        <select id="scanType" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                            <option value="full">Full Scan (Discovery + Security)</option>
+                            <option value="discovery_only">Discovery Only</option>
+                            <option value="security_only">Security Testing Only</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Network Ranges</label>
+                    <textarea id="networkRanges" 
+                              class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                              placeholder="192.168.1.0/24&#10;10.0.0.0/8&#10;company.com"
+                              rows="3"></textarea>
+                    <p class="text-xs text-gray-500 mt-1">Enter IP ranges and domains, one per line</p>
+                </div>
+                
+                <button type="submit" id="startScanBtn"
+                        class="w-full bg-blue-600 text-white py-4 px-8 rounded-md hover:bg-blue-700 transition duration-200 font-medium text-lg">
+                    🚀 Start Scan
+                </button>
+            </form>
+        </div>
+
+        <!-- Recent Scans -->
+        <div class="bg-white rounded-lg shadow-lg p-8">
+            <h3 class="text-2xl font-bold mb-6">Recent Scans</h3>
+            <div id="recent-scans" class="space-y-4">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
