@@ -94,3 +94,14 @@ temp/
 # Configuration overrides (keep templates, ignore local configs)
 config/local/
 local_config.py
+
+# AI tool artifacts
+.claude/
+CLAUDE.md
+claude.md
+planning.md
+status.md
+notes.md
+todo.md
+*.chat
+*.conversation
