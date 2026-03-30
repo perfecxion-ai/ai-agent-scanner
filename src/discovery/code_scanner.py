@@ -6,12 +6,11 @@ API keys, endpoint configurations, and AI framework usage patterns.
 Works without any optional dependencies — uses only stdlib.
 """
 
-import asyncio
 import logging
 import os
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any
 import uuid
 
 

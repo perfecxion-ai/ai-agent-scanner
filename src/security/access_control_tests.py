@@ -17,14 +17,10 @@ vulnerabilities in their AI systems for remediation purposes.
 
 import asyncio
 import aiohttp
-import json
 import logging
 import base64
-import hashlib
-import secrets
-import re
-from typing import List, Dict, Any, Optional, Tuple
-from urllib.parse import urljoin, urlparse
+from typing import List, Dict, Any, Optional
+from urllib.parse import urljoin
 import uuid
 from datetime import datetime
 
@@ -128,7 +124,7 @@ class AccessControlTester:
     async def _test_authentication_bypass(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for authentication bypass vulnerabilities"""
         vulnerabilities = []
-        endpoint = agent.get('endpoint')
+        agent.get('endpoint')
         
         bypass_tests = [
             # No authentication
@@ -344,7 +340,7 @@ class AccessControlTester:
                                 'agent_id': agent.get('id'),
                                 'vulnerability_type': 'authorization_bypass',
                                 'severity': 'high',
-                                'title': f"Authorization Bypass - Admin Access",
+                                'title': "Authorization Bypass - Admin Access",
                                 'description': f"Agent allows unauthorized access to admin functionality via {path}",
                                 'path': path,
                                 'full_url': test_url,

@@ -19,13 +19,11 @@ you own or have explicit permission to test.
 
 import asyncio
 import aiohttp
-import json
 import logging
 import re
 from typing import List, Dict, Any, Optional
-from urllib.parse import urljoin
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from src.utils.request_builder import construct_agent_request
 

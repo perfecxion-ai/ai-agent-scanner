@@ -1,7 +1,5 @@
 import asyncio
 import aiohttp
-import socket
-import ssl
 from typing import List, Dict, Any
 import ipaddress
 import dns.resolver
@@ -73,7 +71,7 @@ class NetworkScanner:
                         for agent in host_agents:
                             agent['domain'] = subdomain_host
                         agents.extend(host_agents)
-                except:
+                except Exception:
                     continue
         
         except Exception as e:
@@ -113,7 +111,7 @@ class NetworkScanner:
             writer.close()
             await writer.wait_closed()
             return True
-        except:
+        except Exception:
             return False
     
     async def _identify_ai_service(self, host: str, port: int, 
@@ -156,13 +154,13 @@ class NetworkScanner:
                                         }
                                         agents.append(agent)
                                         break
-                            except:
+                            except Exception:
                                 continue
                 
                 if agents:  # Found service, no need to try other schemes
                     break
                     
-            except Exception as e:
+            except Exception:
                 continue
         
         return agents
@@ -182,7 +180,7 @@ class NetworkScanner:
                 for pattern in signature.get('response_patterns', []):
                     if pattern in content.lower():
                         return True
-            except:
+            except Exception:
                 pass
         
         # Check specific status codes that might indicate AI services
@@ -199,7 +197,7 @@ class NetworkScanner:
         try:
             answers = dns.resolver.resolve(domain, 'A')
             ips = [str(rdata) for rdata in answers]
-        except:
+        except Exception:
             pass
         
         return ips
@@ -209,5 +207,5 @@ class NetworkScanner:
         try:
             ip = ipaddress.ip_address(host)
             return ip.is_global
-        except:
+        except Exception:
             return True  # Assume domain names are internet-facing

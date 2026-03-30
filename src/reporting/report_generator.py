@@ -8,7 +8,7 @@ HTML (human-readable dashboard).
 
 import json
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from datetime import datetime, timezone
 from pathlib import Path
 

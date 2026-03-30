@@ -18,15 +18,12 @@ personal data and comply with privacy regulations like GDPR and CCPA.
 
 import asyncio
 import aiohttp
-import json
 import logging
 import re
-import hashlib
 import secrets
-from typing import List, Dict, Any, Optional, Set
-from urllib.parse import urljoin
+from typing import List, Dict, Any, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from src.utils.request_builder import construct_agent_request
 
@@ -364,8 +361,7 @@ class DataPrivacyTester:
     async def _send_prompt(self, agent: Dict[str, Any], prompt: str) -> Optional[str]:
         """Send a prompt to the agent and return the response"""
         endpoint = agent.get('endpoint')
-        provider = agent.get('provider', '').lower()
-        
+
         if not endpoint:
             return None
         

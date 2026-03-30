@@ -15,20 +15,17 @@ This tool helps organizations prioritize security remediation efforts
 and understand the business impact of AI security vulnerabilities.
 """
 
-import asyncio
 import logging
 import math
-from typing import List, Dict, Any, Optional, Callable, Tuple
-from datetime import datetime, timezone, timedelta
+from typing import List, Dict, Any, Optional, Callable
+from datetime import datetime
 import statistics
-from collections import defaultdict, Counter
+from collections import Counter
 
 from src.frameworks.owasp_llm_top10 import (
-    map_vulnerability_to_owasp,
     generate_owasp_coverage_report,
 )
 from src.frameworks.mitre_atlas import (
-    map_vulnerability_to_atlas,
     generate_atlas_coverage_report,
 )
 
@@ -291,7 +288,7 @@ class RiskAssessment:
                     vuln_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
                     age_hours = (current_time - vuln_time.replace(tzinfo=None)).total_seconds() / 3600
                     ages.append(age_hours)
-                except:
+                except Exception:
                     ages.append(0)  # Default to recent if parsing fails
         
         if ages:

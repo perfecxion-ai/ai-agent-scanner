@@ -3,10 +3,8 @@
 Unit tests for security testing modules
 """
 
-import asyncio
 import pytest
-import json
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 from datetime import datetime
 
 # Import security modules

@@ -10,9 +10,8 @@ Requires optional cloud SDK dependencies:
     #                   google-cloud-aiplatform
 """
 
-import asyncio
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import uuid
 
 
@@ -185,7 +184,7 @@ class CloudInfrastructureScanner:
                     env_str = ' '.join(f"{k}={v}" for k, v in env_vars.items())
 
                     # Check layers for AI SDK packages
-                    layers = [l.get('Arn', '') for l in fn.get('Layers', [])]
+                    layers = [layer.get('Arn', '') for layer in fn.get('Layers', [])]
                     layers_str = ' '.join(layers)
 
                     # Check runtime and handler for AI patterns

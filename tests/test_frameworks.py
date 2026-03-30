@@ -1,7 +1,5 @@
 """Tests for OWASP LLM Top 10 and MITRE ATLAS framework mappings."""
 
-import pytest
-from datetime import datetime, timezone
 
 from src.frameworks.owasp_llm_top10 import (
     OWASP_LLM_TOP_10,

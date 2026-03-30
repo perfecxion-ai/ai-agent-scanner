@@ -1,13 +1,6 @@
-import asyncio
 import logging
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass
-import ipaddress
-import socket
-import ssl
-import re
-import aiohttp
-import dns.resolver
 from urllib.parse import urlparse
 
 from .network_scanner import NetworkScanner
@@ -253,7 +246,7 @@ class DiscoveryEngine:
         try:
             parsed = urlparse(endpoint)
             return f"{parsed.hostname}:{parsed.port or 443}{parsed.path}"
-        except:
+        except Exception:
             return endpoint.lower().strip()
     
     async def _classify_agents(self, agents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
