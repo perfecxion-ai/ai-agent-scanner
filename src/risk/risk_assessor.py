@@ -17,10 +17,20 @@ and understand the business impact of AI security vulnerabilities.
 
 import asyncio
 import logging
+import math
 from typing import List, Dict, Any, Optional, Callable, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 import statistics
 from collections import defaultdict, Counter
+
+from src.frameworks.owasp_llm_top10 import (
+    map_vulnerability_to_owasp,
+    generate_owasp_coverage_report,
+)
+from src.frameworks.mitre_atlas import (
+    map_vulnerability_to_atlas,
+    generate_atlas_coverage_report,
+)
 
 class RiskAssessment:
     """
@@ -177,7 +187,9 @@ class RiskAssessment:
             'remediation_priorities': remediation_priorities,
             'compliance_implications': self._assess_compliance_implications(vulnerabilities),
             'threat_likelihood': self._assess_threat_likelihood(vulnerabilities, exposure_score),
-            'potential_impact': self._assess_potential_impact(vulnerabilities, business_impact)
+            'potential_impact': self._assess_potential_impact(vulnerabilities, business_impact),
+            'owasp_llm_top10': generate_owasp_coverage_report(vulnerabilities),
+            'mitre_atlas': generate_atlas_coverage_report(vulnerabilities),
         }
     
     def _calculate_vulnerability_score(self, vulnerabilities: List[Dict[str, Any]]) -> float:
@@ -196,8 +208,15 @@ class RiskAssessment:
             base_score = self.severity_weights.get(severity, 1.0)
             
             # Apply vulnerability type multiplier
-            type_multiplier = self.vulnerability_impact.get(vuln_type, 0.5)
-            
+            # Handle nested prompt_injection categories
+            impact_entry = self.vulnerability_impact.get(vuln_type, 0.5)
+            if isinstance(impact_entry, dict):
+                # For prompt_injection, look up the specific category
+                category = vuln.get('category', '')
+                type_multiplier = impact_entry.get(category, 0.7)  # Default 0.7 for unknown subcategory
+            else:
+                type_multiplier = impact_entry
+
             # Apply confidence factor
             confidence_factor = 0.5 + (confidence * 0.5)  # Scale from 0.5 to 1.0
             
@@ -205,8 +224,10 @@ class RiskAssessment:
             total_score += vuln_score
         
         # Normalize to reasonable scale (diminishing returns for many vulnerabilities)
-        normalized_score = min(100, total_score * (1 - (len(vulnerabilities) - 1) * 0.05))
-        
+        # Use logarithmic dampening instead of linear to avoid going negative
+        dampening = 1.0 / (1.0 + math.log1p(len(vulnerabilities) - 1) * 0.15)
+        normalized_score = min(100, total_score * dampening)
+
         return max(0.0, normalized_score)
     
     def _calculate_exposure_risk(self, agent_results: Dict[str, Any]) -> float:
@@ -329,7 +350,12 @@ class RiskAssessment:
         # Sort vulnerabilities by priority (severity + impact)
         def priority_score(vuln):
             severity_score = self.severity_weights.get(vuln.get('severity', 'low'), 1.0)
-            impact_score = self.vulnerability_impact.get(vuln.get('vulnerability_type', ''), 0.5)
+            impact_entry = self.vulnerability_impact.get(vuln.get('vulnerability_type', ''), 0.5)
+            if isinstance(impact_entry, dict):
+                category = vuln.get('category', '')
+                impact_score = impact_entry.get(category, 0.7)
+            else:
+                impact_score = impact_entry
             confidence = vuln.get('confidence', 0.5)
             return severity_score * impact_score * confidence
         

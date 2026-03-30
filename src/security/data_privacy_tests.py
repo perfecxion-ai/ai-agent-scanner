@@ -26,7 +26,10 @@ import secrets
 from typing import List, Dict, Any, Optional, Set
 from urllib.parse import urljoin
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+
+from src.utils.request_builder import construct_agent_request
+
 
 class DataPrivacyTester:
     """
@@ -390,46 +393,7 @@ class DataPrivacyTester:
     
     def _construct_request(self, agent: Dict[str, Any], prompt: str) -> Optional[Dict[str, Any]]:
         """Construct appropriate request for the agent type"""
-        endpoint = agent.get('endpoint')
-        provider = agent.get('provider', '').lower()
-        
-        if not endpoint:
-            return None
-        
-        # OpenAI-style APIs
-        if 'openai' in provider or 'gpt' in endpoint.lower():
-            return {
-                'method': 'POST',
-                'url': urljoin(endpoint, '/v1/chat/completions'),
-                'headers': {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer test-key'
-                },
-                'json': {
-                    'model': 'gpt-3.5-turbo',
-                    'messages': [{'role': 'user', 'content': prompt}],
-                    'max_tokens': 100
-                }
-            }
-        
-        # Generic chat endpoint
-        elif any(path in endpoint.lower() for path in ['/chat', '/api/chat', '/generate']):
-            return {
-                'method': 'POST',
-                'url': endpoint,
-                'headers': {'Content-Type': 'application/json'},
-                'json': {
-                    'message': prompt,
-                    'max_tokens': 100
-                }
-            }
-        
-        # Generic GET endpoint
-        else:
-            return {
-                'method': 'GET',
-                'url': f"{endpoint}?query={prompt}&limit=100"
-            }
+        return construct_agent_request(agent, prompt)
     
     def _detect_pii_in_response(self, response_text: str) -> Dict[str, List[str]]:
         """Detect PII patterns in response text"""
