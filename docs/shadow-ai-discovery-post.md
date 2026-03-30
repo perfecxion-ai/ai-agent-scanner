@@ -10,7 +10,13 @@ target: LinkedIn, Hacker News, conference CFP
 
 Every security team has an AI inventory problem. They just don't know it yet.
 
-We built an open-source tool that scans networks, codebases, cloud accounts, and traffic logs for AI agents — the chatbots, copilots, RAG pipelines, and API integrations that developers shipped without telling anyone. What we found in our own test environments was bad enough. What organizations are finding in production is worse.
+We built an open-source tool that finds AI agents across your infrastructure:
+
+Networks. Codebases. Cloud. Logs.
+
+The ones no one told security about.
+
+What we found in our own test environments was bad enough. What organizations are finding in production is worse.
 
 ## The Shadow AI Problem
 
@@ -22,11 +28,13 @@ The problem is structural. A `pip install openai` and five lines of Python gives
 
 The barrier to deploying AI is now lower than the barrier to documenting it.
 
-Security teams cannot secure what they cannot see.
+Security teams cannot secure what they cannot see. And right now, most of them are flying blind.
+
+Tested across lab environments and authorized enterprise assessments, the pattern is consistent: organizations have far more AI running than they think.
 
 ## What We Built
 
-[AI Agent Scanner](https://github.com/scthornton/ai-agent-scanner) does three things:
+[AI Agent Scanner](https://github.com/scthornton/ai-agent-scanner) is asset inventory for AI. It does three things:
 
 **1. Discover** — Find AI agents you didn't know about.
 

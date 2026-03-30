@@ -12,6 +12,8 @@ They are not securing the ones they don't.
 
 Most organizations have more AI agents in production than their security team can account for. Developers integrate AI APIs in minutes. Cloud providers ship one-click model deployments. No one files a ticket.
 
+Most teams underestimate how much AI is already running in their environment. Until they scan.
+
 This tool finds them.
 
 ## Quick Start (1-minute scan)
@@ -31,7 +33,7 @@ python scanner_cli.py scan --network 192.168.1.0/24 --output results.json
 python scanner_cli.py coverage
 ```
 
-Find AI agents, test them, get a risk report. Minutes, not months.
+Find AI agents you didn't know existed. Test them. Get a risk report. All in minutes.
 
 ## What Makes This Different
 
@@ -42,6 +44,8 @@ This one doesn't.
 It answers the first question security teams actually have:
 
 **What AI is running in my environment right now?**
+
+This is asset inventory for AI.
 
 Then it tests what it finds and tells you what it means for the business:
 
@@ -63,10 +67,12 @@ No other tool — not Garak, Giskard, PyRIT, or Lakera — does discovery. They 
 
 The scanner finds AI agents across four surfaces:
 
-- **Network** — exposed AI endpoints via port scanning + signature matching (OpenAI, Anthropic, Google, Cohere, HuggingFace, Ollama, custom APIs)
-- **Code** — AI SDK imports, hardcoded API keys, endpoint configs in your repositories
-- **Traffic** — AI API calls in proxy logs, HAR files, and access logs
-- **Cloud** — SageMaker, Bedrock, Azure OpenAI, Vertex AI, Lambda/Functions with AI SDKs (requires `pip install ai-agent-scanner[cloud]`)
+- **Network** — exposed AI endpoints (OpenAI-compatible APIs, Ollama, custom)
+- **Code** — SDK usage, API keys, endpoint configs in repositories
+- **Traffic** — AI API calls in logs and HAR files
+- **Cloud** — managed AI services (SageMaker, Bedrock, Azure OpenAI, Vertex AI)
+
+Cloud scanning requires optional SDKs: `pip install ai-agent-scanner[cloud]`
 
 Each method catches what the others miss.
 
@@ -195,7 +201,7 @@ pip install -e ".[dev]"
 
 This tool is for defensive security only. Scan systems you own or have explicit written permission to test.
 
-Built-in safeguards: rate limiting (1s delay between requests), 5 payload cap per category, 1024 host scan limit, 30s request timeout, non-destructive testing only.
+Tested across lab environments and authorized enterprise assessments. Built-in safeguards: rate limiting, payload caps, host limits, request timeouts, non-destructive testing only.
 
 ## Contributing
 
