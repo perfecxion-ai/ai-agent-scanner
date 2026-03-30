@@ -1,4 +1,4 @@
-import asyncio
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Callable
 import logging
 
@@ -43,7 +43,7 @@ class SecurityTestEngine:
         test_results = {
             'agent_id': agent['id'],
             'agent_name': agent['name'],
-            'test_timestamp': asyncio.get_event_loop().time(),
+            'test_timestamp': datetime.now(timezone.utc).isoformat(),
             'vulnerabilities': [],
             'overall_risk_score': 0.0
         }

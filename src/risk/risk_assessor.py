@@ -18,7 +18,7 @@ and understand the business impact of AI security vulnerabilities.
 import logging
 import math
 from typing import List, Dict, Any, Optional, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 import statistics
 from collections import Counter
 
@@ -167,7 +167,7 @@ class RiskAssessment:
         return {
             'agent_id': agent_id,
             'agent_name': agent_name,
-            'assessment_timestamp': datetime.utcnow().isoformat(),
+            'assessment_timestamp': datetime.now(timezone.utc).isoformat(),
             'overall_risk_score': round(overall_risk_score, 2),
             'risk_level': risk_level,
             'vulnerability_score': round(vulnerability_score, 2),
@@ -278,7 +278,7 @@ class RiskAssessment:
             return 1.0
         
         # Calculate average age of vulnerabilities
-        current_time = datetime.utcnow()
+        current_time = datetime.now(timezone.utc)
         ages = []
         
         for vuln in vulnerabilities:
@@ -286,7 +286,10 @@ class RiskAssessment:
             if timestamp_str:
                 try:
                     vuln_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                    age_hours = (current_time - vuln_time.replace(tzinfo=None)).total_seconds() / 3600
+                    # Ensure both are tz-aware for comparison
+                    if vuln_time.tzinfo is None:
+                        vuln_time = vuln_time.replace(tzinfo=timezone.utc)
+                    age_hours = (current_time - vuln_time).total_seconds() / 3600
                     ages.append(age_hours)
                 except Exception:
                     ages.append(0)  # Default to recent if parsing fails

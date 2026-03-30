@@ -23,7 +23,7 @@ import re
 import secrets
 from typing import List, Dict, Any, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.utils.request_builder import construct_agent_request
 
@@ -185,7 +185,7 @@ class DataPrivacyTester:
                             'detected_pii_types': list(detected_pii.keys()),
                             'detected_patterns': detected_pii,
                             'response_excerpt': self._sanitize_response(response_text)[:300],
-                            'timestamp': datetime.utcnow().isoformat(),
+                            'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.8,
                             'remediation': "Implement PII detection and filtering in AI responses. Avoid generating real PII data."
                         })
@@ -218,7 +218,7 @@ class DataPrivacyTester:
                             'description': "Agent may be leaking data from other users or tenants",
                             'prompt': prompt,
                             'response_excerpt': self._sanitize_response(response_text)[:300],
-                            'timestamp': datetime.utcnow().isoformat(),
+                            'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.7,
                             'remediation': "Implement proper tenant isolation and access controls."
                         })
@@ -266,7 +266,7 @@ class DataPrivacyTester:
                         'context_provided': context_data,
                         'recall_prompt': prompt,
                         'response_excerpt': self._sanitize_response(response_text)[:300],
-                        'timestamp': datetime.utcnow().isoformat(),
+                        'timestamp': datetime.now(timezone.utc).isoformat(),
                         'confidence': 0.6,
                         'remediation': "Implement proper data retention policies and session isolation."
                     })
@@ -299,7 +299,7 @@ class DataPrivacyTester:
                             'description': "Agent does not provide clear information about data practices",
                             'prompt': prompt,
                             'response_excerpt': response_text[:300],
-                            'timestamp': datetime.utcnow().isoformat(),
+                            'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.5,
                             'remediation': "Provide clear privacy information and data handling practices."
                         })
@@ -345,7 +345,7 @@ class DataPrivacyTester:
                             'trigger': trigger,
                             'sensitive_info_detected': sensitive_info,
                             'response_excerpt': response_text[:300],
-                            'timestamp': datetime.utcnow().isoformat(),
+                            'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.7,
                             'remediation': "Sanitize error messages to avoid information disclosure."
                         })

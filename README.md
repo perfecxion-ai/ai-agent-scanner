@@ -2,95 +2,130 @@
 
 **Find the AI you don't know about. Secure the AI you do.**
 
-An open-source security tool that discovers AI agents across your infrastructure, tests them for vulnerabilities, scores business risk, and maps findings to OWASP LLM Top 10 and MITRE ATLAS.
+Asset inventory and security assessment for AI agents — the first open-source tool that discovers shadow AI across your infrastructure, tests it for vulnerabilities, and maps findings to compliance frameworks.
 
-Built for security teams who need visibility into shadow AI — the agents, models, and API integrations running in their environment that no one inventoried.
+## The Problem
 
-## What Makes This Different
+Security teams are securing AI systems they know about.
 
-Every other AI security tool (Garak, Giskard, PyRIT) assumes you already know what to test. This one starts by asking: **what AI is actually running?**
+They are not securing the ones they don't.
 
-```
-Discovery (find it) → Security Testing (break it) → Risk Scoring (prioritize it)
-```
+Most organizations have more AI agents in production than their security team can account for. Developers integrate AI APIs in minutes. Cloud providers ship one-click model deployments. No one files a ticket.
 
-The full loop — from network scan to OWASP-mapped remediation priorities — in one tool.
+This tool finds them.
 
-## Quick Start
+## Quick Start (1-minute scan)
 
 ```bash
 git clone https://github.com/scthornton/ai-agent-scanner.git
 cd ai-agent-scanner
 pip install -r requirements.txt
 
-# Discover AI agents on a network
+# Scan your network for AI agents
 python scanner_cli.py discover --network 192.168.1.0/24
 
-# Full scan: discover + test + score + report
-python scanner_cli.py scan --domain api.company.com --output report.json
+# Full scan with risk scoring
+python scanner_cli.py scan --network 192.168.1.0/24 --output results.json
 
-# SARIF output for GitHub Code Scanning
-python scanner_cli.py scan --network 10.0.0.0/24 --format sarif --output results.sarif
-
-# View OWASP LLM Top 10 coverage
+# See what's covered
 python scanner_cli.py coverage
 ```
 
-## Discovery Methods
+Find AI agents, test them, get a risk report. Minutes, not months.
 
-| Method | What It Finds | Status |
-|--------|--------------|--------|
-| **Network scanning** | AI endpoints on IP ranges and domains via port scanning + signature matching | **Production** |
-| **Code scanning** | AI SDK imports, API keys, endpoint configs in local repos | **Production** |
-| **Traffic analysis** | AI API calls in proxy logs, HAR files, access logs | **Production** |
-| **Cloud scanning** | SageMaker, Bedrock, Azure OpenAI, Vertex AI, Lambda/Functions with AI SDKs | **Requires cloud SDKs** |
+## What Makes This Different
 
-Cloud scanning requires optional dependencies: `pip install ai-agent-scanner[cloud]` (boto3, azure-identity, google-cloud-aiplatform). Without them, cloud scanning is disabled with a clear warning — it never silently returns empty results.
+Most AI security tools assume you already know what to test.
 
-## Security Testing
+This one doesn't.
 
-### What's Tested
+It answers the first question security teams actually have:
 
-| Category | Payloads | Coverage |
-|----------|----------|----------|
-| **Prompt injection** | 70+ payloads across 7 categories (system prompt extraction, instruction bypass, role manipulation, DAN jailbreak, context manipulation, encoding bypass, task injection) | Direct injection only |
-| **Access control** | 15+ auth bypass techniques, 10 weak credential combos, API key testing, rate limiting, session management | Production |
-| **Data privacy** | 7 PII types (SSN, credit card, phone, email, IP, API key, address), cross-tenant leakage, data retention, privacy compliance | Production |
+**What AI is running in my environment right now?**
 
-### What's NOT Yet Tested (Roadmap)
-
-These are real gaps — not features we're hiding. They're the next development priorities:
-
-- **Indirect prompt injection** (via retrieved context, tool outputs, emails) — the #1 real-world attack vector in 2025
-- **MCP server security** (tool poisoning, permission escalation)
-- **RAG poisoning** (document injection, retrieval manipulation)
-- **Agentic workflow attacks** (recursive tool calling, sandbox escape, agent-to-agent trust)
-- **Multi-modal injection** (image-based, PDF hidden text)
-- **Adversarial suffixes** (GCG, AutoDAN, PAIR-generated jailbreaks)
-- **Model extraction and membership inference**
-- **Output handling** (XSS/SQLi/SSRF via LLM output)
-
-## Risk Assessment
-
-CVSS-inspired scoring with business context:
+Then it tests what it finds and tells you what it means for the business:
 
 ```
-Risk Score = Vulnerability Score x Exposure Score x Business Impact Score
+Discovery (find it) --> Security Testing (break it) --> Risk Scoring (prioritize it)
 ```
 
-- **Vulnerability Score**: Severity weights + type-specific impact multipliers + confidence factors
-- **Exposure Score**: Internet-facing (1.5x), public API (1.4x), production (1.3x)
-- **Business Impact**: PII access (1.3x), financial data (1.4x), healthcare (1.5x)
+No other tool — not Garak, Giskard, PyRIT, or Lakera — does discovery. They all start from a known endpoint. This starts from "what's out there?"
 
-Every finding is automatically mapped to:
-- **OWASP LLM Top 10 (2025)** — all 10 categories tracked
-- **MITRE ATLAS** — 10 ATT&CK-style ML techniques
-- **Compliance frameworks** — GDPR, SOC 2, HIPAA, PCI DSS, NIST AI RMF, EU AI Act
+## Who This Is For
 
-## OWASP LLM Top 10 Coverage
+- **Security teams** — discover shadow AI and assess risk
+- **AppSec leads** — integrate AI security checks into CI/CD (SARIF output included)
+- **Platform engineers** — scan deployments before they become exposures
+- **Compliance** — map AI risk to GDPR, SOC 2, HIPAA, NIST AI RMF, EU AI Act
+- **Researchers** — extend attack coverage and contribute detection modules
+
+## Discovery Coverage
+
+The scanner finds AI agents across four surfaces:
+
+- **Network** — exposed AI endpoints via port scanning + signature matching (OpenAI, Anthropic, Google, Cohere, HuggingFace, Ollama, custom APIs)
+- **Code** — AI SDK imports, hardcoded API keys, endpoint configs in your repositories
+- **Traffic** — AI API calls in proxy logs, HAR files, and access logs
+- **Cloud** — SageMaker, Bedrock, Azure OpenAI, Vertex AI, Lambda/Functions with AI SDKs (requires `pip install ai-agent-scanner[cloud]`)
+
+Each method catches what the others miss.
+
+## Example Output
 
 ```
-[FULL]     LLM01: Prompt Injection           (direct only — indirect planned)
+  Phase 1: Discovering AI agents...
+  Found 4 AI agent(s)
+
+  Phase 2: Security testing...
+    Internal Chatbot:     3 vulnerabilities (completed)
+    Customer Support Bot: 5 vulnerabilities (completed)
+
+  Phase 3: Risk assessment...
+    Internal Chatbot:     Score 42.0/100 (MEDIUM)
+    Customer Support Bot: Score 78.5/100 (HIGH)
+
+  ============================================================
+  SCAN SUMMARY
+  ============================================================
+  Agents discovered:     4
+  Vulnerabilities found: 8
+  Highest risk score:    78.5/100
+  Output:                results.json
+```
+
+```json
+{
+  "agents_discovered": 4,
+  "total_vulnerabilities": 8,
+  "risk_assessments": [{
+    "agent_name": "Customer Support Bot",
+    "overall_risk_score": 78.5,
+    "risk_level": "high",
+    "critical_findings": ["No authentication", "PII disclosure"],
+    "compliance_implications": ["GDPR Article 32", "SOC 2 CC6.1"]
+  }]
+}
+```
+
+## Coverage (Honest View)
+
+**Tested:**
+- Direct prompt injection (70+ payloads across 7 categories)
+- Auth bypass (15+ techniques), weak credentials, API key security
+- PII disclosure (7 data types), cross-tenant leakage, session security
+- Rate limiting, error info disclosure, privacy compliance
+
+**Not yet covered:**
+- Indirect prompt injection (highest real-world attack vector in 2025)
+- MCP server security / agentic workflow attacks
+- RAG poisoning and retrieval manipulation
+- Multi-modal injection (image/PDF-based)
+- Model extraction and adversarial suffixes
+
+Run `python scanner_cli.py coverage` for the live OWASP LLM Top 10 matrix:
+
+```
+[FULL]     LLM01: Prompt Injection     (direct only — indirect planned)
 [FULL]     LLM02: Sensitive Info Disclosure
 [PLANNED]  LLM03: Supply Chain
 [PLANNED]  LLM04: Data/Model Poisoning
@@ -102,56 +137,52 @@ Every finding is automatically mapped to:
 [PARTIAL]  LLM10: Unbounded Consumption
 ```
 
-6/10 categories actively tested. 4 planned. Run `python scanner_cli.py coverage` for the live matrix.
+6/10 categories actively tested. 4 planned.
+
+## Risk Scoring
+
+Findings are scored using a CVSS-inspired model:
+
+- **Severity** — vulnerability type + confidence weighting
+- **Exposure** — internet-facing (1.5x), production (1.3x), public API (1.4x)
+- **Business impact** — PII access (1.3x), financial data (1.4x), healthcare (1.5x)
+
+Every finding is mapped to:
+- **OWASP LLM Top 10 (2025)** and **MITRE ATLAS**
+- **GDPR**, **SOC 2**, **HIPAA**, **PCI DSS**, **NIST AI RMF**, **EU AI Act**
 
 ## Output Formats
 
-- **JSON** — structured report with full vulnerability details, risk scores, and framework mappings
-- **SARIF** — v2.1.0 compliant for GitHub Code Scanning, Azure DevOps, and other SARIF consumers
+- **JSON** — structured report with full vulnerability details and framework mappings
+- **SARIF** — v2.1.0 for GitHub Code Scanning and Azure DevOps
 - **Executive summary** — text format for quick review
 
-## Interfaces
-
-- **CLI** (`scanner_cli.py`) — `discover`, `scan`, `coverage` subcommands
-- **REST API** (`app.py`) — Flask-based, background scan execution, progress tracking
-- **Web dashboard** — real-time scan progress and agent inventory
-- **Python API** — import and use programmatically
+```bash
+# SARIF for CI/CD
+python scanner_cli.py scan --network 10.0.0.0/24 --format sarif --output results.sarif
+```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│           CLI / Web UI / REST API            │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────┴──────────────────────────┐
-│             Discovery Engine                 │
-│  Network │ Code │ Cloud │ Traffic            │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────┴──────────────────────────┐
-│           Security Test Engine               │
-│  Prompt Injection │ Access │ Privacy         │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────┴──────────────────────────┐
-│        Risk Assessment + Compliance          │
-│  CVSS Scoring │ OWASP │ ATLAS │ Compliance   │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────┴──────────────────────────┐
-│            Report Generator                  │
-│  JSON │ SARIF │ Executive Summary            │
-└─────────────────────────────────────────────┘
+CLI / Web API / REST
+    |
+Discovery Engine (Network + Code + Cloud + Traffic)
+    |
+Security Testing (Prompt Injection + Access Control + Privacy)
+    |
+Risk Assessment + Compliance (OWASP + ATLAS + 6 frameworks)
+    |
+Reporting (JSON + SARIF + Executive Summary)
 ```
 
 ## Installation
 
 ```bash
-# Basic (network + code + traffic scanning + security testing)
+# Standard
 pip install -r requirements.txt
 
-# With cloud scanning
+# With cloud scanning (AWS, Azure, GCP)
 pip install -r requirements.txt boto3 azure-identity azure-mgmt-cognitiveservices google-cloud-aiplatform
 
 # Development
@@ -162,29 +193,18 @@ pip install -e ".[dev]"
 
 ## Responsible Use
 
-This tool is designed exclusively for defensive security. Only scan systems you own or have explicit written permission to test.
+This tool is for defensive security only. Scan systems you own or have explicit written permission to test.
 
-Built-in safeguards:
-- Rate limiting between requests (1s delay)
-- Maximum 5 payloads per test category
-- Network scan cap (1024 hosts max)
-- 30-second request timeout
-- Non-destructive testing only
+Built-in safeguards: rate limiting (1s delay between requests), 5 payload cap per category, 1024 host scan limit, 30s request timeout, non-destructive testing only.
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure `pytest tests/ -v` passes
-5. Submit a pull request
+PRs welcome. Add tests for new functionality. Run `pytest tests/ -v` before submitting.
 
 ## License
 
-[GNU General Public License v3.0](LICENSE)
-
-Copyright (c) 2025 Scott C Thornton
+[GNU General Public License v3.0](LICENSE) | Copyright (c) 2025 Scott C Thornton
 
 ---
 
-**Built by [scthornton](https://github.com/scthornton)** — Securing AI infrastructure one agent at a time.
+**Built by [scthornton](https://github.com/scthornton)** | The AI agents are already running in your infrastructure. The only question is whether you know where they are.

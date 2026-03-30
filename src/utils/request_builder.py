@@ -6,7 +6,7 @@ based on the agent's provider type.
 """
 
 from typing import Dict, Any, Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlencode
 
 
 def construct_agent_request(agent: Dict[str, Any], payload: str) -> Optional[Dict[str, Any]]:
@@ -86,9 +86,10 @@ def construct_agent_request(agent: Dict[str, Any], payload: str) -> Optional[Dic
             }
         }
 
-    # Generic GET endpoint with query parameter
+    # Generic GET endpoint with query parameter (URL-encoded to prevent
+    # payload corruption and access log leakage of raw attack strings)
     else:
         return {
             'method': 'GET',
-            'url': f"{endpoint}?query={payload}&limit=100"
+            'url': f"{endpoint}?{urlencode({'query': payload, 'limit': 100})}"
         }

@@ -22,7 +22,7 @@ import base64
 from typing import List, Dict, Any, Optional
 from urllib.parse import urljoin
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 class AccessControlTester:
     """
@@ -201,7 +201,7 @@ class AccessControlTester:
                             'headers_used': test['headers'],
                             'status_code': response.status,
                             'response_excerpt': response_text[:300],
-                            'timestamp': datetime.utcnow().isoformat(),
+                            'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.9,
                             'remediation': "Implement proper authentication checks and validate all authorization headers."
                         }
@@ -239,7 +239,7 @@ class AccessControlTester:
                                 'username': username,
                                 'password': password,
                                 'status_code': response.status,
-                                'timestamp': datetime.utcnow().isoformat(),
+                                'timestamp': datetime.now(timezone.utc).isoformat(),
                                 'confidence': 0.95,
                                 'remediation': "Change default credentials and enforce strong password policies."
                             })
@@ -285,7 +285,7 @@ class AccessControlTester:
                                     'api_key': api_key,
                                     'headers_used': headers,
                                     'status_code': response.status,
-                                    'timestamp': datetime.utcnow().isoformat(),
+                                    'timestamp': datetime.now(timezone.utc).isoformat(),
                                     'confidence': 0.8,
                                     'remediation': "Implement strong API key validation and rotate default/test keys."
                                 })
@@ -346,7 +346,7 @@ class AccessControlTester:
                                 'full_url': test_url,
                                 'status_code': response.status,
                                 'response_excerpt': response_text[:300],
-                                'timestamp': datetime.utcnow().isoformat(),
+                                'timestamp': datetime.now(timezone.utc).isoformat(),
                                 'confidence': 0.7,
                                 'remediation': "Implement proper authorization checks for all admin endpoints."
                             })
@@ -371,12 +371,12 @@ class AccessControlTester:
             
             async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
                 for i in range(min(20, self.rate_limit_requests)):  # Test with 20 requests
-                    start_time = datetime.utcnow()
+                    start_time = datetime.now(timezone.utc)
                     
                     try:
                         async with session.get(endpoint) as response:
                             status_codes.append(response.status)
-                            request_times.append((datetime.utcnow() - start_time).total_seconds())
+                            request_times.append((datetime.now(timezone.utc) - start_time).total_seconds())
                     except Exception:
                         break
                     
@@ -399,7 +399,7 @@ class AccessControlTester:
                         'requests_sent': len(status_codes),
                         'successful_requests': sum(1 for code in status_codes if code == 200),
                         'avg_response_time': sum(request_times) / len(request_times) if request_times else 0,
-                        'timestamp': datetime.utcnow().isoformat(),
+                        'timestamp': datetime.now(timezone.utc).isoformat(),
                         'confidence': 0.6,
                         'remediation': "Implement rate limiting to prevent abuse and DoS attacks."
                     })
@@ -443,7 +443,7 @@ class AccessControlTester:
                                     'description': f"Session cookie lacks security attributes: {', '.join(insecure_issues)}",
                                     'cookie': cookie,
                                     'issues': insecure_issues,
-                                    'timestamp': datetime.utcnow().isoformat(),
+                                    'timestamp': datetime.now(timezone.utc).isoformat(),
                                     'confidence': 0.8,
                                     'remediation': "Set Secure, HttpOnly, and SameSite attributes on session cookies."
                                 })

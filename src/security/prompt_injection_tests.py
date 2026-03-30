@@ -23,7 +23,7 @@ import logging
 import re
 from typing import List, Dict, Any, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.utils.request_builder import construct_agent_request
 
@@ -393,7 +393,7 @@ class PromptInjectionTester:
                 'response_excerpt': response_text[:500] + ('...' if len(response_text) > 500 else ''),
                 'detected_patterns': detected_patterns,
                 'status_code': status_code,
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'confidence': self._calculate_confidence(detected_patterns, severity),
                 'remediation': self._get_remediation_advice(category, detected_patterns)
             }

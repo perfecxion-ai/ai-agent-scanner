@@ -14,7 +14,7 @@ from src.discovery.discovery_engine import DiscoveryEngine, DiscoveryScope
 
 def load_ai_signatures():
     """Load AI service signatures"""
-    signatures_path = Path("data/signatures/ai_services.json")
+    signatures_path = Path(__file__).parent / "data" / "signatures" / "ai_services.json"
     if not signatures_path.exists():
         print(f"Error: AI signatures file not found at {signatures_path}")
         sys.exit(1)

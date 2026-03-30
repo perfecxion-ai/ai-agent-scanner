@@ -5,7 +5,7 @@ Unit tests for security testing modules
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Import security modules
 import sys
@@ -468,14 +468,14 @@ class TestRiskAssessment:
                         'vulnerability_type': 'prompt_injection',
                         'severity': 'high',
                         'confidence': 0.9,
-                        'timestamp': datetime.utcnow().isoformat()
+                        'timestamp': datetime.now(timezone.utc).isoformat()
                     },
                     {
                         'id': 'vuln-2',
                         'vulnerability_type': 'weak_credentials',
                         'severity': 'critical',
                         'confidence': 0.95,
-                        'timestamp': datetime.utcnow().isoformat()
+                        'timestamp': datetime.now(timezone.utc).isoformat()
                     }
                 ],
                 'metadata': {
@@ -685,7 +685,7 @@ class TestRiskAssessment:
                 'vulnerabilities': [
                     {'id': 'v1', 'vulnerability_type': 'authentication_bypass',
                      'severity': 'critical', 'confidence': 0.9,
-                     'timestamp': datetime.utcnow().isoformat()}
+                     'timestamp': datetime.now(timezone.utc).isoformat()}
                 ],
                 'metadata': {'internet_facing': True}
             },
@@ -695,7 +695,7 @@ class TestRiskAssessment:
                 'vulnerabilities': [
                     {'id': 'v2', 'vulnerability_type': 'privacy_transparency_issue',
                      'severity': 'low', 'confidence': 0.5,
-                     'timestamp': datetime.utcnow().isoformat()}
+                     'timestamp': datetime.now(timezone.utc).isoformat()}
                 ],
                 'metadata': {}
             },
@@ -705,7 +705,7 @@ class TestRiskAssessment:
                 'vulnerabilities': [
                     {'id': 'v3', 'vulnerability_type': 'no_rate_limiting',
                      'severity': 'medium', 'confidence': 0.6,
-                     'timestamp': datetime.utcnow().isoformat()}
+                     'timestamp': datetime.now(timezone.utc).isoformat()}
                 ],
                 'metadata': {}
             }
