@@ -4,6 +4,8 @@
 
 Asset inventory and security assessment for AI agents — the first open-source tool that discovers shadow AI across your infrastructure, tests it for vulnerabilities, and maps findings to compliance frameworks.
 
+![AI Agent Scanner Demo](docs/images/scan-demo.png)
+
 ## The Problem
 
 Security teams are securing AI systems they know about.
@@ -19,7 +21,7 @@ This tool finds them.
 ## Quick Start (1-minute scan)
 
 ```bash
-git clone https://github.com/scthornton/ai-agent-scanner.git
+git clone https://github.com/perfecxion-ai/ai-agent-scanner.git
 cd ai-agent-scanner
 pip install -r requirements.txt
 
@@ -33,7 +35,13 @@ python scanner_cli.py scan --network 192.168.1.0/24 --output results.json
 python scanner_cli.py coverage
 ```
 
-Find AI agents you didn't know existed. Test them. Get a risk report. All in minutes.
+**Have Ollama running locally?** Try this right now:
+
+```bash
+python scanner_cli.py scan --network 127.0.0.0/30 --output local_scan.json
+```
+
+It will find your Ollama instance, test it for vulnerabilities, and show you the risk score. Takes about 2 minutes.
 
 ## What Makes This Different
 
@@ -213,4 +221,4 @@ PRs welcome. Add tests for new functionality. Run `pytest tests/ -v` before subm
 
 ---
 
-**Built by [scthornton](https://github.com/scthornton)** | The AI agents are already running in your infrastructure. The only question is whether you know where they are.
+**Built by [perfecXion.ai](https://perfecxion.ai)** | The AI agents are already running in your infrastructure. The only question is whether you know where they are.
