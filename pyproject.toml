@@ -59,9 +59,9 @@ cloud = [
 ai-agent-scanner = "scanner_cli:cli"
 
 [project.urls]
-Homepage = "https://github.com/scthornton/ai-agent-scanner"
-Repository = "https://github.com/scthornton/ai-agent-scanner"
-Issues = "https://github.com/scthornton/ai-agent-scanner/issues"
+Homepage = "https://github.com/perfecxion-ai/ai-agent-scanner"
+Repository = "https://github.com/perfecxion-ai/ai-agent-scanner"
+Issues = "https://github.com/perfecxion-ai/ai-agent-scanner/issues"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
