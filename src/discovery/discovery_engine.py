@@ -80,6 +80,30 @@ class DiscoveryEngine:
                 "headers": ["authorization"],
                 "paths": ["/models/"],
                 "response_patterns": ["generated_text", "score"]
+            },
+            "ollama": {
+                "domains": [],
+                "headers": [],
+                "paths": ["/api/tags", "/api/generate"],
+                "response_patterns": ["models", "name", "modified_at"]
+            },
+            "vllm": {
+                "domains": [],
+                "headers": [],
+                "paths": ["/v1/models", "/v1/chat/completions"],
+                "response_patterns": ["model", "choices", "object"]
+            },
+            "triton": {
+                "domains": [],
+                "headers": [],
+                "paths": ["/v2/health/ready", "/v2/models"],
+                "response_patterns": ["models", "name", "ready"]
+            },
+            "tgi": {
+                "domains": [],
+                "headers": [],
+                "paths": ["/info", "/generate"],
+                "response_patterns": ["model_id", "max_input_length", "generated_text"]
             }
         }
     

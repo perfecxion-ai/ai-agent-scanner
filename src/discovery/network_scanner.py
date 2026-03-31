@@ -10,7 +10,7 @@ class NetworkScanner:
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.common_ai_ports = [80, 443, 8000, 8080, 8443, 9000]
+        self.common_ai_ports = [80, 443, 8000, 8080, 8443, 9000, 11434, 3000, 5000, 8888]
         self.timeout = 10
     
     async def scan_range(self, network_range: str, ai_signatures: Dict) -> List[Dict[str, Any]]:
