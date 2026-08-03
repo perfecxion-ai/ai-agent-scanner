@@ -5,7 +5,11 @@ surface = "mac"
 proves  = "Discovers shadow AI on a network, probes it, risk-scores it and maps to compliance. The two-minute version points it at the Spark's own Ollama."
 
 [run]
-launch = "python scanner_cli.py scan --network 127.0.0.0/30 --output local_scan.json"
+# /30 is four hosts and the access-control probes against each take minutes;
+# /32 is the single local host, which is the interesting one anyway (it finds
+# the Ollama endpoint and scores it).
+launch  = "python3 scanner_cli.py scan --network 127.0.0.1/32 --output local_scan.json"
+oneshot = true
 
 [requires]
 files = ["requirements.txt"]
