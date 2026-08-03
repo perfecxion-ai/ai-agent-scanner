@@ -1,0 +1,16 @@
+id      = "agent-scanner"
+title   = "Shadow AI discovery and risk scoring"
+intent  = ["redteam"]
+surface = "mac"
+proves  = "Discovers shadow AI on a network, probes it, risk-scores it and maps to compliance. The two-minute version points it at the Spark's own Ollama."
+
+[run]
+launch = "python scanner_cli.py scan --network 127.0.0.0/30 --output local_scan.json"
+
+[requires]
+files = ["requirements.txt"]
+
+[demo]
+beats = [
+  "scan the Spark's Ollama to make shadow AI concrete",
+]
