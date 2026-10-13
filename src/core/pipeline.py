@@ -7,6 +7,7 @@ from urllib.parse import urlsplit, urlunsplit
 from src.core.transport import current_budget, scan_transport, ScanBudget
 from src.core.redaction import collect_secrets, redact_secrets
 from src.reporting.sarif_output import generate_sarif
+from src.utils.request_builder import resolve_api_key
 
 
 SCHEMA_VERSION = "1.0"
@@ -36,6 +37,7 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         agents = await discovery.discover_agents(scope)
     observations = [asdict(agent) if is_dataclass(agent) else deepcopy(agent) for agent in agents]
     secrets = collect_secrets(observations)
+    secrets.update(key for agent in observations if (key := resolve_api_key(agent)))
     security_results = []
     if scan_type != "discovery_only":
         if agent_validator:
@@ -72,7 +74,7 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
     risks_by_id = {result["agent_id"]: result for result in risks}
     public_agents = []
     for original in observations:
-        agent = {key: original[key] for key in ("id", "name", "type", "provider", "endpoint", "discovery_method", "confidence") if key in original}
+        agent = {key: original[key] for key in ("id", "name", "type", "provider", "model", "endpoint", "discovery_method", "confidence") if key in original}
         agent["metadata"] = public_metadata(original.get("metadata", {}))
         if agent.get("endpoint"):
             endpoint = urlsplit(agent["endpoint"])

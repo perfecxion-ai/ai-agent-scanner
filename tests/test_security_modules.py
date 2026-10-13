@@ -28,6 +28,7 @@ class TestPromptInjectionTester:
             'name': 'Test AI Agent',
             'endpoint': 'https://api.example.com/chat',
             'provider': 'openai',
+            'model': 'fixture-model',
             'type': 'chatbot'
         }
 
@@ -52,7 +53,7 @@ class TestPromptInjectionTester:
         assert request_data is not None
         assert request_data['method'] == 'POST'
         assert '/v1/chat/completions' in request_data['url']
-        assert 'Authorization' in request_data['headers']
+        assert 'Authorization' not in request_data['headers']
         assert request_data['json']['messages'][0]['content'] == payload
 
     def test_request_construction_anthropic(self):
@@ -64,7 +65,7 @@ class TestPromptInjectionTester:
         assert request_data is not None
         assert request_data['method'] == 'POST'
         assert '/v1/messages' in request_data['url']
-        assert 'x-api-key' in request_data['headers']
+        assert 'x-api-key' not in request_data['headers']
 
     def test_request_construction_google(self):
         """Test Google/Gemini-style request construction"""
@@ -86,9 +87,7 @@ class TestPromptInjectionTester:
         payload = "Test prompt"
         request_data = self.tester._construct_request(agent, payload)
 
-        assert request_data is not None
-        assert request_data['method'] == 'POST'
-        assert request_data['json']['message'] == payload
+        assert request_data is None
 
     def test_request_construction_generic_get(self):
         """Test generic GET endpoint request construction"""
@@ -100,9 +99,7 @@ class TestPromptInjectionTester:
         payload = "Test prompt"
         request_data = self.tester._construct_request(agent, payload)
 
-        assert request_data is not None
-        assert request_data['method'] == 'GET'
-        assert 'query=' in request_data['url']
+        assert request_data is None
 
     def test_analyze_response_with_vulnerability(self):
         """Test response analysis when vulnerability is detected"""

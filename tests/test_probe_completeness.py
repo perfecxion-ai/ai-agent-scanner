@@ -25,6 +25,7 @@ async def target():
 
     app = web.Application()
     app.router.add_route('*', '/chat/{status}', handler)
+    app.router.add_route('*', '/chat/{status}/v1/chat/completions', handler)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '127.0.0.1', 0)
@@ -41,7 +42,8 @@ async def target():
 async def test_rejected_model_calls_cannot_report_completed_low_risk(target, status):
     engine = SecurityTestEngine()
     engine.prompt_tester.injection_payloads = {'instruction_bypass': ['Say hello']}
-    agent = {'id': 'test', 'name': 'Test', 'endpoint': f'{target}/{status}', 'provider': 'generic'}
+    agent = {'id': 'test', 'name': 'Test', 'endpoint': f'{target}/{status}',
+             'provider': 'openai-compatible', 'model': 'fixture-model'}
     budget = ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True)
     with scan_transport(budget), patch('asyncio.sleep', AsyncMock()), patch.object(engine.access_tester, 'test_agent', AsyncMock(return_value=[])):
         result = await engine._test_single_agent(agent)
