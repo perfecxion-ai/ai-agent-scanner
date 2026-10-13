@@ -72,6 +72,15 @@ class TestOWASPMapping:
     def test_coverage_report_empty_vulns(self):
         report = generate_owasp_coverage_report([])
         assert report['summary']['categories_with_findings'] == 0
+        assert report['coverage_basis'] == 'static_mapping_not_execution'
+        assert 'categories_tested' not in report['summary']
+        assert all(category.test_coverage != 'full' for category in OWASP_LLM_TOP_10.values())
+
+    def test_atlas_scope_does_not_claim_executed_or_full_coverage(self):
+        report = generate_atlas_coverage_report([])
+        assert report['coverage_basis'] == 'static_mapping_not_execution'
+        assert 'techniques_tested' not in report['summary']
+        assert all(technique.test_coverage != 'full' for technique in ATLAS_TECHNIQUES.values())
 
     def test_get_coverage_summary(self):
         summary = get_coverage_summary()

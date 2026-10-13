@@ -48,7 +48,7 @@ OWASP_LLM_TOP_10: Dict[str, OWASPCategory] = {
             "payload_injection",
             "indirect_prompt_injection",
         ],
-        test_coverage="full",
+        test_coverage="partial",
         mitigations=[
             "Implement input sanitization and validation",
             "Use structured output formats to constrain responses",
@@ -78,7 +78,7 @@ OWASP_LLM_TOP_10: Dict[str, OWASPCategory] = {
             "credential_leakage",
             "training_data_extraction",
         ],
-        test_coverage="full",
+        test_coverage="partial",
         mitigations=[
             "Implement PII detection and redaction in outputs",
             "Sanitize error messages to prevent information disclosure",
@@ -217,7 +217,7 @@ OWASP_LLM_TOP_10: Dict[str, OWASPCategory] = {
             "instruction_leakage",
             "configuration_exposure",
         ],
-        test_coverage="full",
+        test_coverage="partial",
         mitigations=[
             "Avoid embedding secrets or sensitive logic in system prompts",
             "Implement prompt extraction detection and response filtering",
@@ -342,8 +342,7 @@ def map_vulnerability_to_owasp(vulnerability: Dict[str, Any]) -> List[str]:
 
 def generate_owasp_coverage_report(vulnerabilities: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Generate a coverage report showing which OWASP categories were tested
-    and which had findings.
+    Report declared mapping scope and findings, not executed test coverage.
 
     Args:
         vulnerabilities: List of vulnerability dicts from security testing.
@@ -353,11 +352,12 @@ def generate_owasp_coverage_report(vulnerabilities: List[Dict[str, Any]]) -> Dic
     """
     report = {
         'framework': 'OWASP LLM Top 10 (2025)',
+        'coverage_basis': 'static_mapping_not_execution',
         'categories': {},
         'summary': {
             'total_categories': len(OWASP_LLM_TOP_10),
             'categories_with_findings': 0,
-            'categories_tested': 0,
+            'categories_with_declared_checks': 0,
             'categories_planned': 0,
         }
     }
@@ -380,7 +380,7 @@ def generate_owasp_coverage_report(vulnerabilities: List[Dict[str, Any]]) -> Dic
         }
 
         if owasp_cat.test_coverage in ('full', 'partial'):
-            report['summary']['categories_tested'] += 1
+            report['summary']['categories_with_declared_checks'] += 1
         else:
             report['summary']['categories_planned'] += 1
 
@@ -392,7 +392,7 @@ def generate_owasp_coverage_report(vulnerabilities: List[Dict[str, Any]]) -> Dic
 
 def get_coverage_summary() -> Dict[str, Any]:
     """
-    Get a quick summary of OWASP LLM Top 10 test coverage.
+    Get the declared scope of OWASP mappings, not measured test execution.
 
     Returns:
         Dict mapping category IDs to their coverage status.

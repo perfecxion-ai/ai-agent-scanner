@@ -166,12 +166,12 @@ async def _execute(scope, agents, output, fmt, mode, verbose):
 
 @cli.command()
 def coverage():
-    """Show OWASP LLM Top 10 and MITRE ATLAS test coverage."""
+    """Show declared OWASP mapping scope, not exhaustive or executed coverage."""
     click.echo(BANNER)
-    click.echo(f"  v{VERSION} | Framework Coverage Report")
+    click.echo(f"  v{VERSION} | Framework Mapping Scope")
     click.echo("=" * 60)
 
-    click.echo("\n  OWASP LLM Top 10 (2025) Coverage")
+    click.echo("\n  OWASP LLM Top 10 (2025) Mapping Scope")
     click.echo("  " + "-" * 55)
 
     summary = get_coverage_summary()
@@ -192,8 +192,9 @@ def coverage():
 
     tested = sum(1 for i in summary.values() if i['coverage'] in ('full', 'partial'))
     total = len(summary)
-    click.echo(f"\n  Coverage: {tested}/{total} categories tested")
-    click.echo(f"  Full: {sum(1 for i in summary.values() if i['coverage'] == 'full')}")
+    click.echo(f"\n  Declared checks: {tested}/{total} categories have partial mappings")
+    click.echo("  Static declarations do not show completed testing or exhaustive attack coverage.")
+    click.echo("  Offline replay fixtures do not establish live target coverage.")
     click.echo(f"  Partial: {sum(1 for i in summary.values() if i['coverage'] == 'partial')}")
     click.echo(f"  Planned: {sum(1 for i in summary.values() if i['coverage'] == 'planned')}")
 
