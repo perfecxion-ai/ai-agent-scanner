@@ -18,7 +18,7 @@ personal data and comply with privacy regulations like GDPR and CCPA.
 
 import asyncio
 import aiohttp
-from src.core.transport import SafeSession
+from src.core.transport import SafeSession, record_response_failure
 import logging
 import re
 from typing import List, Dict, Any, Optional
@@ -345,6 +345,7 @@ class DataPrivacyTester:
                 ) as response:
                     
                     if not 200 <= response.status < 300:
+                        record_response_failure()
                         return None
                     return extract_response_text(await response.text())
                     
