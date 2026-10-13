@@ -80,7 +80,7 @@ def fake_session(responses):
 ])
 async def test_authentication_requires_denied_control_and_private_data(target, responses, expected):
     target.update(authentication_required=True, protected_response_marker=CANARY)
-    with patch('aiohttp.ClientSession', fake_session(responses)):
+    with patch('src.security.access_control_tests.SafeSession', fake_session(responses)):
         result = await AccessControlTester()._test_auth_bypass_method(target, {'name': 'No Authentication', 'headers': {}})
     assert bool(result) is expected
     if result:
@@ -89,7 +89,7 @@ async def test_authentication_requires_denied_control_and_private_data(target, r
 
 @pytest.mark.asyncio
 async def test_public_endpoint_does_not_trigger_credential_probes(target):
-    with patch('aiohttp.ClientSession') as factory:
+    with patch('src.security.access_control_tests.SafeSession') as factory:
         tester = AccessControlTester()
         assert await tester._test_weak_credentials(target) == []
         assert await tester._test_api_key_security(target) == []

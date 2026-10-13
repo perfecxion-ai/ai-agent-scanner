@@ -740,8 +740,10 @@ class TestSecurityModuleIntegration:
 
     @pytest.mark.asyncio
     @patch('asyncio.sleep', new_callable=AsyncMock)
-    @patch('aiohttp.ClientSession')
-    async def test_full_security_pipeline(self, mock_session, mock_sleep):
+    @patch('src.security.prompt_injection_tests.SafeSession')
+    @patch('src.security.access_control_tests.SafeSession')
+    @patch('src.security.data_privacy_tests.SafeSession')
+    async def test_full_security_pipeline(self, privacy_session, access_session, mock_session, mock_sleep):
         """Test the complete security testing pipeline"""
         # Mock HTTP responses
         mock_response = AsyncMock()
@@ -757,6 +759,8 @@ class TestSecurityModuleIntegration:
         mock_session_instance.get.return_value = mock_ctx
 
         mock_session.return_value.__aenter__.return_value = mock_session_instance
+        privacy_session.return_value.__aenter__.return_value = mock_session_instance
+        access_session.return_value.__aenter__.return_value = mock_session_instance
 
         # Test each security module
         prompt_vulns = await self.prompt_tester.test_agent(self.test_agent)

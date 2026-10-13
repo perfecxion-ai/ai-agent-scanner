@@ -1,0 +1,1 @@
+"""Shared scanner execution contracts."""
