@@ -45,6 +45,9 @@ completed scan in the authenticated organization. They cannot add new targets.
 The stored asset endpoints must still satisfy the current server allowlist.
 Requests may shorten the scan deadline with `scan_config.timeout_seconds`, but
 cannot raise the server maximum.
+Security-only requests may also include `scan_config.model_overrides`, mapping
+existing source asset IDs to model names. This field cannot change endpoints,
+providers, or credentials, and is rejected for other scan modes.
 
 Invalid scopes return 400. Unknown or foreign source scans return the same 404.
 Oversized bodies return 413. Accepted scans return 202 after the scan and job are

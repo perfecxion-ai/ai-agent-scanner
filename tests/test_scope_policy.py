@@ -130,6 +130,28 @@ def test_modes_and_timeouts_validated(body):
         validate_request(body, config())
 
 
+def test_security_only_accepts_bounded_model_overrides():
+    _, _, _, options = validate_request({"scan_type": "security_only", "scan_config": {
+        "source_scan_id": "source", "model_overrides": {"asset": "fixture-model"},
+    }}, config())
+    assert options["model_overrides"] == {"asset": "fixture-model"}
+
+
+@pytest.mark.parametrize("overrides", [[], {"asset": ""}, {"asset": {"endpoint": "https://other.example"}}])
+def test_invalid_model_overrides_rejected(overrides):
+    with pytest.raises(ScopeValidationError):
+        validate_request({"scan_type": "security_only", "scan_config": {
+            "source_scan_id": "source", "model_overrides": overrides,
+        }}, config())
+
+
+@pytest.mark.parametrize("scan_type", ["full", "discovery_only"])
+def test_model_overrides_only_apply_to_saved_sources(scan_type):
+    with pytest.raises(ScopeValidationError, match="only valid for security_only"):
+        validate_request({"scan_type": scan_type, "scan_config": {"model_overrides": {}},
+                          "target_scope": {"network_ranges": ["192.0.2.1/32"]}}, config())
+
+
 @pytest.mark.parametrize("body", [[], None, "text", {"target_scope": {"domains": "example.com"}}])
 def test_api_rejects_bad_request_without_worker(api, body):
     module, client = api
