@@ -67,10 +67,18 @@
             <button id="jsonBtn" class="secondary" disabled>Download JSON</button><button id="sarifBtn" class="secondary" disabled>Download SARIF</button></div>
         </div>
         <p id="emptyState" class="empty">Queue a scan or open a saved scan ID to inspect its results.</p>
+        <section id="auditView" hidden aria-labelledby="auditTitle"><h3 id="auditTitle">Scan audit history</h3>
+          <p class="hint">Recorded state changes, oldest first. Earlier upgraded scans may have no history.</p>
+          <div class="actions"><button id="refreshAuditBtn" type="button" class="secondary" disabled>Refresh audit</button>
+            <button id="moreAuditBtn" type="button" class="secondary" disabled>More events</button></div>
+          <p id="auditNotice" class="hint" role="status" aria-live="polite"></p>
+          <ol id="auditList" class="audit-list" tabindex="0"></ol>
+        </section>
         <div id="reportView" hidden>
           <div class="metrics"><div><span>Assets</span><strong id="assetCount">0</strong></div><div><span>Findings</span><strong id="findingCount">0</strong></div>
             <div><span>Highest risk</span><strong id="riskScore">Not assessed</strong></div></div>
           <p id="reportNote" class="hint"></p>
+          <p id="checkSummary" class="hint"></p>
           <h3>Assets and assessment state</h3><div id="assetList" class="items"></div>
           <h3>Findings</h3><p class="hint">Recorded security findings. Review the evidence before taking action.</p><div id="findingList" class="items"></div>
           <h3>Observations</h3><p class="hint">Heuristic or inconclusive signals, separate from confirmed findings.</p><div id="observationList" class="items"></div>
