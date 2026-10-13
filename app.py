@@ -36,6 +36,7 @@ from src.reporting.report_generator import ReportGenerator
 from src.utils.auth import require_auth, create_jwt_token
 from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.model_selection import apply_model_overrides
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
 from src.core.transport import ScanBudget, scan_transport, TransportPolicyError
 from src.core.jobs import JobStore, JobDispatcher, TERMINAL_STATES
@@ -259,6 +260,10 @@ def start_scan():
                 return jsonify({"success": False, "error": "Source scan has no versioned results"}), 400
             if any(agent.get("endpoint_redacted") for agent in previous.result.get("agents", [])):
                 return jsonify({"success": False, "error": "Source endpoints were redacted; supply fresh targets"}), 400
+            try:
+                apply_model_overrides(previous.result.get("agents", []), scan_config.get("model_overrides", {}))
+            except ValueError as exc:
+                raise ScopeValidationError(str(exc)) from exc
             source_agents = DiscoveredAgentModel.query.filter_by(scan_id=source.id).all()
             if not source_agents:
                 return jsonify({"success": False, "error": "Source scan has no assets"}), 400
@@ -648,6 +653,7 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                 source_agents = previous.result["agents"]
                 if any(agent.get("endpoint_redacted") for agent in source_agents):
                     raise SourceReplayError("Source endpoints were redacted; use fresh explicit target configuration")
+                source_agents = apply_model_overrides(source_agents, scan_config.get("model_overrides", {}))
         _update_progress(scan_id, 10, "Running scan pipeline")
         result = await run_pipeline(discovery_engine, security_engine, risk_assessor,
                                     scope, scan_type, agents=source_agents,

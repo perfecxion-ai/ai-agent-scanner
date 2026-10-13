@@ -40,6 +40,5 @@ An unsupported provider, missing credentials, or a model conflicting with a comp
 Gemini endpoint remains unexecutable. A selected model does not guarantee it is
 available on the target; rejected generation requests produce incomplete results.
 
-This module defines and tests the selection contract. API route acceptance and
-execution wiring must be present in the deployed version before the request above
-is supported.
+The API validates selections before queue admission and applies them again when
+the job executes. Queued work remains subject to the current server scope policy.
