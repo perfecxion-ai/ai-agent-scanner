@@ -190,6 +190,21 @@ def dashboard():
     return render_template("dashboard.html")
 
 
+@app.after_request
+def response_boundaries(response):
+    """Keep API data out of caches and restrict the dashboard to local resources."""
+    if request.path == "/api" or request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    if response.mimetype == "text/html":
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+            "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        )
+    return response
+
+
 @app.route("/api/auth/token", methods=["POST"])
 def get_token():
     """Authenticate the configured operator; identity is controlled by the server."""
