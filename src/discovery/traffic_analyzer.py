@@ -65,12 +65,17 @@ class TrafficAnalyzer:
             if file_path.suffix.lower() not in SUPPORTED_SUFFIXES:
                 raise ValueError('Unsupported traffic format')
             try:
-                with file_path.open('rb') as stream:
-                    raw = stream.read(MAX_FILE_BYTES + 1)
-                total_bytes += len(raw)
-                if len(raw) > MAX_FILE_BYTES or total_bytes > MAX_TOTAL_BYTES:
+                remaining = MAX_TOTAL_BYTES - total_bytes
+                if remaining <= 0:
                     self._failure('byte limit')
-                    if total_bytes > MAX_TOTAL_BYTES:
+                    break
+                read_limit = min(MAX_FILE_BYTES, remaining)
+                with file_path.open('rb') as stream:
+                    raw = stream.read(read_limit + 1)
+                total_bytes += len(raw)
+                if len(raw) > read_limit:
+                    self._failure('byte limit')
+                    if read_limit == remaining:
                         break
                     continue
                 records = self._bounded_records(raw.decode('utf-8'), file_path.suffix.lower())

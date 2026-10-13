@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -94,3 +95,39 @@ async def test_bounded_read_does_not_turn_oversized_file_into_empty_success(tmp_
 async def test_missing_source_is_explicit_without_scan_context(tmp_path):
     with pytest.raises(ValueError, match='incomplete'):
         await TrafficAnalyzer().analyze_traffic(str(tmp_path / 'absent'))
+
+
+@pytest.mark.asyncio
+async def test_total_budget_limits_actual_reads_and_retains_prior_observation(tmp_path, monkeypatch):
+    first = json.dumps({'url': 'https://api.openai.com/v1/responses'})
+    (tmp_path / 'a.json').write_text(first)
+    (tmp_path / 'b.json').write_text('x' * 100)
+    (tmp_path / 'c.json').write_text(first)
+    monkeypatch.setattr('src.discovery.traffic_analyzer.MAX_FILE_BYTES', 500)
+    monkeypatch.setattr('src.discovery.traffic_analyzer.MAX_TOTAL_BYTES', len(first) + 5)
+    original = Path.open
+    reads = []
+
+    class Reader:
+        def __init__(self, path, *args, **kwargs):
+            self.stream = original(path, *args, **kwargs)
+            self.name = path.name
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.stream.close()
+
+        def read(self, amount):
+            value = self.stream.read(amount)
+            reads.append((self.name, amount, len(value)))
+            return value
+
+    monkeypatch.setattr(Path, 'open', lambda path, *args, **kwargs: Reader(path, *args, **kwargs))
+    budget = ScanBudget()
+    with scan_transport(budget):
+        result = await TrafficAnalyzer().analyze_traffic(str(tmp_path))
+    assert reads == [('a.json', len(first) + 6, len(first)), ('b.json', 6, 6)]
+    assert budget.failures == 1
+    assert len(result) == 1
