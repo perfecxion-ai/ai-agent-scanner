@@ -3,7 +3,7 @@
 import json
 import os
 import re
-from urllib.parse import urlsplit, urlunsplit, quote
+from urllib.parse import urlsplit, urlunsplit, quote, unquote
 
 
 SUPPORTED_PROVIDERS = {'openai', 'openai-compatible', 'vllm', 'ollama', 'anthropic', 'google', 'gemini'}
@@ -80,7 +80,13 @@ def construct_agent_request(agent, payload):
         return None
     model = agent.get('model')
     if provider in {'google', 'gemini'} and parts.path.endswith(':generateContent'):
-        model = parts.path.rsplit('/models/', 1)[-1].removesuffix(':generateContent')
+        match = re.search(r'/models/([^/]+):generateContent$', parts.path)
+        if not match:
+            return None
+        endpoint_model = unquote(match.group(1))
+        if model is not None and (not isinstance(model, str) or model.removeprefix('models/') != endpoint_model):
+            return None
+        model = endpoint_model
     if not isinstance(model, str) or not model.strip():
         return None
     key = resolve_api_key(agent)
@@ -111,7 +117,9 @@ def construct_agent_request(agent, payload):
         if parts.path.endswith(':generateContent'):
             url = endpoint
         else:
-            url = _route(endpoint, 'v1beta/models/' + quote(model.removeprefix('models/'), safe='') + ':generateContent',
+            version_match = re.search(r'/(v1|v1beta)(?:/models)?$', parts.path.rstrip('/'))
+            version = version_match.group(1) if version_match else 'v1beta'
+            url = _route(endpoint, version + '/models/' + quote(model.removeprefix('models/'), safe='') + ':generateContent',
                          ('v1beta/models', 'v1/models'))
         body = {'contents': [{'role': 'user', 'parts': [{'text': payload}]}],
                 'generationConfig': {'maxOutputTokens': 100}}

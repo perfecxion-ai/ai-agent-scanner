@@ -55,7 +55,7 @@ class SecurityTestEngine:
             'limitations': ['Data retention requires verified expiry/deletion and session boundaries.',
                             'Prompt and tenant disclosure require operator-seeded protected canaries.',
                             'Authentication checks require a protected response marker and denied control.'],
-            'overall_risk_score': 0.0
+            'overall_risk_score': None
         }
         environment = agent.get('metadata', {}).get('environment')
         if environment in ('production', 'development', 'staging', 'test'):
@@ -70,7 +70,7 @@ class SecurityTestEngine:
         try:
             if construct_agent_request(agent, "configuration check") is None:
                 test_results['status'] = 'skipped'
-                test_results['reason'] = 'Unsupported provider or missing model/credential configuration'
+                test_results['reason'] = 'Unsupported provider or invalid/missing model or credential configuration'
                 return test_results
             budget = current_budget()
             errors_before = budget.failures + budget.rejections if budget else 0

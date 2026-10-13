@@ -59,6 +59,7 @@ async def test_unsupported_and_missing_models_skip_without_probes():
         result = await engine._test_single_agent({'id': 'fixture', 'name': 'fixture',
                      'provider': provider, 'endpoint': 'https://fixture.test'})
         assert result['status'] == 'skipped'
+        assert result['overall_risk_score'] is None
     engine.prompt_tester.test_agent.assert_not_called()
 
 
@@ -75,3 +76,38 @@ async def test_env_credential_not_persisted_even_if_echoed(monkeypatch):
     assert 'fixture-private-key' not in json.dumps(result)
     assert 'api_key_env' not in json.dumps(result)
     assert result['agents'][0]['model'] == 'fixture-model'
+
+
+@pytest.mark.parametrize('suffix,version', [('/v1', 'v1'), ('/v1/', 'v1'),
+    ('/v1/models', 'v1'), ('/v1beta', 'v1beta'), ('/v1beta/models', 'v1beta')])
+def test_gemini_base_preserves_api_version_and_proxy_prefix(suffix, version):
+    agent = {'provider': 'gemini', 'endpoint': 'https://fixture.test/proxy' + suffix,
+             'model': 'fixture-model'}
+    request = construct_agent_request(agent, 'hello')
+    assert request['url'] == f'https://fixture.test/proxy/{version}/models/fixture-model:generateContent'
+
+
+@pytest.mark.parametrize('model', ['different-model', 7])
+def test_gemini_conflicting_explicit_model_rejected(model):
+    agent = {'provider': 'gemini', 'endpoint': 'https://fixture.test/v1/models/fixture-model:generateContent',
+             'model': model}
+    assert construct_agent_request(agent, 'hello') is None
+
+
+def test_gemini_matching_prefixed_model_and_incomplete_route():
+    agent = {'provider': 'gemini', 'endpoint': 'https://fixture.test/v1/models/fixture-model:generateContent',
+             'model': 'models/fixture-model'}
+    assert construct_agent_request(agent, 'hello')['url'] == agent['endpoint']
+    agent['endpoint'] = 'https://fixture.test/v1/:generateContent'
+    assert construct_agent_request(agent, 'hello') is None
+
+
+@pytest.mark.asyncio
+async def test_gemini_model_conflict_skips_without_probes_or_score():
+    engine = SecurityTestEngine()
+    engine.prompt_tester.test_agent = AsyncMock()
+    result = await engine._test_single_agent({'id': 'test', 'name': 'Test', 'provider': 'gemini',
+        'endpoint': 'https://fixture.test/v1/models/actual-model:generateContent', 'model': 'different-model'})
+    assert result['status'] == 'skipped'
+    assert result['overall_risk_score'] is None
+    engine.prompt_tester.test_agent.assert_not_called()

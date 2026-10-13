@@ -42,7 +42,9 @@ Configured keys use `x-api-key`.
 
 Gemini uses `/v1beta/models/<model>:generateContent`, `contents` with text parts,
 and the configured `x-goog-api-key` header. A complete generateContent endpoint supplies
-its own model identifier. [Gemini API reference](https://ai.google.dev/api/generate-content)
+its own model identifier; an explicit conflicting model is rejected. Base URLs
+ending in `/v1` or `/v1beta` preserve that API version. Unversioned base URLs
+default to `/v1beta`. [Gemini API reference](https://ai.google.dev/api/generate-content)
 
 Tests use fixture model names, mocked responses, and local data. They do not establish
 compatibility with every live model or perform paid provider requests.
