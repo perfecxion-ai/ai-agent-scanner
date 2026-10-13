@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.contracts import CheckRecord
 from src.core.transport import ScanBudget, scan_transport
 from tests.test_api_auth import api as api_fixture, headers
 
@@ -21,10 +22,19 @@ def asset(endpoint="https://192.0.2.1", asset_id="stable-asset"):
 
 
 def engines(agents, status="completed"):
-    finding = {"vulnerability_type": "fixture", "severity": "critical", "description": "Fixture evidence"}
+    finding = {"vulnerability_type": "fixture", "severity": "critical",
+               "description": "Fixture protected response marker disclosed",
+               "evidence_status": "confirmed", "rule_id": "fixture.protected_disclosure",
+               "probe_id": "fixture.protected_disclosure.sample", "probe_version": "1:fixture",
+               "evidence_context_id": "pipeline-fixture-v1"}
+    checks = [CheckRecord(
+        finding["rule_id"], finding["probe_id"], finding["probe_version"],
+        "completed", "confirmed", 1, 1,
+        evidence_context_id=finding["evidence_context_id"]).to_dict()] if status == "completed" else []
     discovery = SimpleNamespace(discover_agents=AsyncMock(return_value=agents))
     security = SimpleNamespace(test_agents=AsyncMock(return_value=[{
         "agent_id": "stable-asset", "agent_name": "fixture", "status": status,
+        "check_schema_version": "1.0", "checks": checks,
         "vulnerabilities": [finding] if status == "completed" else [],
     }]))
     risk = SimpleNamespace(assess_risks=AsyncMock(return_value=[{

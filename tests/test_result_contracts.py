@@ -249,8 +249,11 @@ def test_invalid_pass_claims_rejected(status, outcome, evaluated):
 
 
 def test_legacy_reports_remain_readable_and_invalid_modern_checks_rejected():
-    legacy = {"schema_version": "1.0", "agents": [{"vulnerabilities": []}]}
+    legacy = {"schema_version": "1.0", "summary": {"overall_risk_score": 12},
+              "agents": [{"vulnerabilities": [], "risk_score": 12, "risk_level": "low"}]}
+    original = deepcopy(legacy)
     assert validate_scan_result(legacy) is legacy
+    assert legacy == original
     modern = {**legacy, "check_schema_version": "1.0",
               "agents": [{"vulnerabilities": [], "checks": [{"rule_id": "rule", "status": "passed"}]}]}
     with pytest.raises((TypeError, ValueError)):
@@ -368,3 +371,28 @@ async def test_completed_modern_conclusive_check_remains_risk_eligible(target, o
     risk.assess_risks.assert_awaited_once()
     assert report["risk_assessment_status"] == "completed"
     assert report["summary"]["agents_risk_assessed"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("schema,has_checks", [(None, True), (None, False), ("2.0", True), ("1.0", False)])
+async def test_unknown_schema_or_missing_checks_cannot_start_new_risk_assessment(target, schema, has_checks):
+    check = CheckRecord("rule", "probe", "1", "completed", "confirmed", 1, 1).to_dict()
+    adapter_result = {"agent_id": "fixture", "status": "completed",
+                      "vulnerabilities": [],
+                      "overall_risk_score": 0, "risk_level": "low"}
+    if has_checks:
+        adapter_result["checks"] = [check]
+    if schema:
+        adapter_result["check_schema_version"] = schema
+    security = SimpleNamespace(test_agents=AsyncMock(return_value=[adapter_result]))
+    discovery = SimpleNamespace(discover_agents=AsyncMock(return_value=[target]))
+    risk = SimpleNamespace(assess_risks=AsyncMock())
+    report = await run_pipeline(discovery, security, risk, None)
+    assert report["status"] == "completed"
+    assert report["risk_assessment_status"] == "not_assessed"
+    assert report["summary"]["overall_risk_score"] is None
+    assert report["agents"][0]["risk_score"] is None
+    assert report["agents"][0]["risk_level"] == "unknown"
+    assert report["security_results"][0]["overall_risk_score"] is None
+    assert report["security_results"][0]["risk_level"] == "unknown"
+    risk.assess_risks.assert_not_called()

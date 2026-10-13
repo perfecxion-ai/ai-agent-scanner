@@ -249,12 +249,14 @@ def proves_absence(check, finding):
 
 
 def risk_assessment_eligible(result):
-    """Legacy adapters retain compatibility; modern evidence must be conclusive."""
-    if result.get("status") != "completed":
+    """New assessments require valid, conclusive check-level evidence."""
+    if result.get("status") != "completed" or result.get("check_schema_version") != CHECK_SCHEMA_VERSION:
         return False
-    if "check_schema_version" not in result:
-        return True
-    return result["check_schema_version"] == CHECK_SCHEMA_VERSION and any(
+    try:
+        validate_checks(result.get("checks", []))
+    except (TypeError, ValueError):
+        return False
+    return any(
         check.get("status") == "completed" and check.get("outcome") in {"passed", "confirmed"}
         for check in result.get("checks", []))
 

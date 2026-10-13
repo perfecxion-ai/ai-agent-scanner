@@ -73,6 +73,10 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
                     result.update(status="failed", error="Invalid security check result", vulnerabilities=[], checks=[])
             else:
                 result["checks"] = missing_checks([], "No check-level evidence supplied")
+            if not risk_assessment_eligible(result):
+                result["overall_risk_score"] = None
+                if "risk_level" in result:
+                    result["risk_level"] = "unknown"
             result["metadata"] = public_metadata(agent.get("metadata", {}))
             secrets.update(collect_secrets(result))
             security_results.append(result)

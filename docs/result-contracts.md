@@ -68,9 +68,11 @@ heuristic/inconclusive responses and skipped oracles remains completed, but
 its risk is unknown, score is null, and `risk_assessment_status` is
 `not_assessed` when no asset qualifies. Summary fields
 `agents_risk_assessed` and `agents_risk_not_assessed` expose this distinction.
-Older engine adapters without `check_schema_version` retain their previous
-risk eligibility for compatibility; missing legacy check evidence still
-cannot prove finding resolution.
+New executions, including older engine adapters, require the known check
+schema and validated conclusive records before risk assessment. Existing
+version 1.0 files remain readable with their persisted scores; reading them
+does not trigger a retrospective assessment or change their recorded values.
+Missing legacy check evidence cannot prove finding resolution.
 
 Report comparison resolves an absent finding only when the same unambiguous,
 unredacted endpoint has explicit completed, passed evidence for every earlier
