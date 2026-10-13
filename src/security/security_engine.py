@@ -119,6 +119,14 @@ class SecurityTestEngine:
             self.logger.error("Security testing failed")
             test_results['status'] = 'failed'
             test_results['error'] = 'Security testing failed'
+            test_results['overall_risk_score'] = None
+        finally:
+            test_results['observations'].extend(
+                finding for finding in test_results['vulnerabilities']
+                if finding.get('evidence_status') in ('heuristic', 'inconclusive'))
+            test_results['vulnerabilities'] = [
+                finding for finding in test_results['vulnerabilities']
+                if finding.get('evidence_status') not in ('heuristic', 'inconclusive')]
         test_results['checks'].extend(missing_checks(test_results['checks'], 'Probe did not execute'))
         
         return test_results

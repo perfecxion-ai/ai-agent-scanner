@@ -18,6 +18,7 @@ from src.reporting.workflows import compare_reports, inventory
 from src.security.access_control_tests import AccessControlTester
 from src.security.data_privacy_tests import DataPrivacyTester
 from src.security.prompt_injection_tests import PromptInjectionTester
+from src.security.security_engine import SecurityTestEngine
 
 
 CANARY = "random-fixture-canary-95fb63569eaf"
@@ -299,3 +300,30 @@ def test_cli_evidence_context_is_explicit_bounded_public_provenance(tmp_path, co
     else:
         with pytest.raises(click.ClickException):
             load_targets((), (), config=str(config))
+
+
+@pytest.mark.asyncio
+async def test_later_tester_failure_retains_confirmed_findings_without_promoting_observations(target):
+    engine = SecurityTestEngine()
+    engine.prompt_tester.test_agent = AsyncMock(return_value=[
+        {"vulnerability_type": "prompt_injection", "evidence_status": "heuristic",
+         "severity": "info", "description": "Unverified observation"},
+        {"vulnerability_type": "prompt_injection", "evidence_status": "confirmed",
+         "severity": "high", "description": "Protected marker disclosed"},
+    ])
+    engine.access_tester.test_agent = AsyncMock(side_effect=RuntimeError("Fixture access failure"))
+    engine.privacy_tester.test_agent = AsyncMock()
+    discovery = SimpleNamespace(discover_agents=AsyncMock(return_value=[target]))
+    risk = SimpleNamespace(assess_risks=AsyncMock())
+    report = await run_pipeline(discovery, engine, risk, None)
+    result = report["security_results"][0]
+    assert result["status"] == "failed"
+    assert result["overall_risk_score"] is None
+    assert len(result["vulnerabilities"]) == len(result["observations"]) == 1
+    assert result["vulnerabilities"][0]["evidence_status"] == "confirmed"
+    assert result["observations"][0]["evidence_status"] == "heuristic"
+    assert report["summary"]["vulnerabilities_found"] == 1
+    assert report["agents"][0]["risk_score"] is None
+    assert report["status"] == "partial"
+    risk.assess_risks.assert_not_called()
+    engine.privacy_tester.test_agent.assert_not_called()
