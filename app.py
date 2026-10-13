@@ -213,6 +213,31 @@ def get_token():
     return response
 
 
+@app.route("/api/scans", methods=["GET"])
+@require_auth
+def list_scans():
+    """List only the authenticated organization's saved scan summaries."""
+    try:
+        limit = int(request.args.get("limit", "25"))
+        offset = int(request.args.get("offset", "0"))
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid pagination"}), 400
+    if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
+        return jsonify({"success": False, "error": "Invalid pagination"}), 400
+    query = ScanSession.query.filter_by(organization_id=g.user["organization_id"])
+    scans = query.order_by(ScanSession.created_at.desc(), ScanSession.id.desc()).offset(offset).limit(limit).all()
+    return jsonify({
+        "success": True, "total": query.count(), "limit": limit, "offset": offset,
+        "scans": [{
+            "scan_id": scan.id, "scan_name": scan.scan_name, "scan_type": scan.scan_type,
+            "status": scan.status, "created_at": scan.created_at.isoformat(),
+            "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
+            "agents_discovered": scan.agents_discovered,
+            "vulnerabilities_found": scan.vulnerabilities_found,
+        } for scan in scans],
+    })
+
+
 @app.route("/api/scans", methods=["POST"])
 @require_auth
 def start_scan():
