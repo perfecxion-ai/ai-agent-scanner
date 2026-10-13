@@ -211,6 +211,7 @@ def test_transport_failures_cannot_produce_clean_scan(api, monkeypatch, counter)
     module, _ = api
     module.db.session.add(module.ScanSession(id="transport", organization_id="tenant-a", scan_name="x",
                           scan_type="discovery_only", target_scope={}, scan_config={}))
+    module.db.session.add(module.ScanJob(scan_id="transport", status="running"))
     module.db.session.commit()
 
     async def blocked(*args):

@@ -47,8 +47,17 @@ class DispatcherLock:
 
 
 class JobStore:
-    def __init__(self, engine, jobs, scans, results):
+    def __init__(self, engine, jobs, scans, results, audit):
         self.engine, self.jobs, self.scans, self.results = engine, jobs, scans, results
+        self.audit = audit
+
+    def _event(self, connection, scan_id, event, previous, status):
+        tenant = connection.scalar(select(self.scans.c.organization_id).where(self.scans.c.id == scan_id))
+        if tenant is None:
+            raise ValueError("Job has no scan session")
+        connection.execute(insert(self.audit).values(
+            scan_id=scan_id, organization_id=tenant, event=event,
+            previous_status=previous, status=status, created_at=datetime.now(timezone.utc)))
 
     def queued_count(self):
         with self.engine.connect() as connection:
@@ -65,19 +74,25 @@ class JobStore:
             claimed = connection.execute(update(self.jobs).where(
                 self.jobs.c.scan_id == scan_id, self.jobs.c.status == "queued",
             ).values(status="running", owner=owner, started_at=datetime.now(timezone.utc)))
-            return scan_id if claimed.rowcount == 1 else None
+            if claimed.rowcount != 1:
+                return None
+            connection.execute(update(self.scans).where(self.scans.c.id == scan_id).values(
+                status="running", started_at=datetime.now(timezone.utc)))
+            self._event(connection, scan_id, "claimed", "queued", "running")
+            return scan_id
 
-    def _finalize(self, connection, scan_id, status, error=None):
+    def _finalize(self, connection, scan_id, status, error=None, output=None):
         now = datetime.now(timezone.utc)
         scan = connection.execute(select(self.scans).where(self.scans.c.id == scan_id)).mappings().first()
         if not scan:
             raise ValueError("Job has no scan session")
+        previous = connection.scalar(select(self.jobs.c.status).where(self.jobs.c.scan_id == scan_id))
         connection.execute(update(self.jobs).where(self.jobs.c.scan_id == scan_id).values(
             status=status, completed_at=now))
         connection.execute(update(self.scans).where(self.scans.c.id == scan_id).values(
             status=status, completed_at=now))
         result = connection.scalar(select(self.results.c.result).where(self.results.c.scan_id == scan_id))
-        output = dict(result) if result is not None else {
+        output = dict(output) if output is not None else dict(result) if result is not None else {
             "schema_version": "1.0", "scan_id": scan_id, "scan_type": scan["scan_type"],
             "agents": [], "security_results": [], "risk_assessments": [], "summary": {},
         }
@@ -88,37 +103,70 @@ class JobStore:
             connection.execute(insert(self.results).values(scan_id=scan_id, result=output))
         else:
             connection.execute(update(self.results).where(self.results.c.scan_id == scan_id).values(result=output))
+        self._event(connection, scan_id, "terminal", previous or scan["status"], status)
 
-    def finish(self, scan_id, error=None):
+    def _locked_status(self, connection, scan_id):
+        connection.execute(update(self.jobs).where(self.jobs.c.scan_id == scan_id).values(
+            status=self.jobs.c.status))
+        return connection.scalar(select(self.jobs.c.status).where(self.jobs.c.scan_id == scan_id))
+
+    def save_result(self, scan_id, output, agents_table, snapshots):
+        """Commit the report, snapshots, terminal queue state and event together."""
+        if output["status"] not in {"completed", "partial"}:
+            raise ValueError("Pipeline result must be completed or partial")
+        with self.engine.begin() as connection:
+            status = self._locked_status(connection, scan_id)
+            if status in TERMINAL_STATES:
+                return
+            if status is None:
+                scan_status = connection.scalar(select(self.scans.c.status).where(self.scans.c.id == scan_id))
+                if scan_status in TERMINAL_STATES:
+                    return
+                if scan_status is None:
+                    raise ValueError("Job has no scan session")
+            summary = output["summary"]
+            connection.execute(update(self.scans).where(self.scans.c.id == scan_id).values(
+                agents_discovered=summary["agents_discovered"],
+                vulnerabilities_found=summary["vulnerabilities_found"],
+                critical_risks=summary["critical_risks"],
+                overall_risk_score=summary["overall_risk_score"] or 0.0, progress=100.0))
+            if snapshots:
+                connection.execute(insert(agents_table), snapshots)
+            if status == "cancel_requested":
+                self._finalize(connection, scan_id, "cancelled", "Scan cancelled by operator", output)
+            else:
+                self._finalize(connection, scan_id, output["status"], output=output)
+
+    def finish(self, scan_id, error=None, *, status=None):
+        explicit_status = status is not None
         with self.engine.begin() as connection:
             # Lock before reading so a concurrent accepted cancellation cannot be overwritten.
-            connection.execute(update(self.jobs).where(self.jobs.c.scan_id == scan_id).values(
-                status=self.jobs.c.status))
-            job_status = connection.scalar(select(self.jobs.c.status).where(self.jobs.c.scan_id == scan_id))
+            job_status = self._locked_status(connection, scan_id)
             if job_status in TERMINAL_STATES:
                 return
-            status = connection.scalar(select(self.scans.c.status).where(self.scans.c.id == scan_id))
+            scan_status = connection.scalar(select(self.scans.c.status).where(self.scans.c.id == scan_id))
+            if job_status is None and (scan_status is None or scan_status in TERMINAL_STATES):
+                return
+            status = status or scan_status
             if job_status == "cancel_requested":
                 status, error = "cancelled", "Scan cancelled by operator"
-            elif error or status not in TERMINAL_STATES:
+            elif (error and not explicit_status) or status not in TERMINAL_STATES:
                 status, error = "failed", error or "Worker exited without a terminal result"
             self._finalize(connection, scan_id, status, error)
 
     def cancel(self, scan_id):
         with self.engine.begin() as connection:
-            connection.execute(update(self.jobs).where(self.jobs.c.scan_id == scan_id).values(
-                status=self.jobs.c.status))
-            status = connection.scalar(select(self.jobs.c.status).where(self.jobs.c.scan_id == scan_id))
+            status = self._locked_status(connection, scan_id)
             if status == "queued":
-                changed = connection.execute(update(self.jobs).where(
-                    self.jobs.c.scan_id == scan_id, self.jobs.c.status == "queued",
-                ).values(status="cancelled"))
-                if changed.rowcount:
-                    self._finalize(connection, scan_id, "cancelled", "Scan cancelled before execution")
-                    return "cancelled"
+                self._finalize(connection, scan_id, "cancelled", "Scan cancelled before execution")
+                return "cancelled"
+            if status == "cancel_requested":
+                return "cancel_requested"
             changed = connection.execute(update(self.jobs).where(
-                self.jobs.c.scan_id == scan_id, self.jobs.c.status.in_(("running", "cancel_requested")),
+                self.jobs.c.scan_id == scan_id, self.jobs.c.status == "running",
             ).values(status="cancel_requested"))
+            if changed.rowcount:
+                self._event(connection, scan_id, "cancel_requested", "running", "cancel_requested")
             return "cancel_requested" if changed.rowcount else None
 
     def cancellation_requested(self, scan_id):
@@ -146,7 +194,7 @@ class JobStore:
 
 
 class JobDispatcher:
-    def __init__(self, store, run, workers=2, poll_seconds=0.25):
+    def __init__(self, store, run, workers=2, poll_seconds=0.25, initialize=None):
         if workers < 1 or poll_seconds <= 0:
             raise ValueError("Worker count and poll interval must be positive")
         self.store, self.run = store, run
@@ -161,6 +209,7 @@ class JobDispatcher:
         self._healthy = False
         self._ownership = DispatcherLock(store.engine)
         self.logger = logging.getLogger(__name__)
+        self.initialize = initialize
 
     @property
     def ready(self):
@@ -172,6 +221,8 @@ class JobDispatcher:
                 raise RuntimeError("Dispatcher has already been started")
             self._ownership.acquire()
             try:
+                if self.initialize:
+                    self.initialize()
                 self.store.recover()
                 self._executor = ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix="scan-job")
                 self._thread = threading.Thread(target=self._loop, name="scan-dispatcher", daemon=True)

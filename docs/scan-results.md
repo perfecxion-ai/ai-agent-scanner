@@ -1,8 +1,9 @@
 # Scan results
 
-The API stores versioned results in the `scan_result` table. Existing installations must run
-`flask --app app shell`, then `db.create_all()` before serving requests after upgrading.
-This adds the table without rewriting existing scan records. Back up the database first.
+The API stores versioned results in the `scan_result` table. Server startup validates
+and upgrades known SQLite schemas under the dispatcher lock. Stop the server and
+back up the database before upgrading; see [schema upgrades](jobs.md#schema-upgrades).
+Do not use `db.create_all()` as an upgrade command; it bypasses schema acceptance.
 Older scans remain readable but do not have JSON/SARIF reports or reusable security-only inputs.
 
 `GET /api/scans/<id>/results` includes a `pipeline` object with schema version `1.0`.
@@ -23,8 +24,9 @@ fresh explicit configuration through the CLI instead. Discovery-only scans do no
 tests. JSON preserves findings and risk assessments; SARIF includes execution completeness so
 skipped, failed, and discovery-only runs are not represented as clean security executions.
 
-Execution remains in process: restarting the server interrupts running work. This release does
-not introduce a durable worker queue, retry recovery, or historical result backfill.
+Execution uses a durable SQLite queue within one server process. Restarting resumes
+queued work and marks previously active jobs interrupted without replaying probes.
+It does not backfill historical reports. See [persistent jobs](jobs.md).
 
 ## CLI
 
