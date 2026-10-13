@@ -4,6 +4,8 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from copy import deepcopy
 from urllib.parse import urlsplit, urlunsplit
+from src.core.transport import current_budget
+from src.reporting.sarif_output import generate_sarif
 
 
 SCHEMA_VERSION = "1.0"
@@ -95,6 +97,7 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         agent["metadata"] = public_metadata(original.get("metadata", {}))
         if agent.get("endpoint"):
             endpoint = urlsplit(agent["endpoint"])
+            agent["endpoint_redacted"] = bool(endpoint.query or endpoint.username or endpoint.password)
             agent["endpoint"] = urlunsplit((endpoint.scheme, endpoint.netloc.rsplit('@', 1)[-1], endpoint.path, '', ''))
         test = tests_by_id.get(agent["id"], {})
         assessment = risks_by_id.get(agent["id"], {})
@@ -108,11 +111,14 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
     failed = sum(result["status"] == "failed" for result in security_results)
     partial = sum(result["status"] == "partial" for result in security_results)
     skipped = sum(result["status"] == "skipped" for result in security_results)
+    budget = current_budget()
+    transport_incomplete = bool(budget and (budget.failures or budget.rejections))
     return redact_secrets({
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": scan_type,
-        "status": "partial" if failed or partial or risk_status == "failed" else "completed",
+        "status": "partial" if failed or partial or transport_incomplete or risk_status == "failed" else "completed",
+        "transport_incomplete": transport_incomplete,
         "risk_assessment_status": risk_status,
         "agents": observations,
         "security_results": security_results,
@@ -129,25 +135,16 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
 
 
 def to_sarif(result):
-    """Export findings and execution completeness without claiming clean skipped assets."""
+    """Use the shared SARIF exporter and attach execution completeness."""
     findings = []
-    rules = {}
     for agent in result.get("agents", []):
         for finding in agent.get("vulnerabilities", []):
-            rule_id = str(finding.get("vulnerability_type") or finding.get("type") or "unknown")
-            rules.setdefault(rule_id, {"id": rule_id, "shortDescription": {"text": rule_id}})
-            findings.append({
-                "ruleId": rule_id,
-                "level": {"critical": "error", "high": "error", "medium": "warning"}.get(
-                    finding.get("severity"), "note"),
-                "message": {"text": str(finding.get("description") or finding.get("title") or rule_id)},
-                "properties": {"asset_id": agent["id"], "finding": finding},
-            })
+            findings.append({**finding, "agent_id": agent["id"]})
+    report = generate_sarif(findings, {"started_at": result.get("generated_at")})
     summary = result.get("summary", {})
     complete = result.get("status") == "completed" and not any(
         summary.get(key, 0) for key in ("agents_failed", "agents_partial", "agents_skipped", "agents_not_tested")
     )
-    return {"version": "2.1.0", "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-            "runs": [{"tool": {"driver": {"name": "AI Agent Scanner", "rules": list(rules.values())}},
-                      "results": findings, "invocations": [{"executionSuccessful": complete}],
-                      "properties": {"scan_status": result.get("status"), "summary": summary}}]}
+    report["runs"][0]["invocations"][0]["executionSuccessful"] = complete
+    report["runs"][0]["properties"] = {"scan_status": result.get("status"), "summary": summary}
+    return report

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.transport import ScanBudget, scan_transport
 from tests.test_api_auth import api as api_fixture, headers
 
 
@@ -95,6 +96,25 @@ async def test_partial_findings_and_secret_redaction():
     assert 'private-key-value' not in str(result)
     assert result['agents'][0]['metadata'] == {'internet_facing': True}
     assert not to_sarif(result)['runs'][0]['invocations'][0]['executionSuccessful']
+
+
+@pytest.mark.asyncio
+async def test_transport_failures_prevent_empty_clean_report():
+    discovery, security, risk = engines([])
+    budget = ScanBudget()
+    budget.failures = 1
+    with scan_transport(budget):
+        result = await run_pipeline(discovery, security, risk, None, 'discovery_only')
+    assert result['status'] == 'partial'
+    assert result['transport_incomplete']
+
+
+@pytest.mark.asyncio
+async def test_endpoint_redaction_is_marked():
+    discovery, security, risk = engines([asset('https://example.test/api?api_key=secret')])
+    result = await run_pipeline(discovery, security, risk, None, 'discovery_only')
+    assert result['agents'][0]['endpoint'] == 'https://example.test/api'
+    assert result['agents'][0]['endpoint_redacted'] is True
 
 
 def add_scan(module, scan_id, organization="tenant-a", mode="full"):

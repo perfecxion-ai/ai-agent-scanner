@@ -79,6 +79,10 @@ _scans_lock = threading.Lock()
 VERSION = "1.1.0"
 
 
+class SourceReplayError(ValueError):
+    """A persisted source requires new explicit target configuration."""
+
+
 # ---------------------------------------------------------------------------
 # Database models
 # ---------------------------------------------------------------------------
@@ -443,6 +447,8 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                 if not previous:
                     raise ValueError("Source scan has no versioned results")
                 source_agents = previous.result["agents"]
+                if any(agent.get("endpoint_redacted") for agent in source_agents):
+                    raise SourceReplayError("Source endpoints were redacted; use fresh explicit target configuration")
         _update_progress(scan_id, 10, "Running scan pipeline")
         result = await run_pipeline(discovery_engine, security_engine, risk_assessor,
                                     scope, scan_type, agents=source_agents)
@@ -491,7 +497,7 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                 scan_session.completed_at = datetime.now(timezone.utc)
                 db.session.add(ScanResult(scan_id=scan_id, result={
                     "schema_version": "1.0", "scan_id": scan_id, "scan_type": scan_type,
-                    "status": "failed", "error": "Scan execution failed", "agents": [],
+                    "status": "failed", "error": str(e) if isinstance(e, SourceReplayError) else "Scan execution failed", "agents": [],
                     "summary": {},
                 }))
                 db.session.commit()

@@ -17,7 +17,9 @@ Legacy numeric columns retain zero for compatibility; use the versioned result's
 The scanner's existing detection heuristics are not evidence that an endpoint is safe.
 
 Security-only scans use `scan_config.source_scan_id` to load a completed scan from the same
-organization. The source must have versioned results. Discovery-only scans do not run security
+organization. The source must have versioned results.
+Source endpoints whose query or credentials were redacted cannot be replayed: supply
+fresh explicit configuration through the CLI instead. Discovery-only scans do not run security
 tests. JSON preserves findings and risk assessments; SARIF includes execution completeness so
 skipped, failed, and discovery-only runs are not represented as clean security executions.
 
