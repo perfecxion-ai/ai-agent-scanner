@@ -133,7 +133,9 @@ async def test_engine_preserves_risk_context_and_excludes_observations(target):
     with patch.object(engine.prompt_tester, 'test_agent', AsyncMock(return_value=[{'severity': 'info', 'evidence_status': 'heuristic'}])), patch.object(engine.access_tester, 'test_agent', AsyncMock(return_value=[])), patch.object(engine.privacy_tester, 'test_agent', AsyncMock(return_value=[])):
         result = await engine._test_single_agent(target)
     assert result['vulnerabilities'] == [] and len(result['observations']) == 1
-    assert result['overall_risk_score'] == 0
+    assert result['overall_risk_score'] is None
+    assert result['status'] == 'partial'
+    assert all(check['status'] == 'skipped' for check in result['checks'])
     assert result['type'] == 'assistant'
     assert result['metadata'] == {'internet_facing': True, 'processes_pii': True, 'environment': 'production'}
     assert 'secret' not in json.dumps(result)

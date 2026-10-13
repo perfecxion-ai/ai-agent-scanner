@@ -5,6 +5,7 @@ import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
+from src.core.contracts import proves_absence, validate_scan_result
 
 
 def _digest(value):
@@ -12,21 +13,18 @@ def _digest(value):
 
 
 def _validate(report):
-    if not isinstance(report, dict) or report.get("schema_version") != "1.0":
-        raise ValueError("Expected a version 1.0 scan report")
-    if not isinstance(report.get("agents"), list):
-        raise ValueError("Report agents must be an array")
-    for agent in report["agents"]:
-        if not isinstance(agent, dict) or not isinstance(agent.get("vulnerabilities", []), list):
-            raise ValueError("Invalid agent findings")
-        if not all(isinstance(finding, dict) for finding in agent.get("vulnerabilities", [])):
-            raise ValueError("Each finding must be an object")
+    validate_scan_result(report)
 
 
 def asset_identity(agent):
-    """Prefer normalized endpoints, then source identity, then a labeled fallback."""
+    """Prefer cloud resource identity, then endpoint, source, or labeled fallback."""
     endpoint = agent.get("endpoint")
-    if endpoint:
+    metadata = agent.get("metadata", {})
+    resource = metadata.get("resource_id")
+    if isinstance(resource, str) and resource.strip() and len(resource) <= 2048 and metadata.get("cloud") in {"aws", "azure", "gcp"}:
+        basis = ["cloud_resource", metadata["cloud"], agent.get("provider"), resource]
+        quality = "cloud_resource"
+    elif endpoint:
         parsed = urlsplit(endpoint)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise ValueError("Invalid report endpoint")
@@ -38,13 +36,13 @@ def asset_identity(agent):
         basis = ["endpoint", canonical]
         quality = "redacted_endpoint" if agent.get("endpoint_redacted") else "endpoint"
     else:
-        metadata = agent.get("metadata", {})
         source = metadata.get("source_path") or metadata.get("file_path") or metadata.get("repository")
         basis = ["source" if source else "fallback", source, agent.get("provider"),
                  agent.get("name"), agent.get("type"), agent.get("discovery_method")]
         quality = "source" if source else "provider_name_fallback"
     return {"asset_key": _digest(basis), "identity_basis": quality,
-            "name": agent.get("name"), "endpoint": endpoint, "provider": agent.get("provider")}
+            "name": agent.get("name"), "endpoint": endpoint, "provider": agent.get("provider"),
+            "model": agent.get("model")}
 
 
 def inventory(report):
@@ -93,8 +91,12 @@ def compare_reports(before, after):
                     and not asset["ambiguous"] and not old_assets[item["asset_key"]]["ambiguous"]
                     and asset["identity_basis"] == "endpoint"
                     and old_assets[item["asset_key"]]["identity_basis"] == "endpoint"
-                    and any(isinstance(check, dict) and check.get("rule_id") == item["rule_id"]
-                            and check.get("status") == "passed" for check in asset.get("checks", [])))
+                    and asset["provider"] == old_assets[item["asset_key"]]["provider"]
+                    and asset["model"] == old_assets[item["asset_key"]]["model"]
+                    and all(occurrence.get("probe_id") and occurrence.get("probe_version") and any(
+                        isinstance(check, dict) and proves_absence(check, occurrence)
+                        for check in asset.get("checks", []))
+                        for occurrence in item["occurrences"]))
         (resolved if verified else unverified).append(item)
     return {"workflow": "diff", "schema_version": "1.0",
             "before_scan_id": before.get("scan_id"), "after_scan_id": after.get("scan_id"),

@@ -45,7 +45,15 @@ def test_completed_same_asset_resolves_but_missing_asset_does_not():
     after['agents'][0]['checks'] = [{'rule_id': 'other_rule', 'status': 'passed'}]
     assert compare_reports(report(), after)['resolved'] == []
     after['agents'][0]['checks'] = [{'rule_id': 'prompt_injection', 'status': 'passed'}]
-    assert len(compare_reports(report(), after)['resolved']) == 1
+    assert compare_reports(report(), after)['resolved'] == []
+    before = report()
+    before['agents'][0]['vulnerabilities'][0].update(
+        probe_id='fixture.sample', probe_version='1:fixture', evidence_context_id='lab-policy-v1')
+    after['agents'][0]['checks'] = [{'rule_id': 'prompt_injection', 'probe_id': 'fixture.sample',
+                                   'probe_version': '1:fixture', 'status': 'completed',
+                                   'outcome': 'passed', 'responses_evaluated': 1, 'requests_attempted': 1,
+                                   'evidence_context_id': 'lab-policy-v1'}]
+    assert len(compare_reports(before, after)['resolved']) == 1
     after['agents'] = []
     result = compare_reports(report(), after)
     assert result['resolved'] == []

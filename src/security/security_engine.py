@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional, Callable
 import logging
 from src.core.transport import current_budget
 from src.utils.request_builder import construct_agent_request
+from src.core.contracts import CHECK_SCHEMA_VERSION, collect_checks, missing_checks, risk_assessment_eligible
 
 # Import test modules from guardrail tester
 from .prompt_injection_tests import PromptInjectionTester
@@ -57,6 +58,8 @@ class SecurityTestEngine:
                             'Authentication checks require a protected response marker and denied control.'],
             'overall_risk_score': None
         }
+        test_results['check_schema_version'] = CHECK_SCHEMA_VERSION
+        test_results['checks'] = []
         environment = agent.get('metadata', {}).get('environment')
         if environment in ('production', 'development', 'staging', 'test'):
             test_results['metadata']['environment'] = environment
@@ -65,25 +68,34 @@ class SecurityTestEngine:
         if not agent.get('endpoint'):
             test_results['status'] = 'skipped'
             test_results['reason'] = 'No accessible endpoint'
+            test_results['checks'] = missing_checks([], test_results['reason'])
             return test_results
         
+        async def run_tester(tester):
+            with collect_checks() as checks:
+                try:
+                    return await tester.test_agent(agent)
+                finally:
+                    test_results['checks'].extend(checks)
+
         try:
             if construct_agent_request(agent, "configuration check") is None:
                 test_results['status'] = 'skipped'
                 test_results['reason'] = 'Unsupported provider or invalid/missing model or credential configuration'
+                test_results['checks'] = missing_checks([], test_results['reason'])
                 return test_results
             budget = current_budget()
             errors_before = budget.failures + budget.rejections if budget else 0
             # Test 1: Prompt Injection Vulnerabilities
-            prompt_results = await self.prompt_tester.test_agent(agent)
+            prompt_results = await run_tester(self.prompt_tester)
             test_results['vulnerabilities'].extend(prompt_results)
             
             # Test 2: Access Control Issues
-            access_results = await self.access_tester.test_agent(agent)
+            access_results = await run_tester(self.access_tester)
             test_results['vulnerabilities'].extend(access_results)
             
             # Test 3: Data Privacy Violations
-            privacy_results = await self.privacy_tester.test_agent(agent)
+            privacy_results = await run_tester(self.privacy_tester)
             test_results['vulnerabilities'].extend(privacy_results)
             test_results['observations'] = [finding for finding in test_results['vulnerabilities']
                                             if finding.get('evidence_status') in ('heuristic', 'inconclusive')]
@@ -96,15 +108,28 @@ class SecurityTestEngine:
             )
             
             test_results['status'] = 'completed'
-            if budget and budget.failures + budget.rejections > errors_before:
+            incomplete_checks = any(check['status'] == 'failed' for check in test_results['checks'])
+            no_evaluated_checks = not any(check['responses_evaluated'] for check in test_results['checks'])
+            if incomplete_checks or no_evaluated_checks or (budget and budget.failures + budget.rejections > errors_before):
                 test_results['status'] = 'partial'
                 test_results['overall_risk_score'] = None
                 test_results['limitations'].append('Some requests failed or were refused by transport policy.')
+            if not risk_assessment_eligible(test_results):
+                test_results['overall_risk_score'] = None
             
-        except Exception as e:
-            self.logger.error(f"Error testing agent {agent['id']}: {e}")
+        except Exception:
+            self.logger.error("Security testing failed")
             test_results['status'] = 'failed'
-            test_results['error'] = str(e)
+            test_results['error'] = 'Security testing failed'
+            test_results['overall_risk_score'] = None
+        finally:
+            test_results['observations'].extend(
+                finding for finding in test_results['vulnerabilities']
+                if finding.get('evidence_status') in ('heuristic', 'inconclusive'))
+            test_results['vulnerabilities'] = [
+                finding for finding in test_results['vulnerabilities']
+                if finding.get('evidence_status') not in ('heuristic', 'inconclusive')]
+        test_results['checks'].extend(missing_checks(test_results['checks'], 'Probe did not execute'))
         
         return test_results
     

@@ -246,14 +246,20 @@ class DiscoveryEngine:
         return agents
     
     def _deduplicate_agents(self, agents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Merge endpoint observations without collapsing unrelated code assets."""
+        """Preserve cloud resource identity before merging endpoint observations."""
         unique = {}
         for index, observation in enumerate(agents):
             agent = deepcopy(observation)
             endpoint = agent.get('endpoint')
-            key = ('endpoint', self._normalize_endpoint(endpoint)) if endpoint else (
-                'asset', agent.get('id') or index,
-            )
+            metadata = agent.get('metadata', {})
+            resource = metadata.get('resource_id')
+            if (isinstance(resource, str) and resource.strip() and len(resource) <= 2048
+                    and metadata.get('cloud') in {'aws', 'azure', 'gcp'}):
+                key = ('cloud_resource', metadata['cloud'], agent.get('provider'), resource)
+            else:
+                key = ('endpoint', self._normalize_endpoint(endpoint)) if endpoint else (
+                    'asset', agent.get('id') or index,
+                )
             provenance = {
                 'id': agent.get('id'),
                 'discovery_method': agent.get('discovery_method'),
