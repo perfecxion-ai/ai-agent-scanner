@@ -17,7 +17,8 @@ are removed from output; request headers and bodies are not retained.
 Each provider and normalized endpoint has a deterministic asset ID. Each request
 record contributes once to the endpoint count. The analyzer reads at most 16 MiB
 per file, 64 MiB per source, 50 files, 10,000 directory entries, and 100,000
-records per file. UTF-8 is required. Symlinks are rejected.
+records per file. A read may probe one additional sentinel byte to detect
+truncation. UTF-8 is required. Symlinks are rejected.
 
 A missing, unreadable, malformed, or oversized selected source increments the
 active scan's failure count. Valid records from other files are preserved and
@@ -65,6 +66,9 @@ failure count. Automated tests use mocked SDK objects without provider accounts.
 
 The imported SDKs are `boto3` (including `botocore`), `azure-identity`,
 `azure-mgmt-cognitiveservices`, `azure-ai-ml`, and `google-cloud-aiplatform`.
+Use Python 3.11 or newer for cloud inventory: the installed Google SDK warns that
+Python 3.10 no longer receives supported upstream updates. The core CLI and server
+continue to be tested on Python 3.10 through 3.13.
 Pagination and scope parameters follow the official
 [AWS Bedrock list API](https://docs.aws.amazon.com/boto3/latest/reference/services/bedrock/client/list_provisioned_model_throughputs.html),
 [Azure account listing](https://learn.microsoft.com/en-us/python/api/azure-mgmt-cognitiveservices/azure.mgmt.cognitiveservices.operations.accountsoperations?view=azure-python),
