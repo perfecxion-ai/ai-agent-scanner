@@ -175,6 +175,8 @@ class AccessControlTester:
     async def _test_auth_bypass_method(self, agent: Dict[str, Any], 
                                      test: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Test a specific authentication bypass method"""
+        if not await self._has_denied_control(agent):
+            return None
         
         async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
             endpoint = agent.get('endpoint')
@@ -183,24 +185,26 @@ class AccessControlTester:
             try:
                 async with session.get(
                     endpoint,
-                    headers=test['headers']
+                    headers=test['headers'], allow_redirects=False
                 ) as response:
                     
                     response_text = await response.text()
                     
                     # Check if bypass was successful
-                    if self._is_successful_bypass(response.status, response_text):
+                    if self._is_successful_bypass(response.status, response_text, agent.get('protected_response_marker')):
                         return {
                             'id': str(uuid.uuid4()),
                             'agent_id': agent.get('id'),
                             'vulnerability_type': 'authentication_bypass',
                             'severity': 'high',
+                            'evidence_status': 'confirmed',
+                            'control_status': 'invalid_credential_denied',
                             'title': f"Authentication Bypass - {test['name']}",
                             'description': f"Agent allows access without proper authentication using {test['name']}.",
                             'method': test['name'],
                             'headers_used': test['headers'],
                             'status_code': response.status,
-                            'response_excerpt': response_text[:300],
+                            'response_excerpt': response_text.replace(agent['protected_response_marker'], '[MARKER_REDACTED]')[:300],
                             'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.9,
                             'remediation': "Implement proper authentication checks and validate all authorization headers."
@@ -216,6 +220,8 @@ class AccessControlTester:
         """Test for weak or default credentials"""
         vulnerabilities = []
         endpoint = agent.get('endpoint')
+        if not await self._has_denied_control(agent):
+            return []
         
         # Test basic authentication with common credentials
         for username, password in self.weak_credentials[:5]:  # Test first 5 to avoid overwhelming
@@ -225,15 +231,17 @@ class AccessControlTester:
                 async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
                     async with session.get(
                         endpoint,
-                        headers={'Authorization': f'Basic {credentials}'}
+                        headers={'Authorization': f'Basic {credentials}'}, allow_redirects=False
                     ) as response:
                         
-                        if response.status == 200:
+                        if self._is_successful_bypass(response.status, await response.text(), agent.get('protected_response_marker')):
                             vulnerabilities.append({
                                 'id': str(uuid.uuid4()),
                                 'agent_id': agent.get('id'),
                                 'vulnerability_type': 'weak_credentials',
                                 'severity': 'critical',
+                                'evidence_status': 'confirmed',
+                                'control_status': 'invalid_credential_denied',
                                 'title': f"Weak Credentials - {username}:{password}",
                                 'description': f"Agent accepts weak credentials: {username}:{password}",
                                 'username': username,
@@ -256,6 +264,8 @@ class AccessControlTester:
         """Test API key security implementation"""
         vulnerabilities = []
         endpoint = agent.get('endpoint')
+        if not await self._has_denied_control(agent):
+            return []
         
         # Test various API key weaknesses
         for api_key in self.test_api_keys[:5]:  # Test first 5
@@ -272,14 +282,16 @@ class AccessControlTester:
                 
                 for headers in header_variations:
                     async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
-                        async with session.get(endpoint, headers=headers) as response:
+                        async with session.get(endpoint, headers=headers, allow_redirects=False) as response:
                             
-                            if response.status == 200:
+                            if self._is_successful_bypass(response.status, await response.text(), agent.get('protected_response_marker')):
                                 vulnerabilities.append({
                                     'id': str(uuid.uuid4()),
                                     'agent_id': agent.get('id'),
                                     'vulnerability_type': 'weak_api_key',
                                     'severity': 'high',
+                                    'evidence_status': 'confirmed',
+                                    'control_status': 'invalid_credential_denied',
                                     'title': f"Weak API Key Accepted - {api_key}",
                                     'description': f"Agent accepts weak/test API key: {api_key}",
                                     'api_key': api_key,
@@ -325,27 +337,31 @@ class AccessControlTester:
         ]
         
         for path in bypass_paths[:8]:  # Test first 8 paths
+            marker = agent.get('protected_path_markers', {}).get(path)
+            if not isinstance(marker, str) or len(marker) < 16:
+                continue
             try:
                 test_url = urljoin(endpoint.rstrip('/'), path)
                 
                 async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
-                    async with session.get(test_url) as response:
+                    async with session.get(test_url, allow_redirects=False) as response:
                         
                         response_text = await response.text()
                         
                         # Check for successful access to restricted areas
-                        if self._is_admin_access(response.status, response_text):
+                        if self._is_admin_access(response.status, response_text, marker):
                             vulnerabilities.append({
                                 'id': str(uuid.uuid4()),
                                 'agent_id': agent.get('id'),
                                 'vulnerability_type': 'authorization_bypass',
                                 'severity': 'high',
+                                'evidence_status': 'confirmed',
                                 'title': "Authorization Bypass - Admin Access",
                                 'description': f"Agent allows unauthorized access to admin functionality via {path}",
                                 'path': path,
                                 'full_url': test_url,
                                 'status_code': response.status,
-                                'response_excerpt': response_text[:300],
+                                'response_excerpt': response_text.replace(marker, '[MARKER_REDACTED]')[:300],
                                 'timestamp': datetime.now(timezone.utc).isoformat(),
                                 'confidence': 0.7,
                                 'remediation': "Implement proper authorization checks for all admin endpoints."
@@ -393,9 +409,10 @@ class AccessControlTester:
                         'id': str(uuid.uuid4()),
                         'agent_id': agent.get('id'),
                         'vulnerability_type': 'no_rate_limiting',
-                        'severity': 'medium',
-                        'title': "No Rate Limiting Detected",
-                        'description': f"Agent accepts {len(status_codes)} rapid requests without rate limiting",
+                        'severity': 'info',
+                        'evidence_status': 'heuristic',
+                        'title': "Rate Limit Not Observed in Sample",
+                        'description': f"No rate-limit response in {len(status_codes)} requests; policy and thresholds are unknown.",
                         'requests_sent': len(status_codes),
                         'successful_requests': sum(1 for code in status_codes if code == 200),
                         'avg_response_time': sum(request_times) / len(request_times) if request_times else 0,
@@ -453,30 +470,22 @@ class AccessControlTester:
         
         return vulnerabilities
     
-    def _is_successful_bypass(self, status_code: int, response_text: str) -> bool:
-        """Check if authentication bypass was successful"""
-        if status_code == 200:
-            # Look for indicators of successful access
-            success_indicators = [
-                'welcome', 'dashboard', 'admin', 'settings', 'config',
-                'users', 'api', 'data', 'success', 'authenticated'
-            ]
-            
-            response_lower = response_text.lower()
-            return any(indicator in response_lower for indicator in success_indicators)
-        
-        return False
+    async def _has_denied_control(self, agent: Dict[str, Any]) -> bool:
+        """Require an explicit private resource and a rejected random credential."""
+        marker = agent.get('protected_response_marker')
+        if agent.get('authentication_required') is not True or not isinstance(marker, str) or len(marker) < 16:
+            return False
+        try:
+            async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
+                async with session.get(agent['endpoint'], headers={'Authorization': f'Bearer scanner-invalid-{uuid.uuid4()}'}, allow_redirects=False) as response:
+                    return response.status in (401, 403)
+        except Exception:
+            return False
+
+    def _is_successful_bypass(self, status_code: int, response_text: str, marker: Optional[str] = None) -> bool:
+        """A successful status alone cannot establish access to protected data."""
+        return bool(200 <= status_code < 300 and isinstance(marker, str) and len(marker) >= 16 and marker in response_text)
     
-    def _is_admin_access(self, status_code: int, response_text: str) -> bool:
-        """Check if admin access was obtained"""
-        if status_code == 200:
-            admin_indicators = [
-                'admin', 'administrator', 'control panel', 'dashboard',
-                'users', 'settings', 'configuration', 'system',
-                'manage', 'delete', 'create user', 'permissions'
-            ]
-            
-            response_lower = response_text.lower()
-            return any(indicator in response_lower for indicator in admin_indicators)
-        
-        return False
+    def _is_admin_access(self, status_code: int, response_text: str, marker: Optional[str] = None) -> bool:
+        """Require configured evidence of protected admin data."""
+        return self._is_successful_bypass(status_code, response_text, marker)

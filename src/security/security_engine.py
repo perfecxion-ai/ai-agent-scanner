@@ -43,10 +43,21 @@ class SecurityTestEngine:
         test_results = {
             'agent_id': agent['id'],
             'agent_name': agent['name'],
+            'type': agent.get('type', 'unknown'),
+            'provider': agent.get('provider', 'unknown'),
+            'metadata': {key: value for key, value in agent.get('metadata', {}).items()
+                         if key in {'internet_facing', 'public_api', 'processes_pii', 'financial_data_access', 'healthcare_data'} and isinstance(value, bool)},
             'test_timestamp': datetime.now(timezone.utc).isoformat(),
             'vulnerabilities': [],
+            'observations': [],
+            'limitations': ['Data retention requires verified expiry/deletion and session boundaries.',
+                            'Prompt and tenant disclosure require operator-seeded protected canaries.',
+                            'Authentication checks require a protected response marker and denied control.'],
             'overall_risk_score': 0.0
         }
+        environment = agent.get('metadata', {}).get('environment')
+        if environment in ('production', 'development', 'staging', 'test'):
+            test_results['metadata']['environment'] = environment
         
         # Only test agents that have accessible endpoints
         if not agent.get('endpoint'):
@@ -66,6 +77,10 @@ class SecurityTestEngine:
             # Test 3: Data Privacy Violations
             privacy_results = await self.privacy_tester.test_agent(agent)
             test_results['vulnerabilities'].extend(privacy_results)
+            test_results['observations'] = [finding for finding in test_results['vulnerabilities']
+                                            if finding.get('evidence_status') in ('heuristic', 'inconclusive')]
+            test_results['vulnerabilities'] = [finding for finding in test_results['vulnerabilities']
+                                              if finding.get('evidence_status') not in ('heuristic', 'inconclusive')]
             
             # Calculate overall risk score
             test_results['overall_risk_score'] = self._calculate_risk_score(
