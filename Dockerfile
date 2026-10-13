@@ -18,11 +18,12 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels "ai-agent-scanner
     && mkdir /app/instance \
     && chown scanner:scanner /app/instance
 COPY app.py ./
+COPY gunicorn.conf.py ./
 COPY templates ./templates
 COPY static ./static
 COPY scripts/container-entrypoint.sh ./
 USER scanner
 EXPOSE 5000
 ENTRYPOINT ["sh", "/app/container-entrypoint.sh"]
-# One worker until scan execution no longer depends on process-local state.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+# Startup recovery requires one dispatcher process per database.
+CMD ["gunicorn", "--config", "gunicorn.conf.py", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "--access-logfile", "-", "--error-logfile", "-", "app:app"]

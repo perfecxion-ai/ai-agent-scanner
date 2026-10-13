@@ -36,6 +36,7 @@ Request limits:
 | Individual file | 16 MiB |
 | Aggregate input files | 256 MiB |
 | Concurrent scans (`MAX_CONCURRENT_SCANS`) | 2 |
+| Queued scans (`SCAN_MAX_QUEUED`) | 32 |
 | Scan deadline (`SCAN_TIMEOUT_SECONDS`) | 300 seconds |
 
 The supported modes are `discovery_only`, `full`, and `security_only`.
@@ -46,9 +47,9 @@ Requests may shorten the scan deadline with `scan_config.timeout_seconds`, but
 cannot raise the server maximum.
 
 Invalid scopes return 400. Unknown or foreign source scans return the same 404.
-Oversized bodies return 413. Exhausted worker capacity returns 429 without
-creating a queued scan. Thread startup errors release capacity and mark the
-created scan failed. Deadlines cancel asynchronous work and mark failures;
-synchronous code must return before cancellation can take effect. This interim
-admission limit is process-local, so keep the server at one worker until durable
-job coordination is available.
+Oversized bodies return 413. Accepted scans return 202 after the scan and job are
+committed together. A full queue returns 429 without creating another scan.
+Deadlines cancel asynchronous work and mark failures; synchronous code must
+return before cancellation can take effect. Saved scopes are validated again
+against current server policy when a queued job starts. See
+[persistent jobs](jobs.md) for recovery and cancellation behavior.
