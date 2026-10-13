@@ -15,8 +15,8 @@ SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json"
 
 TOOL_NAME = "ai-agent-scanner"
-TOOL_VERSION = "1.0.0"
-TOOL_URI = "https://github.com/scthornton/ai-agent-scanner"
+TOOL_VERSION = "1.1.0"
+TOOL_URI = "https://github.com/perfecxion-ai/ai-agent-scanner"
 
 
 def _severity_to_sarif_level(severity: str) -> str:
@@ -83,6 +83,7 @@ def generate_sarif(
                 'agent_id': vuln.get('agent_id', ''),
                 'vulnerability_id': vuln.get('id', ''),
                 'remediation': vuln.get('remediation', ''),
+                'evidence_status': vuln.get('evidence_status', 'unspecified'),
             },
         }
 

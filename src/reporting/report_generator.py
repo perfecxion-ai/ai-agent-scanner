@@ -83,9 +83,9 @@ class ReportGenerator:
                 'total_vulnerabilities': len(all_vulns),
                 'critical_findings': severity_counts['critical'],
                 'high_findings': severity_counts['high'],
-                'highest_risk_score': highest_risk.get('overall_risk_score', 0) if highest_risk else 0,
+                'highest_risk_score': highest_risk.get('overall_risk_score') if highest_risk else None,
                 'highest_risk_agent': highest_risk.get('agent_name', 'N/A') if highest_risk else 'N/A',
-                'overall_risk_level': highest_risk.get('risk_level', 'minimal') if highest_risk else 'minimal',
+                'overall_risk_level': highest_risk.get('risk_level', 'unknown') if highest_risk else 'unknown',
                 'requires_immediate_action': severity_counts['critical'] > 0,
             },
             'discovery_summary': {
@@ -125,8 +125,7 @@ class ReportGenerator:
         all_priorities = []
         for assessment in risk_assessments:
             for priority in assessment.get('remediation_priorities', []):
-                priority['agent_name'] = assessment.get('agent_name')
-                all_priorities.append(priority)
+                all_priorities.append({**priority, 'agent_name': assessment.get('agent_name')})
 
         # Sort by severity then priority number
         severity_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
@@ -140,10 +139,12 @@ class ReportGenerator:
         """Generate a plain-text executive summary from a comprehensive report."""
         es = report.get('executive_summary', {})
         comp = report.get('compliance', {})
+        score = es.get('highest_risk_score')
+        score_text = f'{score:.1f}/100' if score is not None else 'Not assessed'
 
         lines = [
             "=" * 60,
-            "  AI AGENT SECURITY ASSESSMENT — EXECUTIVE SUMMARY",
+            "  AI AGENT SECURITY ASSESSMENT - EXECUTIVE SUMMARY",
             "=" * 60,
             "",
             f"  Date:       {report.get('report_metadata', {}).get('generated_at', 'N/A')}",
@@ -155,26 +156,26 @@ class ReportGenerator:
             f"  Total Vulnerabilities:   {es.get('total_vulnerabilities', 0)}",
             f"    Critical:              {es.get('critical_findings', 0)}",
             f"    High:                  {es.get('high_findings', 0)}",
-            f"  Highest Risk Score:      {es.get('highest_risk_score', 0):.1f}/100",
+            f"  Highest Risk Score:      {score_text}",
             f"  Highest Risk Agent:      {es.get('highest_risk_agent', 'N/A')}",
             f"  Overall Risk Level:      {es.get('overall_risk_level', 'N/A').upper()}",
             "",
         ]
 
         if es.get('requires_immediate_action'):
-            lines.append("  *** IMMEDIATE ACTION REQUIRED — CRITICAL FINDINGS ***")
+            lines.append("  *** IMMEDIATE ACTION REQUIRED - CRITICAL FINDINGS ***")
             lines.append("")
 
         # Compliance summary
         if comp and comp.get('summary'):
             cs = comp['summary']
             lines.extend([
-                "  COMPLIANCE",
+                "  CONTROL MAPPINGS (REVIEW REQUIRED)",
                 "  " + "-" * 55,
-                f"  Frameworks Assessed:     {cs.get('frameworks_assessed', 0)}",
+                f"  Frameworks Mapped:       {cs.get('frameworks_mapped', 0)}",
                 f"  Frameworks Impacted:     {cs.get('frameworks_impacted', 0)}",
-                f"  Control Violations:      {cs.get('total_control_violations', 0)}",
-                f"  Compliance Score:        {cs.get('compliance_score', 0):.0f}%",
+                f"  Controls With Findings: {cs.get('controls_with_findings', 0)}",
+                "  This report does not establish compliance.",
                 "",
             ])
 
