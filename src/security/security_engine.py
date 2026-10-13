@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Callable
 import logging
 from src.core.transport import current_budget
+from src.utils.request_builder import construct_agent_request
 
 # Import test modules from guardrail tester
 from .prompt_injection_tests import PromptInjectionTester
@@ -67,6 +68,10 @@ class SecurityTestEngine:
             return test_results
         
         try:
+            if construct_agent_request(agent, "configuration check") is None:
+                test_results['status'] = 'skipped'
+                test_results['reason'] = 'Unsupported provider or missing model/credential configuration'
+                return test_results
             budget = current_budget()
             errors_before = budget.failures + budget.rejections if budget else 0
             # Test 1: Prompt Injection Vulnerabilities

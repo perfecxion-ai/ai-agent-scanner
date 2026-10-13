@@ -2,7 +2,6 @@
 
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -127,6 +126,7 @@ async def test_retention_is_not_inferred_from_recall(target):
 
 @pytest.mark.asyncio
 async def test_engine_preserves_risk_context_and_excludes_observations(target):
+    target.update(provider='openai-compatible', model='fixture-model')
     target['metadata'] = {'internet_facing': True, 'processes_pii': True, 'environment': 'production',
                           'api_key': 'secret', 'nested': {'password': 'secret'}}
     engine = SecurityTestEngine()
@@ -145,12 +145,12 @@ async def test_engine_preserves_risk_context_and_excludes_observations(target):
     ('https://example.com/proxy/v1/chat/completions?api-version=1', 'https://example.com/proxy/v1/chat/completions?api-version=1'),
 ])
 def test_provider_paths_preserve_deployment_prefix(endpoint, expected):
-    assert construct_agent_request({'provider': 'openai', 'endpoint': endpoint}, 'hi')['url'] == expected
+    assert construct_agent_request({'provider': 'openai', 'model': 'fixture-model', 'endpoint': endpoint}, 'hi')['url'] == expected
 
 
 def test_generic_query_preserves_existing_parameters():
     request = construct_agent_request({'endpoint': 'https://example.com/?tenant=one#fragment'}, 'A&B')
-    assert parse_qs(urlsplit(request['url']).query) == {'tenant': ['one'], 'query': ['A&B'], 'limit': ['100']}
+    assert request is None
 
 
 @pytest.mark.parametrize('body,expected', [

@@ -1,26 +1,49 @@
-"""
-Shared request construction logic for AI agent API interaction.
+"""Provider-specific request adapters with explicit models and transient credentials."""
 
-Used by security testing modules to construct appropriate HTTP requests
-based on the agent's provider type.
-"""
-
-from typing import Dict, Any, Optional
 import json
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+import os
+import re
+from urllib.parse import urlsplit, urlunsplit, quote
 
 
-def _provider_url(endpoint: str, suffix: str) -> str:
-    """Preserve deployment prefixes and already complete provider routes."""
+SUPPORTED_PROVIDERS = {'openai', 'openai-compatible', 'vllm', 'ollama', 'anthropic', 'google', 'gemini'}
+_CLOUD = {
+    'api.openai.com': 'OPENAI_API_KEY',
+    'api.anthropic.com': 'ANTHROPIC_API_KEY',
+    'generativelanguage.googleapis.com': 'GEMINI_API_KEY',
+}
+
+
+def resolve_api_key(agent):
+    """Resolve explicit environment references; automatic keys stay on official HTTPS hosts."""
+    endpoint = urlsplit(agent.get('endpoint') or '')
+    reference = agent.get('api_key_env')
+    if reference:
+        if not isinstance(reference, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', reference):
+            return None
+        return os.environ.get(reference) or None
+    if endpoint.scheme == 'https' and endpoint.port in (None, 443):
+        variable = _CLOUD.get(endpoint.hostname)
+        return os.environ.get(variable) or None if variable else None
+    return None
+
+
+def _route(endpoint, suffix, known):
     parts = urlsplit(endpoint)
     path = parts.path.rstrip('/')
-    if not path.endswith(suffix) and not path.endswith(suffix.split('/', 1)[-1]):
-        path += '/' + (suffix.split('/', 1)[-1] if path.endswith('/v1') else suffix)
-    return urlunsplit(parts._replace(path=path))
+    for ending in sorted(known, key=len, reverse=True):
+        if path.endswith('/' + ending):
+            path = path[:-len(ending)].rstrip('/')
+            break
+    else:
+        version = suffix.split('/', 1)[0]
+        if path.endswith('/' + version):
+            path = path[:-(len(version) + 1)]
+    return urlunsplit(parts._replace(path=path + '/' + suffix))
 
 
-def extract_response_text(response_text: str) -> str:
-    """Extract generated text, excluding provider metadata and error envelopes."""
+def extract_response_text(response_text):
+    """Extract generated text without interpreting response metadata as model output."""
     try:
         body = json.loads(response_text)
     except (ValueError, TypeError):
@@ -30,6 +53,9 @@ def extract_response_text(response_text: str) -> str:
     try:
         if 'choices' in body:
             content = body['choices'][0]['message']['content']
+            return content if isinstance(content, str) else ''
+        if isinstance(body.get('message'), dict):
+            content = body['message'].get('content')
             return content if isinstance(content, str) else ''
         if isinstance(body.get('content'), list):
             return '\n'.join(block['text'] for block in body['content'] if block.get('type') == 'text')
@@ -43,91 +69,52 @@ def extract_response_text(response_text: str) -> str:
     return ''
 
 
-def construct_agent_request(agent: Dict[str, Any], payload: str) -> Optional[Dict[str, Any]]:
-    """
-    Construct an appropriate HTTP request for the given agent type.
-
-    Args:
-        agent: Agent dict with 'endpoint' and 'provider' keys.
-        payload: The prompt/payload string to send.
-
-    Returns:
-        Request dict with method, url, headers, and json/data, or None if
-        no endpoint is available.
-    """
+def construct_agent_request(agent, payload):
+    """Return a supported POST request or None when execution lacks required configuration."""
     endpoint = agent.get('endpoint')
-    provider = agent.get('provider', '').lower()
-
-    if not endpoint:
+    provider = str(agent.get('provider', '')).lower()
+    if not endpoint or provider not in SUPPORTED_PROVIDERS:
         return None
-
-    # OpenAI-style APIs
-    if 'openai' in provider or 'gpt' in endpoint.lower():
-        return {
-            'method': 'POST',
-            'url': _provider_url(endpoint, 'v1/chat/completions'),
-            'headers': {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer test-key'
-            },
-            'json': {
-                'model': agent.get('model', 'gpt-3.5-turbo'),
-                'messages': [{'role': 'user', 'content': payload}],
-                'max_tokens': 100
-            }
-        }
-
-    # Anthropic Claude-style APIs
-    elif 'anthropic' in provider or 'claude' in endpoint.lower():
-        return {
-            'method': 'POST',
-            'url': _provider_url(endpoint, 'v1/messages'),
-            'headers': {
-                'Content-Type': 'application/json',
-                'x-api-key': 'test-key',
-                'anthropic-version': '2023-06-01'
-            },
-            'json': {
-                'model': agent.get('model', 'claude-3-sonnet-20240229'),
-                'max_tokens': 100,
-                'messages': [{'role': 'user', 'content': payload}]
-            }
-        }
-
-    # Google/Gemini-style APIs
-    elif 'google' in provider or 'gemini' in endpoint.lower():
-        return {
-            'method': 'POST',
-            'url': endpoint if ':generateContent' in endpoint else _provider_url(endpoint, 'v1/models/gemini-pro:generateContent'),
-            'headers': {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': 'test-key'
-            },
-            'json': {
-                'contents': [{'parts': [{'text': payload}]}]
-            }
-        }
-
-    # Generic chat endpoint
-    elif any(path in endpoint.lower() for path in ['/chat', '/api/chat', '/generate']):
-        return {
-            'method': 'POST',
-            'url': endpoint,
-            'headers': {'Content-Type': 'application/json'},
-            'json': {
-                'message': payload,
-                'max_tokens': 100
-            }
-        }
-
-    # Generic GET endpoint with query parameter (URL-encoded to prevent
-    # payload corruption and access log leakage of raw attack strings)
+    parts = urlsplit(endpoint)
+    if parts.scheme not in {'http', 'https'} or not parts.hostname or parts.username or parts.password or parts.fragment:
+        return None
+    model = agent.get('model')
+    if provider in {'google', 'gemini'} and parts.path.endswith(':generateContent'):
+        model = parts.path.rsplit('/models/', 1)[-1].removesuffix(':generateContent')
+    if not isinstance(model, str) or not model.strip():
+        return None
+    key = resolve_api_key(agent)
+    if agent.get('api_key_env') and not key:
+        return None
+    if parts.hostname in _CLOUD and (parts.scheme != 'https' or not key):
+        return None
+    headers = {'Content-Type': 'application/json'}
+    if provider in {'openai', 'openai-compatible', 'vllm'}:
+        url = _route(endpoint, 'v1/chat/completions',
+                     ('v1/chat/completions', 'v1/completions', 'v1/models'))
+        body = {'model': model, 'messages': [{'role': 'user', 'content': payload}], 'max_tokens': 100}
+        if key:
+            headers['Authorization'] = 'Bearer ' + key
+    elif provider == 'ollama':
+        url = _route(endpoint, 'api/chat', ('api/tags', 'api/chat', 'api/generate'))
+        body = {'model': model, 'messages': [{'role': 'user', 'content': payload}],
+                'stream': False, 'options': {'num_predict': 100}}
+        if key:
+            headers['Authorization'] = 'Bearer ' + key
+    elif provider == 'anthropic':
+        url = _route(endpoint, 'v1/messages', ('v1/messages', 'v1/complete'))
+        body = {'model': model, 'messages': [{'role': 'user', 'content': payload}], 'max_tokens': 100}
+        headers['anthropic-version'] = '2023-06-01'
+        if key:
+            headers['x-api-key'] = key
     else:
-        parts = urlsplit(endpoint)
-        query = parse_qsl(parts.query, keep_blank_values=True)
-        query = [(key, value) for key, value in query if key not in ('query', 'limit')]
-        query.extend([('query', payload), ('limit', '100')])
-        return {
-            'method': 'GET',
-            'url': urlunsplit(parts._replace(query=urlencode(query)))
-        }
+        if parts.path.endswith(':generateContent'):
+            url = endpoint
+        else:
+            url = _route(endpoint, 'v1beta/models/' + quote(model.removeprefix('models/'), safe='') + ':generateContent',
+                         ('v1beta/models', 'v1/models'))
+        body = {'contents': [{'role': 'user', 'parts': [{'text': payload}]}],
+                'generationConfig': {'maxOutputTokens': 100}}
+        if key:
+            headers['x-goog-api-key'] = key
+    return {'method': 'POST', 'url': url, 'headers': headers, 'json': body}
