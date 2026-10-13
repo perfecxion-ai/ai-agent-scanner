@@ -1,262 +1,195 @@
-"""
-Traffic Analyzer for AI Service Usage
+"""Extract AI service observations from bounded, already captured traffic records."""
 
-Analyzes proxy logs, HAR files, and access logs to identify AI API
-calls in network traffic. Works without packet capture — analyzes
-already-captured log artifacts.
-
-Supports:
-    - HAR files (browser/proxy exports)
-    - Access logs (nginx, Apache, cloud ALB)
-    - JSON-lines log files
-    - mitmproxy dump files (text format)
-"""
-
+import asyncio
 import json
 import logging
 import re
-from pathlib import Path
-from typing import List, Dict, Any, Optional
 import uuid
-from collections import defaultdict
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit, urlunsplit
+
+from src.core.transport import current_budget
 
 
-# Known AI API domains and path patterns
 AI_API_SIGNATURES = {
-    'openai': {
-        'domains': ['api.openai.com'],
-        'paths': ['/v1/chat/completions', '/v1/completions', '/v1/embeddings', '/v1/images'],
-        'provider': 'openai',
-    },
-    'anthropic': {
-        'domains': ['api.anthropic.com'],
-        'paths': ['/v1/messages', '/v1/complete'],
-        'provider': 'anthropic',
-    },
-    'google_ai': {
-        'domains': ['generativelanguage.googleapis.com', 'aiplatform.googleapis.com'],
-        'paths': ['/v1/models/', '/v1beta/models/', ':generateContent', ':predict'],
-        'provider': 'google_ai',
-    },
-    'azure_openai': {
-        'domains': ['.openai.azure.com'],
-        'paths': ['/openai/deployments/'],
-        'provider': 'azure_openai',
-    },
-    'cohere': {
-        'domains': ['api.cohere.ai', 'api.cohere.com'],
-        'paths': ['/v1/generate', '/v1/chat', '/v1/embed', '/v2/chat'],
-        'provider': 'cohere',
-    },
-    'huggingface': {
-        'domains': ['api-inference.huggingface.co'],
-        'paths': ['/models/'],
-        'provider': 'huggingface',
-    },
-    'replicate': {
-        'domains': ['api.replicate.com'],
-        'paths': ['/v1/predictions'],
-        'provider': 'replicate',
-    },
-    'ollama': {
-        'domains': ['localhost:11434', '127.0.0.1:11434'],
-        'paths': ['/api/generate', '/api/chat', '/api/embeddings'],
-        'provider': 'ollama',
-    },
-    'mistral': {
-        'domains': ['api.mistral.ai'],
-        'paths': ['/v1/chat/completions'],
-        'provider': 'mistral',
-    },
+    'openai': {'domains': ['api.openai.com']},
+    'anthropic': {'domains': ['api.anthropic.com']},
+    'google_ai': {'domains': ['generativelanguage.googleapis.com', 'aiplatform.googleapis.com', '.aiplatform.googleapis.com', '-aiplatform.googleapis.com']},
+    'azure_openai': {'domains': ['.openai.azure.com']},
+    'cohere': {'domains': ['api.cohere.ai', 'api.cohere.com']},
+    'huggingface': {'domains': ['api-inference.huggingface.co']},
+    'replicate': {'domains': ['api.replicate.com']},
+    'ollama': {'domains': ['localhost:11434', '127.0.0.1:11434', '[::1]:11434']},
+    'mistral': {'domains': ['api.mistral.ai']},
 }
 
-# Regex for extracting URLs from various log formats
-URL_PATTERNS = [
-    # Standard access log: GET /path HTTP/1.1 or POST https://host/path
-    r'(?:GET|POST|PUT|PATCH)\s+(https?://[^\s"]+)',
-    # Host + path from access logs
-    r'(?:GET|POST|PUT|PATCH)\s+(/[^\s"]+)\s+HTTP.*?"?\s*\d+.*?(?:host[=:]\s*"?([^\s"]+))?',
-    # Full URLs in JSON logs
-    r'"(?:url|uri|request_url|target)":\s*"(https?://[^"]+)"',
-    # HAR format
-    r'"url":\s*"(https?://[^"]+)"',
-]
+MAX_FILE_BYTES = 16 * 1024 * 1024
+MAX_TOTAL_BYTES = 64 * 1024 * 1024
+MAX_FILES = 50
+MAX_RECORDS = 100_000
+SUPPORTED_SUFFIXES = {'.log', '.har', '.json', '.jsonl', '.ndjson', '.txt'}
+REQUEST = re.compile(r'\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(https?://[^\s"<>]+)\s+HTTP/\d(?:\.\d)?\b')
 
 
 class TrafficAnalyzer:
-    """Analyze network traffic logs for AI service usage."""
-
-    def __init__(self):
-        self.logger = logging.getLogger(__name__)
+    """Analyze explicit request records without issuing network requests."""
 
     async def analyze_traffic(self, source: str, ai_signatures: Dict = None) -> List[Dict[str, Any]]:
-        """
-        Analyze a traffic source for AI API calls.
-
-        Args:
-            source: Path to a log file, HAR file, or directory of logs.
-            ai_signatures: Optional additional signatures (unused, for interface compat).
-
-        Returns:
-            List of discovered agent dicts.
-        """
-        source_path = Path(source)
-
-        if not source_path.exists():
-            self.logger.error(f"Traffic source does not exist: {source}")
+        # Provider identity comes from authority, not ambiguous shared API paths.
+        try:
+            return await asyncio.to_thread(self._analyze, Path(source))
+        except (OSError, ValueError, UnicodeError):
+            self._failure('source')
             return []
 
-        # Collect all log files
-        if source_path.is_dir():
-            log_files = self._find_log_files(source_path)
-        else:
-            log_files = [source_path]
+    @staticmethod
+    def _failure(operation):
+        logging.getLogger(__name__).warning('Traffic discovery incomplete: %s', operation)
+        budget = current_budget()
+        if budget is None:
+            raise ValueError('Traffic discovery incomplete') from None
+        budget.failures += 1
 
-        if not log_files:
-            self.logger.warning(f"No analyzable log files found in {source}")
-            return []
-
-        self.logger.info(f"Analyzing {len(log_files)} log file(s) from {source}")
-
-        # Aggregate findings across all files
-        api_calls: Dict[str, Dict] = defaultdict(lambda: {
-            'count': 0,
-            'endpoints': set(),
-            'methods': set(),
-            'source_files': set(),
-            'first_seen': None,
-            'last_seen': None,
-        })
-
-        for log_file in log_files:
-            await self._analyze_file(log_file, api_calls)
-
-        # Convert to agent dicts
-        agents = []
-        for provider_key, data in api_calls.items():
-            sig = AI_API_SIGNATURES.get(provider_key, {})
-            agents.append({
-                'id': str(uuid.uuid4()),
-                'name': f"Traffic AI: {sig.get('provider', provider_key)}",
-                'provider': sig.get('provider', provider_key),
-                'endpoint': next(iter(data['endpoints']), None),
-                'discovery_method': 'traffic_analysis',
-                'confidence': min(0.6 + data['count'] * 0.05, 0.95),
-                'metadata': {
-                    'total_api_calls': data['count'],
-                    'unique_endpoints': list(data['endpoints'])[:20],
-                    'methods': list(data['methods']),
-                    'source_files': list(data['source_files'])[:10],
-                    'internet_facing': True,
-                }
-            })
-
-        self.logger.info(f"Traffic analysis complete: {len(agents)} AI services detected")
-        return agents
-
-    async def _analyze_file(self, file_path: Path, api_calls: Dict):
-        """Analyze a single log file."""
-        suffix = file_path.suffix.lower()
-
-        try:
-            if suffix == '.har':
-                await self._analyze_har(file_path, api_calls)
-            elif suffix in ('.json', '.jsonl', '.ndjson'):
-                await self._analyze_jsonl(file_path, api_calls)
-            else:
-                await self._analyze_text_log(file_path, api_calls)
-        except Exception as e:
-            self.logger.debug(f"Error analyzing {file_path}: {e}")
-
-    async def _analyze_har(self, file_path: Path, api_calls: Dict):
-        """Analyze a HAR (HTTP Archive) file."""
-        try:
-            content = file_path.read_text(errors='ignore')
-            har = json.loads(content)
-
-            for entry in har.get('log', {}).get('entries', []):
-                request = entry.get('request', {})
-                url = request.get('url', '')
-                method = request.get('method', '')
-
+    def _analyze(self, source: Path) -> List[Dict[str, Any]]:
+        if not source.exists() or source.is_symlink():
+            raise ValueError('Traffic source must be an existing regular file or directory')
+        files = self._find_log_files(source) if source.is_dir() else [source]
+        if not files:
+            raise ValueError('No supported traffic records found')
+        observations = {}
+        total_bytes = 0
+        for file_path in files:
+            if file_path.is_symlink() or not file_path.is_file():
+                raise ValueError('Traffic input must be a regular file without symlinks')
+            if file_path.suffix.lower() not in SUPPORTED_SUFFIXES:
+                raise ValueError('Unsupported traffic format')
+            try:
+                with file_path.open('rb') as stream:
+                    raw = stream.read(MAX_FILE_BYTES + 1)
+                total_bytes += len(raw)
+                if len(raw) > MAX_FILE_BYTES or total_bytes > MAX_TOTAL_BYTES:
+                    self._failure('byte limit')
+                    if total_bytes > MAX_TOTAL_BYTES:
+                        break
+                    continue
+                records = self._bounded_records(raw.decode('utf-8'), file_path.suffix.lower())
+            except (OSError, UnicodeError):
+                self._failure('read')
+                continue
+            for url, method in records:
                 provider = self._match_url_to_provider(url)
-                if provider:
-                    api_calls[provider]['count'] += 1
-                    api_calls[provider]['endpoints'].add(url.split('?')[0])
-                    api_calls[provider]['methods'].add(method)
-                    api_calls[provider]['source_files'].add(str(file_path))
+                endpoint = self._clean_endpoint(url)
+                if provider is None or endpoint is None:
+                    continue
+                key = (provider, endpoint)
+                item = observations.setdefault(key, {
+                    'id': str(uuid.uuid5(uuid.NAMESPACE_URL, f'traffic:{provider}:{endpoint}')),
+                    'name': f'Traffic AI: {provider}', 'provider': provider,
+                    'endpoint': endpoint, 'discovery_method': 'traffic_analysis',
+                    'confidence': 0.85,
+                    'metadata': {'total_api_calls': 0, 'methods': set(), 'source_files': set(),
+                                 'evidence_status': 'observed_request'},
+                })
+                item['metadata']['total_api_calls'] += 1
+                if method:
+                    item['metadata']['methods'].add(method.upper())
+                item['metadata']['source_files'].add(str(file_path))
+        result = []
+        for key in sorted(observations):
+            item = observations[key]
+            item['metadata']['methods'] = sorted(item['metadata']['methods'])
+            item['metadata']['source_files'] = sorted(item['metadata']['source_files'])
+            result.append(item)
+        return result
 
-        except json.JSONDecodeError:
-            self.logger.debug(f"Invalid JSON in HAR file: {file_path}")
-
-    async def _analyze_jsonl(self, file_path: Path, api_calls: Dict):
-        """Analyze JSON-lines log files."""
+    def _bounded_records(self, text, suffix):
         try:
-            with open(file_path, 'r', errors='ignore') as f:
-                for line_num, line in enumerate(f):
-                    if line_num > 100_000:  # Safety limit
-                        break
-                    line = line.strip()
-                    if not line:
-                        continue
+            for index, record in enumerate(self._records(text, suffix)):
+                if index >= MAX_RECORDS:
+                    self._failure('record limit')
+                    return
+                yield record
+        except (ValueError, TypeError, RecursionError):
+            self._failure('record format')
 
-                    # Extract URLs from JSON
-                    for pattern in URL_PATTERNS:
-                        for match in re.finditer(pattern, line):
-                            url = match.group(1) if match.lastindex else match.group(0)
-                            provider = self._match_url_to_provider(url)
-                            if provider:
-                                api_calls[provider]['count'] += 1
-                                api_calls[provider]['endpoints'].add(url.split('?')[0])
-                                api_calls[provider]['source_files'].add(str(file_path))
-        except Exception as e:
-            self.logger.debug(f"Error reading {file_path}: {e}")
+    def _records(self, text, suffix):
+        if suffix in {'.har', '.json'}:
+            document = json.loads(text)
+            if suffix == '.har':
+                if not isinstance(document, dict) or not isinstance(document.get('log'), dict):
+                    raise ValueError('HAR must contain a log object')
+                records = document['log'].get('entries')
+                if not isinstance(records, list):
+                    raise ValueError('HAR entries must be a list')
+            else:
+                records = document if isinstance(document, list) else [document]
+            for record in records:
+                yield self._json_request(record)
+        elif suffix in {'.jsonl', '.ndjson'}:
+            for line in text.splitlines():
+                if line.strip():
+                    yield self._json_request(json.loads(line))
+        else:
+            for line in text.splitlines():
+                match = REQUEST.search(line)
+                yield (match.group(2), match.group(1)) if match else ('', '')
 
-    async def _analyze_text_log(self, file_path: Path, api_calls: Dict):
-        """Analyze plain-text access logs (nginx, Apache, ALB, etc.)."""
+    @staticmethod
+    def _json_request(record):
+        if not isinstance(record, dict):
+            raise ValueError('Traffic request must be a JSON object')
+        request = record.get('request', record)
+        if not isinstance(request, dict):
+            raise ValueError('Traffic request field must be an object')
+        url = next((request[key] for key in ('url', 'uri', 'request_url', 'target')
+                    if isinstance(request.get(key), str)), '')
+        method = request.get('method', '')
+        return url, method if isinstance(method, str) else ''
+
+    @staticmethod
+    def _clean_endpoint(url):
         try:
-            with open(file_path, 'r', errors='ignore') as f:
-                for line_num, line in enumerate(f):
-                    if line_num > 100_000:
-                        break
-
-                    for pattern in URL_PATTERNS:
-                        for match in re.finditer(pattern, line):
-                            url = match.group(1) if match.lastindex else match.group(0)
-                            provider = self._match_url_to_provider(url)
-                            if provider:
-                                api_calls[provider]['count'] += 1
-                                api_calls[provider]['endpoints'].add(url.split('?')[0])
-                                api_calls[provider]['source_files'].add(str(file_path))
-
-                    # Also check for AI domains mentioned in any context
-                    for sig_name, sig in AI_API_SIGNATURES.items():
-                        for domain in sig['domains']:
-                            if domain in line:
-                                api_calls[sig_name]['count'] += 1
-                                api_calls[sig_name]['source_files'].add(str(file_path))
-                                break
-
-        except Exception as e:
-            self.logger.debug(f"Error reading {file_path}: {e}")
+            parsed = urlsplit(url)
+            if parsed.scheme not in {'http', 'https'} or not parsed.hostname:
+                return None
+            host = parsed.hostname.lower()
+            authority = f'[{host}]' if ':' in host else host
+            port = parsed.port
+            if port is not None and port != (443 if parsed.scheme == 'https' else 80):
+                authority += f':{port}'
+            return urlunsplit((parsed.scheme, authority, parsed.path or '/', '', ''))
+        except (ValueError, TypeError):
+            return None
 
     def _match_url_to_provider(self, url: str) -> Optional[str]:
-        """Match a URL to a known AI API provider."""
-        url_lower = url.lower()
-        for sig_name, sig in AI_API_SIGNATURES.items():
-            for domain in sig['domains']:
-                if domain in url_lower:
-                    return sig_name
-            for path in sig['paths']:
-                if path in url_lower:
-                    return sig_name
+        endpoint = self._clean_endpoint(url)
+        if endpoint is None:
+            return None
+        parsed = urlsplit(endpoint)
+        for provider, signature in AI_API_SIGNATURES.items():
+            for domain in signature['domains']:
+                if ':' in domain:
+                    matches = parsed.netloc == domain
+                elif domain.startswith('.'):
+                    matches = parsed.hostname.endswith(domain)
+                elif domain.startswith('-'):
+                    matches = bool(re.fullmatch(r'[a-z0-9-]+' + re.escape(domain), parsed.hostname))
+                else:
+                    matches = parsed.hostname == domain
+                if matches:
+                    return provider
         return None
 
     def _find_log_files(self, directory: Path) -> List[Path]:
-        """Find analyzable log files in a directory."""
-        extensions = {'.log', '.har', '.json', '.jsonl', '.ndjson', '.txt', '.gz'}
         files = []
-        for f in directory.rglob('*'):
-            if f.is_file() and f.suffix.lower() in extensions and f.stat().st_size <= 500_000_000:
-                files.append(f)
-        return sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)[:50]
+        for index, path in enumerate(directory.rglob('*')):
+            if index >= 10_000:
+                raise ValueError('Traffic input exceeds directory entry limit')
+            if path.is_symlink():
+                raise ValueError('Traffic directories must not contain symlinks')
+            if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES:
+                files.append(path)
+                if len(files) > MAX_FILES:
+                    raise ValueError('Traffic input exceeds file limit')
+        return sorted(files)
