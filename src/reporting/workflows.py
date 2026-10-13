@@ -58,6 +58,7 @@ def inventory(report):
             assets[key]["ambiguous"] = True
         else:
             assets[key] = {**identity, "security_status": agent.get("security_status", "unknown"),
+                           "checks": deepcopy(agent.get("checks", [])),
                            "ambiguous": False}
         for finding in agent.get("vulnerabilities", []):
             rule = finding.get("rule_id") or finding.get("vulnerability_type") or finding.get("type")
@@ -65,8 +66,11 @@ def inventory(report):
                 raise ValueError("Finding requires a stable rule or vulnerability type")
             semantic = [rule, finding.get("category"), finding.get("test_name"), finding.get("path")]
             finding_key = _digest([key, semantic])
-            findings[finding_key] = {"finding_key": finding_key, "asset_key": key, "rule_id": rule,
-                                     "finding": deepcopy(finding)}
+            if finding_key in findings:
+                findings[finding_key]["occurrences"].append(deepcopy(finding))
+            else:
+                findings[finding_key] = {"finding_key": finding_key, "asset_key": key, "rule_id": rule,
+                                         "finding": deepcopy(finding), "occurrences": [deepcopy(finding)]}
     return assets, findings
 
 
@@ -86,7 +90,10 @@ def compare_reports(before, after):
         item = old_findings[key]
         asset = new_assets.get(item["asset_key"])
         verified = (_complete(after) and asset and asset["security_status"] == "completed"
-                    and not asset["ambiguous"] and asset["identity_basis"] == "endpoint")
+                    and not asset["ambiguous"] and not old_assets[item["asset_key"]]["ambiguous"]
+                    and asset["identity_basis"] == "endpoint"
+                    and any(isinstance(check, dict) and check.get("rule_id") == item["rule_id"]
+                            and check.get("status") == "passed" for check in asset.get("checks", [])))
         (resolved if verified else unverified).append(item)
     return {"workflow": "diff", "schema_version": "1.0",
             "before_scan_id": before.get("scan_id"), "after_scan_id": after.get("scan_id"),

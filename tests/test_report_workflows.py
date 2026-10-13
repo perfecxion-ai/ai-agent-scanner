@@ -40,8 +40,12 @@ def test_incomplete_scan_cannot_resolve(status):
 
 
 def test_completed_same_asset_resolves_but_missing_asset_does_not():
-    assert len(compare_reports(report(), report(False))['resolved']) == 1
     after = report(False)
+    assert compare_reports(report(), after)['resolved'] == []
+    after['agents'][0]['checks'] = [{'rule_id': 'other_rule', 'status': 'passed'}]
+    assert compare_reports(report(), after)['resolved'] == []
+    after['agents'][0]['checks'] = [{'rule_id': 'prompt_injection', 'status': 'passed'}]
+    assert len(compare_reports(report(), after)['resolved']) == 1
     after['agents'] = []
     result = compare_reports(report(), after)
     assert result['resolved'] == []
@@ -87,7 +91,7 @@ def test_cli_diff_and_source_overwrite_protection(tmp_path):
     runner = CliRunner()
     result = runner.invoke(cli, ['diff', '--before', str(before), '--after', str(after), '--output', str(output)])
     assert result.exit_code == 0, result.output
-    assert len(json.loads(output.read_text())['resolved']) == 1
+    assert len(json.loads(output.read_text())['resolution_unverified']) == 1
     original = before.read_text()
     result = runner.invoke(cli, ['diff', '--before', str(before), '--after', str(after), '--output', str(before)])
     assert result.exit_code != 0
@@ -100,6 +104,7 @@ def test_ambiguous_assets_are_not_suppressed():
     rules = policy(next(iter(inventory(source)[0])))
     derived = apply_policy(source, rules, datetime(2026, 10, 13, tzinfo=timezone.utc))
     assert derived['summary']['suppressed_findings'] == 0
+    assert len(derived['active_findings'][0]['occurrences']) == 2
 
 
 def test_cli_triage_writes_derived_file(tmp_path):

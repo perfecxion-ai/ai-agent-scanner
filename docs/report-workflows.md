@@ -11,11 +11,15 @@ ai-agent-scanner triage --report current.json --policy suppressions.json --outpu
 Diff identifies assets by normalized endpoint. Endpointless assets use source path plus
 provider/name/type when available, otherwise a labeled provider/name fallback. Random snapshot
 IDs, finding IDs, and timestamps do not determine identity. Findings are grouped by asset,
-rule, category, test name, and path, so repeated observations of the same check count once.
+rule, category, test name, and path. Repeated observations count once but every occurrence
+is retained in the group's `occurrences` array.
 Identity collisions are labeled ambiguous and cannot support automatic suppression or resolution.
 
 `newly_observed` means absent from the prior report, not necessarily newly introduced.
-`resolved` requires a complete current security run of the same unambiguous endpoint asset.
+`resolved` requires a complete current security run of the same unambiguous endpoint asset
+and an explicit `checks` entry with matching `rule_id` and `status: passed`.
+Current scanner reports do not yet supply per-rule pass manifests, so disappearance alone
+always remains unverified; it cannot establish that the original check passed.
 Missing assets, incomplete runs, redacted endpoints, and endpointless identities leave disappeared
 findings in `resolution_unverified`. `inventory_not_observed` does not assert asset deletion.
 Completeness is based on the report's recorded status; it does not establish coverage of every
