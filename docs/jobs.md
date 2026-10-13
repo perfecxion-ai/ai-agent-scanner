@@ -74,10 +74,11 @@ dispatcher lock. An empty database is initialized automatically. Recognized
 unversioned layouts are the original `scan_session` and `discovered_agent` tables,
 those tables plus `scan_result`, or those tables plus `scan_result` and `scan_job`.
 Existing column definitions and primary keys must match the supported layout.
-Extra indexes are accepted. Existing records are preserved; missing additive
+Extra non-unique indexes are accepted. Existing records are preserved; missing additive
 tables and the version stamp are committed in one SQLite transaction.
 
-Unknown tables, views, triggers, additional constraints, changed columns,
+Unknown tables, views, triggers, additional constraints or unique indexes,
+database column defaults, changed columns,
 missing versioned tables, or an unsupported
 version stop startup without changing the database. Restore a backup or perform
 an explicit reviewed migration; deleting the version stamp is not a repair.

@@ -25,12 +25,17 @@ def _validate_tables(connection, metadata, names):
             if (str(stored["type"]).upper() != str(column.type.compile(dialect=connection.dialect)).upper()
                     or stored["nullable"] != column.nullable):
                 raise SchemaError(f"Unsupported definition for {name}.{column.name}")
+            expected_default = str(column.server_default.arg) if column.server_default is not None else None
+            if stored["default"] != expected_default:
+                raise SchemaError(f"Unsupported database default for {name}.{column.name}")
         primary = inspector.get_pk_constraint(name)["constrained_columns"]
         if primary != [column.name for column in expected.primary_key.columns]:
             raise SchemaError(f"Unsupported primary key in {name}")
         if (inspector.get_foreign_keys(name) or inspector.get_check_constraints(name)
                 or inspector.get_unique_constraints(name)):
             raise SchemaError(f"Unsupported additional constraints in {name}")
+        if any(index["unique"] for index in inspector.get_indexes(name)):
+            raise SchemaError(f"Unsupported unique index in {name}")
 
 
 def initialize_schema(engine, metadata):

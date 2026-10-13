@@ -118,6 +118,12 @@ class JobStore:
             status = self._locked_status(connection, scan_id)
             if status in TERMINAL_STATES:
                 return
+            if status is None:
+                scan_status = connection.scalar(select(self.scans.c.status).where(self.scans.c.id == scan_id))
+                if scan_status in TERMINAL_STATES:
+                    return
+                if scan_status is None:
+                    raise ValueError("Job has no scan session")
             summary = output["summary"]
             connection.execute(update(self.scans).where(self.scans.c.id == scan_id).values(
                 agents_discovered=summary["agents_discovered"],
@@ -138,10 +144,10 @@ class JobStore:
             job_status = self._locked_status(connection, scan_id)
             if job_status in TERMINAL_STATES:
                 return
-            if job_status is None and connection.scalar(select(self.scans.c.id).where(
-                    self.scans.c.id == scan_id)) is None:
+            scan_status = connection.scalar(select(self.scans.c.status).where(self.scans.c.id == scan_id))
+            if job_status is None and (scan_status is None or scan_status in TERMINAL_STATES):
                 return
-            status = status or connection.scalar(select(self.scans.c.status).where(self.scans.c.id == scan_id))
+            status = status or scan_status
             if job_status == "cancel_requested":
                 status, error = "cancelled", "Scan cancelled by operator"
             elif (error and not explicit_status) or status not in TERMINAL_STATES:

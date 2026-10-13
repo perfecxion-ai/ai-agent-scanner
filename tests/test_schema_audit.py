@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
 
 import pytest
-from sqlalchemy import MetaData, create_engine, event, inspect, insert, select, text, CheckConstraint
+from sqlalchemy import MetaData, create_engine, event, inspect, insert, select, text, CheckConstraint, DefaultClause
 
 from src.core.jobs import JobDispatcher
 from src.core.schema import BASE_TABLES, LEGACY_LAYOUTS, SchemaError, initialize_schema
@@ -69,7 +69,8 @@ def test_recognized_legacy_upgrade_preserves_rows_and_creates_no_fake_history(da
 
 @pytest.mark.parametrize("mutation", ["unknown_table", "extra_column", "missing_column", "future_version",
                                       "partial_versioned", "unversioned_audit", "unknown_trigger",
-                                      "unknown_view", "unknown_constraint"])
+                                      "unknown_view", "unknown_constraint", "unknown_unique_index",
+                                      "unknown_default"])
 def test_unknown_schemas_fail_without_changing_database(database, mutation):
     module, engine = database
     if mutation in {"future_version", "partial_versioned"}:
@@ -80,6 +81,8 @@ def test_unknown_schemas_fail_without_changing_database(database, mutation):
             module.db.metadata.tables[name].to_metadata(metadata)
         if mutation == "unknown_constraint":
             metadata.tables["scan_session"].append_constraint(CheckConstraint("status = 'completed'"))
+        if mutation == "unknown_default":
+            metadata.tables["scan_session"].c.status.server_default = DefaultClause("queued")
         metadata.create_all(engine)
     with engine.begin() as connection:
         if mutation == "unknown_table":
@@ -99,6 +102,8 @@ def test_unknown_schemas_fail_without_changing_database(database, mutation):
                                     "BEGIN UPDATE scan_session SET scan_name = 'changed' WHERE id = NEW.id; END"))
         elif mutation == "unknown_view":
             connection.execute(text("CREATE VIEW custom_scan_view AS SELECT id FROM scan_session"))
+        elif mutation == "unknown_unique_index":
+            connection.execute(text("CREATE UNIQUE INDEX custom_scan_name ON scan_session (scan_name)"))
         before = connection.execute(text("SELECT name, sql FROM sqlite_master ORDER BY name")).all()
     with pytest.raises(SchemaError):
         initialize_schema(engine, module.db.metadata)
@@ -278,3 +283,21 @@ def test_worker_error_overrides_implicit_completed_scan_but_preserves_explicit_i
     enqueue(store, "interrupted", "running")
     store.finish("interrupted", "Server stopped during scan", status="interrupted")
     assert state(store, "interrupted") == result(store, "interrupted")["status"] == "interrupted"
+
+
+def test_jobless_legacy_terminal_retry_does_not_duplicate_history(store):
+    enqueue(store, "legacy", "running", with_job=False)
+    store.finish("legacy", "Scan worker failed")
+    store.finish("legacy", "Scan worker failed")
+    assert result(store, "legacy")["status"] == "failed"
+    assert [(row["event"], row["status"]) for row in history(store)] == [("terminal", "failed")]
+
+
+def test_completed_legacy_scan_does_not_get_fabricated_result_or_event(store):
+    enqueue(store, "legacy", "running", with_job=False)
+    with store.engine.begin() as connection:
+        connection.execute(text("UPDATE scan_session SET status = 'completed' WHERE id = 'legacy'"))
+    store.finish("legacy", "Scan worker failed")
+    store.save_result("legacy", {"status": "completed"}, None, [])
+    assert result(store, "legacy") is None
+    assert history(store) == []
