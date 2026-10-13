@@ -14,6 +14,9 @@ signing key and database URL are set only in that process. It does not open an
 operator database, run discovery, contact HTTP targets, or call a model provider.
 It exercises the actual schema initializer, `JobStore`, `JobDispatcher`, and
 application table definitions on a POSIX host with local file-backed SQLite.
+Before opening a connection, it verifies that the application's engine resolves
+to the requested temporary file, rejecting a cached application with another
+database target.
 
 The workload inserts synthetic scans and admitted events directly, bypassing
 HTTP queue admission and its separate request/queue limits. Before restarting

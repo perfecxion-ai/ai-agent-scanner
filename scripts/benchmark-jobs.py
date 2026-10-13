@@ -60,6 +60,10 @@ def run(args, database):
 
     with server.app.app_context():
         engine = server.db.engine
+        actual_database = engine.url.database
+        if (engine.dialect.name != "sqlite" or not actual_database or actual_database == ":memory:"
+                or engine.url.query or Path(actual_database).resolve() != database.resolve()):
+            raise ValueError("Benchmark engine does not target the requested temporary SQLite database")
         initialize_schema(engine, server.db.metadata)
         store = ObservedStore(engine, server.ScanJob.__table__, server.ScanSession.__table__,
                               server.ScanResult.__table__, server.AuditEvent.__table__)
