@@ -5,24 +5,23 @@ on:
     types: [published]
 
 permissions:
-  id-token: write
+  contents: read
 
 jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    needs: validate
     runs-on: ubuntu-latest
     environment: pypi
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/download-artifact@v4
         with:
-          python-version: "3.12"
-
-      - name: Install build tools
-        run: pip install build
-
-      - name: Build package
-        run: python -m build
-
-      - name: Publish to PyPI
+          name: distributions
+          path: dist
+      - name: Publish validated distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
