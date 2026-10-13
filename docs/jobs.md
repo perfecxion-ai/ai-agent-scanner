@@ -15,8 +15,8 @@ CLI does not use the queue and is unaffected by these deployment constraints.
 ## Startup and shutdown
 
 Gunicorn must load `gunicorn.conf.py`; the container already does so. Its worker
-initialization hook creates missing tables, takes exclusive ownership, recovers
-prior jobs, and starts the dispatcher. The development server starts the same
+initialization hook takes exclusive ownership, validates or upgrades the schema,
+recovers prior jobs, and starts the dispatcher. The development server starts the same
 service and binds to localhost. Do not launch the server with the Flask reloader.
 
 The dispatcher holds an OS lock on `<database>.dispatcher.lock` for its entire
@@ -56,7 +56,8 @@ scan IDs both return 404. Already terminal scans return 409.
 | cancelled | Operator cancellation completed |
 | interrupted | Server stopped before execution completed |
 
-Terminal status is reflected in both scan metadata and the versioned report.
+Terminal status is committed atomically in the job, scan metadata, versioned report,
+and audit event. Agent snapshots and summary counts share that transaction.
 Known findings already persisted are retained when a job is finalized. Work that
 had not reached a persistence boundary cannot be reconstructed after a crash.
 
@@ -65,6 +66,36 @@ returns 200 only while the database schema is accessible and the dispatcher is
 healthy; otherwise it returns 503. Health responses do not expose credentials,
 database URLs, or queue contents.
 
-Back up the SQLite database with a consistent SQLite backup operation or while
-the server is stopped. Table initialization adds missing queue tables but is not
-a general schema migration system.
+## Schema upgrades
+
+Stop the server and back up the SQLite database with a consistent SQLite backup
+operation before upgrading. Startup validates schema version 1 while holding the
+dispatcher lock. An empty database is initialized automatically. Recognized
+unversioned layouts are the original `scan_session` and `discovered_agent` tables,
+those tables plus `scan_result`, or those tables plus `scan_result` and `scan_job`.
+Existing column definitions and primary keys must match the supported layout.
+Extra indexes are accepted. Existing records are preserved; missing additive
+tables and the version stamp are committed in one SQLite transaction.
+
+Unknown tables, changed columns, missing versioned tables, or an unsupported
+version stop startup without changing the database. Restore a backup or perform
+an explicit reviewed migration; deleting the version stamp is not a repair.
+This is an acceptance path for these known SQLite releases, not a general
+migration engine or support for PostgreSQL.
+
+## Audit history
+
+`GET /api/scans/<id>/audit` requires the scan's authenticated organization.
+History records successful admission, claim, cancellation request, and terminal
+transitions in the same transaction as the corresponding state changes. Retried
+cancellation requests or finalization do not duplicate events. Recovery emits
+terminal events for work interrupted by a restart; it does not fabricate earlier
+history for upgraded scans.
+
+Events contain only an ID, scan ID, organization ID, event name, previous/next
+state and UTC timestamp. Scan names, targets, endpoint queries, configuration,
+credentials, prompts, responses, and exception details are excluded. The route
+returns state fields and timestamps only, ordered by increasing event ID. Use
+`limit` (default 100, maximum 200) and `after` (last returned ID) to paginate.
+Foreign and missing scans both return 404. This is audit history, not a
+tamper-proof record: an administrator with database access can modify it.

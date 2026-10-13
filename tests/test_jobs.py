@@ -21,9 +21,10 @@ def store(api, tmp_path):
     scans = module.ScanSession.__table__.to_metadata(metadata)
     jobs = module.ScanJob.__table__.to_metadata(metadata)
     results = module.ScanResult.__table__.to_metadata(metadata)
+    audit = module.AuditEvent.__table__.to_metadata(metadata)
     engine = create_engine(f"sqlite:///{tmp_path / 'jobs.db'}")
     metadata.create_all(engine)
-    yield JobStore(engine, jobs, scans, results)
+    yield JobStore(engine, jobs, scans, results, audit)
     engine.dispose()
 
 
@@ -89,7 +90,7 @@ def test_restart_preserves_queue_and_interrupts_active_jobs(store):
     enqueue(store, "active", "running")
     enqueue(store, "cancel", "cancel_requested")
     enqueue(store, "legacy", "running", with_job=False)
-    restarted = JobStore(store.engine, store.jobs, store.scans, store.results)
+    restarted = JobStore(store.engine, store.jobs, store.scans, store.results, store.audit)
     assert restarted.recover() == 3
     assert state(store, "pending") == "queued"
     assert state(store, "active") == result(store, "active")["status"] == "interrupted"
@@ -330,6 +331,7 @@ def test_failed_admission_transaction_leaves_no_orphan(api, monkeypatch):
         "scan_type": "discovery_only", "target_scope": {"network_ranges": ["192.0.2.1/32"]}})
     assert response.status_code == 500
     assert module.ScanSession.query.count() == module.ScanJob.query.count() == 0
+    assert module.AuditEvent.query.count() == 0
 
 
 def test_queued_job_revalidates_current_allowlist(api, monkeypatch):

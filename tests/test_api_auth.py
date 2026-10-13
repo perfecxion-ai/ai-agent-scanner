@@ -25,7 +25,7 @@ def api(monkeypatch):
     monkeypatch.setattr(module, "_job_dispatcher", None)
     with module.app.app_context():
         assert module.db.engine.url.database == ":memory:"
-        module.db.create_all()
+        module.initialize_schema(module.db.engine, module.db.metadata)
         yield module, module.app.test_client()
         module.db.session.remove()
         module.db.drop_all()

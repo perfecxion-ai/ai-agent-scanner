@@ -38,8 +38,9 @@ from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
 from src.core.model_selection import apply_model_overrides
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
-from src.core.transport import ScanBudget, scan_transport, TransportPolicyError
+from src.core.transport import ScanBudget, scan_transport, current_budget
 from src.core.jobs import JobStore, JobDispatcher, TERMINAL_STATES
+from src.core.schema import initialize_schema, SCHEMA_VERSION
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -181,6 +182,23 @@ class ScanJob(db.Model):
     completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
 
+class SchemaVersion(db.Model):
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class AuditEvent(db.Model):
+    """Minimal transition history; never store scan inputs or response content."""
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scan_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    organization_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    event: Mapped[str] = mapped_column(String(32), nullable=False)
+    previous_status: Mapped[str] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -301,6 +319,8 @@ def start_scan():
                 return jsonify({"success": False, "error": "Scan queue is full"}), 429
             db.session.add(scan_session)
             db.session.add(ScanJob(scan_id=scan_id))
+            db.session.add(AuditEvent(scan_id=scan_id, organization_id=scan_session.organization_id,
+                                      event="admitted", status="queued"))
             db.session.commit()
         if _job_dispatcher:
             _job_dispatcher.wake()
@@ -330,6 +350,26 @@ def cancel_scan(scan_id):
     if _job_dispatcher:
         _job_dispatcher.wake()
     return jsonify({"success": True, "scan_id": scan_id, "status": status}), 202
+
+
+@app.route("/api/scans/<scan_id>/audit")
+@require_auth
+def scan_audit(scan_id):
+    tenant = g.user["organization_id"]
+    if not ScanSession.query.filter_by(id=scan_id, organization_id=tenant).first():
+        return jsonify({"success": False, "error": "Scan not found"}), 404
+    try:
+        limit = min(200, max(1, int(request.args.get("limit", 100))))
+        after = max(0, int(request.args.get("after", 0)))
+    except ValueError:
+        return jsonify({"success": False, "error": "Integer limit and after required"}), 400
+    events = AuditEvent.query.filter(AuditEvent.scan_id == scan_id,
+                                    AuditEvent.organization_id == tenant,
+                                    AuditEvent.id > after).order_by(AuditEvent.id).limit(limit).all()
+    return jsonify({"success": True, "events": [{
+        "id": row.id, "event": row.event, "previous_status": row.previous_status,
+        "status": row.status, "created_at": row.created_at.isoformat(),
+    } for row in events], "next_after": events[-1].id if events else after})
 
 
 @app.route("/api/scans/<scan_id>/status")
@@ -491,6 +531,8 @@ def readiness_check():
     try:
         db.session.execute(select(1))
         db.session.execute(select(ScanJob.scan_id).limit(1))
+        if db.session.scalar(select(SchemaVersion.version).where(SchemaVersion.id == 1)) != SCHEMA_VERSION:
+            raise RuntimeError("Schema not initialized")
         ready = bool(_job_dispatcher and _job_dispatcher.ready)
     except Exception:
         db.session.rollback()
@@ -503,7 +545,8 @@ def readiness_check():
 # ---------------------------------------------------------------------------
 
 def _get_job_store():
-    return JobStore(db.engine, ScanJob.__table__, ScanSession.__table__, ScanResult.__table__)
+    return JobStore(db.engine, ScanJob.__table__, ScanSession.__table__, ScanResult.__table__,
+                    AuditEvent.__table__)
 
 
 def start_job_dispatcher():
@@ -512,9 +555,9 @@ def start_job_dispatcher():
         if _job_dispatcher is not None:
             return _job_dispatcher
         with app.app_context():
-            db.create_all()
             dispatcher = JobDispatcher(_get_job_store(), _execute_job,
-                                       workers=app.config["MAX_CONCURRENT_SCANS"])
+                                       workers=app.config["MAX_CONCURRENT_SCANS"],
+                                       initialize=lambda: initialize_schema(db.engine, db.metadata))
             dispatcher.start()
         _job_dispatcher = dispatcher
         return dispatcher
@@ -540,21 +583,7 @@ def _execute_job(scan_id, cancelled):
 
 def _record_terminal(scan_id, status, error):
     with app.app_context():
-        scan = db.session.get(ScanSession, scan_id)
-        if not scan:
-            return
-        scan.status, scan.completed_at = status, datetime.now(timezone.utc)
-        stored = db.session.get(ScanResult, scan_id)
-        result = dict(stored.result) if stored else {
-            "schema_version": "1.0", "scan_id": scan_id, "scan_type": scan.scan_type,
-            "agents": [], "security_results": [], "risk_assessments": [], "summary": {},
-        }
-        result.update(status=status, error=error)
-        if stored:
-            stored.result = result
-        else:
-            db.session.add(ScanResult(scan_id=scan_id, result=result))
-        db.session.commit()
+        _get_job_store().finish(scan_id, error, status=status)
 
 
 async def _await_scan(scan_id, scan_type, target_scope, scan_config, cancelled):
@@ -598,13 +627,8 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
         if budget.rejections or budget.failures:
             with app.app_context():
                 stored = db.session.get(ScanResult, scan_id)
-                session = db.session.get(ScanSession, scan_id)
-                if stored and session:
-                    session.status = "partial"
-                    stored.result = {**stored.result, "status": "partial"}
-                    db.session.commit()
-                else:
-                    raise TransportPolicyError("Scan encountered rejected or failed requests")
+                if not stored:
+                    raise RuntimeError("Rejected or failed transport produced no report")
     except asyncio.CancelledError:
         with app.app_context():
             requested = _get_job_store().cancellation_requested(scan_id)
@@ -623,13 +647,6 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
 
 async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_config: dict):
     """Execute the full scan pipeline."""
-
-    # Mark scan as running
-    with app.app_context():
-        scan_session = db.session.get(ScanSession, scan_id)
-        scan_session.status = "running"
-        scan_session.started_at = datetime.now(timezone.utc)
-        db.session.commit()
 
     try:
         with _scans_lock:
@@ -674,26 +691,16 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                                     scope, scan_type, agents=source_agents,
                                     agent_validator=lambda agents: validate_agent_endpoints(agents, app.config))
         result["scan_id"] = scan_id
+        budget = current_budget()
+        if budget and (budget.rejections or budget.failures):
+            result["status"] = "partial"
         _update_progress(scan_id, 95, "Saving results")
 
         # Save results
         with app.app_context():
-            scan_session = db.session.get(ScanSession, scan_id)
-            job = db.session.get(ScanJob, scan_id)
-            if job and job.status == "cancel_requested":
-                raise asyncio.CancelledError
-            summary = result["summary"]
-            scan_session.agents_discovered = summary["agents_discovered"]
-            scan_session.vulnerabilities_found = summary["vulnerabilities_found"]
-            scan_session.critical_risks = summary["critical_risks"]
-            scan_session.overall_risk_score = summary["overall_risk_score"] or 0.0
-            scan_session.status = result["status"]
-            scan_session.completed_at = datetime.now(timezone.utc)
-            scan_session.progress = 100.0
-
-            db.session.add(ScanResult(scan_id=scan_id, result=result))
+            snapshots = []
             for agent_data in result["agents"]:
-                agent_record = DiscoveredAgentModel(
+                snapshots.append(dict(
                     id=uuid.uuid4().hex,
                     scan_id=scan_id,
                     agent_name=agent_data["name"],
@@ -705,26 +712,14 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                     vulnerabilities=agent_data["vulnerabilities"],
                     risk_score=agent_data["risk_score"] or 0.0,
                     risk_level=agent_data["risk_level"],
-                    metadata_json={**agent_data.get("metadata", {}), "asset_id": agent_data["id"],
+                    metadata={**agent_data.get("metadata", {}), "asset_id": agent_data["id"],
                                    "security_status": agent_data["security_status"]},
-                )
-                db.session.add(agent_record)
-
-            db.session.commit()
+                ))
+            _get_job_store().save_result(scan_id, result, DiscoveredAgentModel.__table__, snapshots)
 
     except Exception as e:
         app.logger.error(f"Scan execution error: {e}", exc_info=True)
-        with app.app_context():
-            scan_session = db.session.get(ScanSession, scan_id)
-            if scan_session:
-                scan_session.status = "failed"
-                scan_session.completed_at = datetime.now(timezone.utc)
-                db.session.add(ScanResult(scan_id=scan_id, result={
-                    "schema_version": "1.0", "scan_id": scan_id, "scan_type": scan_type,
-                    "status": "failed", "error": str(e) if isinstance(e, SourceReplayError) else "Scan execution failed", "agents": [],
-                    "summary": {},
-                }))
-                db.session.commit()
+        _record_terminal(scan_id, "failed", str(e) if isinstance(e, SourceReplayError) else "Scan execution failed")
 
 
 def _update_progress(scan_id: str, progress: float, phase: str):

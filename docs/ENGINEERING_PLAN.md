@@ -81,8 +81,9 @@ These are source-review findings, not evidence of exploitation in a deployment.
   coverage accounting remain incomplete.
 - M3 has a durable SQLite queue, exclusive startup recovery, bounded workers,
   cooperative cancellation, deadlines, and readiness checks. Race and restart
-  tests pass. PostgreSQL/distributed coordination, comprehensive migrations,
-  and audit acceptance remain pending.
+  tests pass. Known SQLite schema upgrades and transactional tenant audit history
+  have acceptance tests. PostgreSQL/distributed coordination and a general
+  migration framework remain outside the supported deployment boundary.
 - M4 has passive MCP configuration/schema checks and offline replay for indirect
   markers, RAG tenant canaries, and tool authorization requests. These fixtures
   do not establish live attack coverage. Broader live integrations, output sinks,
