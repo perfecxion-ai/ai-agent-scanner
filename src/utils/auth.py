@@ -18,7 +18,9 @@ from flask import request, jsonify, current_app
 
 
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_HOURS = 24
+JWT_EXPIRY_HOURS = 1
+JWT_ISSUER = "ai-agent-scanner"
+JWT_AUDIENCE = "ai-agent-scanner-api"
 
 
 def require_auth(f):
@@ -31,6 +33,8 @@ def require_auth(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        if not current_app.config.get("OPERATOR_API_KEY"):
+            return jsonify({"success": False, "error": "Operator authentication is not configured"}), 503
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return jsonify({"success": False, "error": "Missing or malformed Authorization header"}), 401
@@ -44,7 +48,13 @@ def require_auth(f):
                 token,
                 current_app.config["SECRET_KEY"],
                 algorithms=[JWT_ALGORITHM],
+                issuer=JWT_ISSUER,
+                audience=JWT_AUDIENCE,
+                options={"require": ["exp", "iat", "iss", "aud", "user_id", "organization_id"]},
             )
+            for claim in ("user_id", "organization_id"):
+                if not isinstance(payload[claim], str) or not payload[claim].strip():
+                    raise jwt.InvalidTokenError("Invalid identity claim")
         except jwt.ExpiredSignatureError:
             return jsonify({"success": False, "error": "Token expired"}), 401
         except jwt.InvalidTokenError:
@@ -75,5 +85,7 @@ def create_jwt_token(user_data: dict, secret_key: str) -> str:
         **user_data,
         "iat": now,
         "exp": now + timedelta(hours=JWT_EXPIRY_HOURS),
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
     }
     return jwt.encode(payload, secret_key, algorithm=JWT_ALGORITHM)

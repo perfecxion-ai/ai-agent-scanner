@@ -13,9 +13,9 @@ Environment variables:
 """
 
 import os
-import logging
 import threading
 import asyncio
+import hmac
 from datetime import datetime, timezone
 from typing import Dict, Any
 
@@ -42,10 +42,10 @@ app = Flask(__name__)
 # --- SECRET_KEY: fail loudly if not set (except in debug/testing) ---
 _secret = os.environ.get("SECRET_KEY")
 _debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
-if not _secret and not _debug:
+if not _secret and (not _debug or os.environ.get("OPERATOR_API_KEY")):
     raise RuntimeError(
         "SECRET_KEY environment variable must be set in production. "
-        "Set FLASK_DEBUG=true to use a dev-only key."
+        "It is also required whenever operator authentication is enabled."
     )
 app.config["SECRET_KEY"] = _secret or "dev-only-insecure-key-do-not-use-in-prod"
 
@@ -53,6 +53,8 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URL", "sqlite:///ai_agent_scanner.db"
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["OPERATOR_API_KEY"] = os.environ.get("OPERATOR_API_KEY", "")
+app.config["OPERATOR_ORGANIZATION_ID"] = os.environ.get("OPERATOR_ORGANIZATION_ID", "default")
 
 # --- CORS: restricted to explicit origins ---
 _allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5000")
@@ -142,17 +144,26 @@ def dashboard():
 
 @app.route("/api/auth/token", methods=["POST"])
 def get_token():
-    """Issue a JWT token. In production, wire this to your identity provider."""
-    data = request.get_json() or {}
-    user_id = data.get("user_id")
-    if not user_id:
-        return jsonify({"success": False, "error": "user_id required"}), 400
+    """Authenticate the configured operator; identity is controlled by the server."""
+    expected = app.config["OPERATOR_API_KEY"]
+    if not expected:
+        return jsonify({"success": False, "error": "Operator authentication is not configured"}), 503
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "error": "JSON object required"}), 400
+    supplied = data.get("api_key")
+    if not isinstance(supplied, str) or not hmac.compare_digest(
+        supplied.encode("utf-8"), expected.encode("utf-8")
+    ):
+        return jsonify({"success": False, "error": "Invalid credentials"}), 401
 
     token = create_jwt_token(
-        {"user_id": user_id, "organization_id": data.get("organization_id", "default")},
+        {"user_id": "operator", "organization_id": app.config["OPERATOR_ORGANIZATION_ID"]},
         app.config["SECRET_KEY"],
     )
-    return jsonify({"success": True, "token": token})
+    response = jsonify({"success": True, "token": token})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/api/scans", methods=["POST"])
@@ -174,7 +185,7 @@ def start_scan():
         scan_id = generate_scan_id()
         scan_session = ScanSession(
             id=scan_id,
-            organization_id=g.user.get("organization_id", "default"),
+            organization_id=g.user["organization_id"],
             scan_name=scan_name,
             scan_type=scan_type,
             target_scope=target_scope,
@@ -205,7 +216,9 @@ def start_scan():
 def get_scan_status(scan_id):
     """Get current scan status and progress."""
     try:
-        scan_session = db.session.get(ScanSession, scan_id)
+        scan_session = ScanSession.query.filter_by(
+            id=scan_id, organization_id=g.user["organization_id"]
+        ).first()
         if not scan_session:
             return jsonify({"success": False, "error": "Scan not found"}), 404
 
@@ -234,7 +247,9 @@ def get_scan_status(scan_id):
 def get_scan_results(scan_id):
     """Get complete scan results."""
     try:
-        scan_session = db.session.get(ScanSession, scan_id)
+        scan_session = ScanSession.query.filter_by(
+            id=scan_id, organization_id=g.user["organization_id"]
+        ).first()
         if not scan_session:
             return jsonify({"success": False, "error": "Scan not found"}), 404
 
@@ -283,7 +298,7 @@ def get_scan_results(scan_id):
 def list_agents():
     """List all discovered agents across scans."""
     try:
-        org_id = g.user.get("organization_id", "default")
+        org_id = g.user["organization_id"]
         risk_level = request.args.get("risk_level")
         agent_type = request.args.get("agent_type")
 

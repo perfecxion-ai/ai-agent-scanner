@@ -1,5 +1,7 @@
 # AI Agent Scanner
 
+Web/API deployment requires configured operator authentication. See [authentication setup](docs/authentication.md).
+
 **Find the AI you don't know about. Secure the AI you do.**
 
 Asset inventory and security assessment for AI agents — the first open-source tool that discovers shadow AI across your infrastructure, tests it for vulnerabilities, and maps findings to compliance frameworks.
