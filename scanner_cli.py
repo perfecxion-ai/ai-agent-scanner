@@ -14,7 +14,6 @@ Usage:
 import asyncio
 import json
 import sys
-from pathlib import Path
 from datetime import datetime, timezone
 
 import click
@@ -24,7 +23,7 @@ from src.security.security_engine import SecurityTestEngine
 from src.risk.risk_assessor import RiskAssessment
 from src.frameworks.owasp_llm_top10 import get_coverage_summary, generate_owasp_coverage_report
 from src.frameworks.mitre_atlas import generate_atlas_coverage_report
-from src.reporting.sarif_output import write_sarif, generate_sarif
+from src.reporting.sarif_output import write_sarif
 
 
 VERSION = "1.1.0"
