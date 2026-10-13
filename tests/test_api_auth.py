@@ -2,6 +2,7 @@
 
 import importlib
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -19,7 +20,10 @@ def api(monkeypatch):
     monkeypatch.setenv("OPERATOR_ORGANIZATION_ID", "tenant-a")
     module = sys.modules.get("app") or importlib.import_module("app")
     module.app.config.update(TESTING=True, OPERATOR_API_KEY="test-operator-key",
-                             OPERATOR_ORGANIZATION_ID="tenant-a")
+                             OPERATOR_ORGANIZATION_ID="tenant-a",
+                             SCAN_ALLOWED_NETWORKS=("192.0.2.0/24",),
+                             SCAN_ALLOWED_PATH_ROOTS=(), SCAN_ALLOW_LOOPBACK=False)
+    monkeypatch.setattr(module, "_scan_slots", threading.BoundedSemaphore(2), raising=False)
     with module.app.app_context():
         assert module.db.engine.url.database == ":memory:"
         module.db.create_all()

@@ -25,6 +25,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import String, DateTime, Integer, Float, Boolean, Text, JSON
+from werkzeug.exceptions import HTTPException
 
 from src.discovery.discovery_engine import DiscoveryEngine, DiscoveryScope
 from src.security.security_engine import SecurityTestEngine
@@ -32,8 +33,10 @@ from src.risk.risk_assessor import RiskAssessment
 from src.compliance.compliance_engine import ComplianceEngine
 from src.reporting.report_generator import ReportGenerator
 from src.utils.auth import require_auth, create_jwt_token
-from src.utils.helpers import generate_scan_id, validate_scan_scope
+from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
+from src.core.transport import ScanBudget, scan_transport, TransportPolicyError
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -57,6 +60,20 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["OPERATOR_API_KEY"] = os.environ.get("OPERATOR_API_KEY", "")
 app.config["OPERATOR_ORGANIZATION_ID"] = os.environ.get("OPERATOR_ORGANIZATION_ID", "default")
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
+app.config["SCAN_ALLOWED_NETWORKS"] = tuple(filter(None, (
+    value.strip() for value in os.environ.get("SCAN_ALLOWED_NETWORKS", "").split(",")
+)))
+app.config["SCAN_ALLOWED_PATH_ROOTS"] = tuple(filter(None, os.environ.get(
+    "SCAN_ALLOWED_PATH_ROOTS", ""
+).split(os.pathsep)))
+app.config["SCAN_ALLOW_LOOPBACK"] = os.environ.get("SCAN_ALLOW_LOOPBACK", "false").lower() == "true"
+for _setting, _default, _maximum in (
+    ("SCAN_MAX_HOSTS", 1024, 65536), ("SCAN_MAX_FILES", 10000, 100000),
+    ("SCAN_TIMEOUT_SECONDS", 300, 3600), ("MAX_CONCURRENT_SCANS", 2, 32),
+    ("SCAN_MAX_REQUESTS", 500, 10000), ("SCAN_MAX_RESPONSE_BYTES", 1048576, 16777216),
+):
+    app.config[_setting] = bounded_integer(int(os.environ.get(_setting, _default)), _setting, _maximum)
 
 # --- CORS: restricted to explicit origins ---
 _allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5000")
@@ -75,6 +92,7 @@ report_generator = ReportGenerator()
 # --- Thread-safe scan tracking ---
 _active_scans: Dict[str, Dict[str, Any]] = {}
 _scans_lock = threading.Lock()
+_scan_slots = threading.BoundedSemaphore(app.config["MAX_CONCURRENT_SCANS"])
 
 VERSION = "1.1.0"
 
@@ -183,17 +201,33 @@ def get_token():
 @require_auth
 def start_scan():
     """Start a new AI agent discovery and security scan."""
+    admitted = False
+    scan_session = None
     try:
-        data = request.get_json()
+        scan_name, scan_type, target_scope, scan_config = validate_request(
+            request.get_json(silent=True), app.config,
+        )
+        if scan_type == "security_only":
+            source = ScanSession.query.filter_by(
+                id=scan_config["source_scan_id"], organization_id=g.user["organization_id"],
+            ).first()
+            if source is None:
+                return jsonify({"success": False, "error": "Source scan not found"}), 404
+            if source.status != "completed":
+                return jsonify({"success": False, "error": "Source scan must be completed"}), 400
+            previous = db.session.get(ScanResult, source.id)
+            if not previous:
+                return jsonify({"success": False, "error": "Source scan has no versioned results"}), 400
+            if any(agent.get("endpoint_redacted") for agent in previous.result.get("agents", [])):
+                return jsonify({"success": False, "error": "Source endpoints were redacted; supply fresh targets"}), 400
+            source_agents = DiscoveredAgentModel.query.filter_by(scan_id=source.id).all()
+            if not source_agents:
+                return jsonify({"success": False, "error": "Source scan has no assets"}), 400
+            validate_agent_endpoints([{"endpoint": agent.endpoint_url} for agent in source_agents], app.config)
 
-        scan_name = data.get("scan_name", f"Scan {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}")
-        scan_type = data.get("scan_type", "full")
-        target_scope = data.get("target_scope", {})
-        scan_config = data.get("scan_config", {})
-
-        is_valid, validation_error = validate_scan_scope(target_scope)
-        if not is_valid:
-            return jsonify({"success": False, "error": validation_error}), 400
+        admitted = _scan_slots.acquire(blocking=False)
+        if not admitted:
+            return jsonify({"success": False, "error": "Concurrent scan limit reached"}), 429
 
         scan_id = generate_scan_id()
         scan_session = ScanSession(
@@ -204,24 +238,38 @@ def start_scan():
             target_scope=target_scope,
             scan_config=scan_config,
             created_by=g.user.get("user_id"),
-            user_ip=request.headers.get("X-Forwarded-For", request.remote_addr),
+            user_ip=request.remote_addr,
         )
 
         db.session.add(scan_session)
         db.session.commit()
 
         thread = threading.Thread(
-            target=_run_scan_in_thread,
+            target=_run_admitted_scan,
             args=(scan_id, scan_type, target_scope, scan_config),
             daemon=True,
         )
         thread.start()
+        admitted = False  # The worker owns the slot after successful startup.
 
         return jsonify({"success": True, "scan_id": scan_id, "message": "Scan started"})
 
+    except ScopeValidationError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except HTTPException as e:
+        return jsonify({"success": False, "error": e.description}), e.code
     except Exception as e:
+        db.session.rollback()
+        if scan_session is not None:
+            failed_scan = db.session.get(ScanSession, scan_session.id)
+            if failed_scan is not None:
+                failed_scan.status = "failed"
+                db.session.commit()
         app.logger.error(f"Error starting scan: {e}", exc_info=True)
         return jsonify({"success": False, "error": "Failed to start scan"}), 500
+    finally:
+        if admitted:
+            _scan_slots.release()
 
 
 @app.route("/api/scans/<scan_id>/status")
@@ -381,14 +429,41 @@ def health_check():
 # Background scan execution
 # ---------------------------------------------------------------------------
 
+def _run_admitted_scan(*args):
+    try:
+        _run_scan_in_thread(*args)
+    finally:
+        _scan_slots.release()
+
+
 def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_config: dict):
     """Run scan in a background thread with its own event loop."""
     loop = asyncio.new_event_loop()
     try:
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(
-            _execute_scan(scan_id, scan_type, target_scope, scan_config)
+        budget = ScanBudget(
+            allowed_networks=app.config["SCAN_ALLOWED_NETWORKS"],
+            allow_loopback=app.config["SCAN_ALLOW_LOOPBACK"],
+            max_requests=app.config["SCAN_MAX_REQUESTS"],
+            max_response_bytes=app.config["SCAN_MAX_RESPONSE_BYTES"],
         )
+        with scan_transport(budget):
+            loop.run_until_complete(
+                asyncio.wait_for(
+                    _execute_scan(scan_id, scan_type, target_scope, scan_config),
+                    timeout=scan_config.get("timeout_seconds", app.config["SCAN_TIMEOUT_SECONDS"]),
+                )
+            )
+        if budget.rejections or budget.failures:
+            with app.app_context():
+                stored = db.session.get(ScanResult, scan_id)
+                session = db.session.get(ScanSession, scan_id)
+                if stored and session:
+                    session.status = "partial"
+                    stored.result = {**stored.result, "status": "partial"}
+                    db.session.commit()
+                else:
+                    raise TransportPolicyError("Scan encountered rejected or failed requests")
     except Exception as e:
         app.logger.error(f"Scan thread error: {e}", exc_info=True)
         with app.app_context():
@@ -451,7 +526,8 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                     raise SourceReplayError("Source endpoints were redacted; use fresh explicit target configuration")
         _update_progress(scan_id, 10, "Running scan pipeline")
         result = await run_pipeline(discovery_engine, security_engine, risk_assessor,
-                                    scope, scan_type, agents=source_agents)
+                                    scope, scan_type, agents=source_agents,
+                                    agent_validator=lambda agents: validate_agent_endpoints(agents, app.config))
         result["scan_id"] = scan_id
         _update_progress(scan_id, 95, "Saving results")
 

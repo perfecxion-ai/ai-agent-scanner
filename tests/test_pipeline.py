@@ -15,7 +15,7 @@ def api(monkeypatch):
     yield from api_fixture.__wrapped__(monkeypatch)
 
 
-def asset(endpoint="https://example.test", asset_id="stable-asset"):
+def asset(endpoint="https://192.0.2.1", asset_id="stable-asset"):
     return {"id": asset_id, "name": "fixture", "type": "assistant", "provider": "test",
             "endpoint": endpoint, "discovery_method": "fixture", "metadata": {}}
 
