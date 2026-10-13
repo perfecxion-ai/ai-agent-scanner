@@ -20,6 +20,7 @@ import aiohttp
 from src.core.transport import SafeSession
 import logging
 import base64
+from http.cookies import SimpleCookie, CookieError
 from typing import List, Dict, Any, Optional
 from urllib.parse import urljoin
 import uuid
@@ -442,27 +443,33 @@ class AccessControlTester:
                         cookies = response.headers.getall('set-cookie')
                         
                         for cookie in cookies:
-                            insecure_issues = []
-                            
-                            if 'secure' not in cookie.lower():
-                                insecure_issues.append('Missing Secure flag')
-                            if 'httponly' not in cookie.lower():
-                                insecure_issues.append('Missing HttpOnly flag')
-                            if 'samesite' not in cookie.lower():
-                                insecure_issues.append('Missing SameSite attribute')
-                            
-                            if insecure_issues:
+                            parsed = SimpleCookie()
+                            try:
+                                parsed.load(cookie)
+                            except CookieError:
+                                continue
+                            for name, morsel in parsed.items():
+                                insecure_issues = []
+                                if not morsel['secure']:
+                                    insecure_issues.append('Missing Secure flag')
+                                if not morsel['httponly']:
+                                    insecure_issues.append('Missing HttpOnly flag')
+                                if morsel['samesite'].lower() not in ('strict', 'lax', 'none'):
+                                    insecure_issues.append('Missing or invalid SameSite attribute')
+                                if not insecure_issues:
+                                    continue
                                 vulnerabilities.append({
                                     'id': str(uuid.uuid4()),
                                     'agent_id': agent.get('id'),
                                     'vulnerability_type': 'insecure_session_management',
-                                    'severity': 'medium',
-                                    'title': "Insecure Session Cookie",
-                                    'description': f"Session cookie lacks security attributes: {', '.join(insecure_issues)}",
-                                    'cookie': cookie,
+                                    'severity': 'info',
+                                    'evidence_status': 'heuristic',
+                                    'title': "Cookie Attributes Require Review",
+                                    'description': f"Cookie attributes require review; cookie purpose is unverified: {', '.join(insecure_issues)}",
+                                    'cookie_name': name,
                                     'issues': insecure_issues,
                                     'timestamp': datetime.now(timezone.utc).isoformat(),
-                                    'confidence': 0.8,
+                                    'confidence': 0.5,
                                     'remediation': "Set Secure, HttpOnly, and SameSite attributes on session cookies."
                                 })
         

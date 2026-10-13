@@ -4,7 +4,8 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from copy import deepcopy
 from urllib.parse import urlsplit, urlunsplit
-from src.core.transport import current_budget
+from src.core.transport import current_budget, scan_transport, ScanBudget
+from src.core.redaction import collect_secrets, redact_secrets
 from src.reporting.sarif_output import generate_sarif
 
 
@@ -19,36 +20,13 @@ def public_metadata(metadata):
     return clean
 
 
-def redact_secrets(value, secrets):
-    if isinstance(value, dict):
-        return {key: redact_secrets(item, secrets) for key, item in value.items()}
-    if isinstance(value, list):
-        return [redact_secrets(item, secrets) for item in value]
-    if isinstance(value, str):
-        for secret in secrets:
-            value = value.replace(secret, "[redacted]")
-    return value
-
-
-def collect_secrets(value):
-    secrets = set()
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if any(word in key.lower() for word in ("secret", "token", "password", "canary", "marker", "api_key", "authorization")):
-                if isinstance(item, str) and item:
-                    secrets.add(item)
-                elif isinstance(item, dict):
-                    secrets.update(str(entry) for entry in item.values() if isinstance(entry, str) and entry)
-            secrets.update(collect_secrets(item))
-    elif isinstance(value, list):
-        for item in value:
-            secrets.update(collect_secrets(item))
-    return secrets
-
-
 async def run_pipeline(discovery, security, risk, scope, scan_type="full", agents=None,
                        agent_validator=None):
     """Run requested phases, preserving unsuccessful security outcomes."""
+    if current_budget() is None:
+        with scan_transport(ScanBudget()):
+            return await run_pipeline(discovery, security, risk, scope, scan_type,
+                                      agents, agent_validator)
     if scan_type not in {"full", "discovery_only", "security_only"}:
         raise ValueError("Unsupported scan type")
     if scan_type == "security_only":
@@ -79,6 +57,7 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
             if result.get("error"):
                 result["error"] = "Security testing failed"
             result["metadata"] = public_metadata(agent.get("metadata", {}))
+            secrets.update(collect_secrets(result))
             security_results.append(result)
     completed = [result for result in security_results if result["status"] == "completed"]
     risk_status = "not_run"

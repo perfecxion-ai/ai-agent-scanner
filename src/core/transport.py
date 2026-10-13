@@ -70,6 +70,16 @@ def current_budget():
     return _budget.get()
 
 
+def record_response_failure():
+    """Record a required model interaction rejected at the HTTP layer.
+
+    Intentional denied controls in authentication probes do not call this helper.
+    """
+    budget = current_budget()
+    if budget is not None:
+        budget.failures += 1
+
+
 @contextmanager
 def scan_transport(budget):
     token = _budget.set(budget)
