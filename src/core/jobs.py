@@ -132,6 +132,7 @@ class JobStore:
                 self._finalize(connection, scan_id, output["status"], output=output)
 
     def finish(self, scan_id, error=None, *, status=None):
+        explicit_status = status is not None
         with self.engine.begin() as connection:
             # Lock before reading so a concurrent accepted cancellation cannot be overwritten.
             job_status = self._locked_status(connection, scan_id)
@@ -143,7 +144,7 @@ class JobStore:
             status = status or connection.scalar(select(self.scans.c.status).where(self.scans.c.id == scan_id))
             if job_status == "cancel_requested":
                 status, error = "cancelled", "Scan cancelled by operator"
-            elif status not in TERMINAL_STATES:
+            elif (error and not explicit_status) or status not in TERMINAL_STATES:
                 status, error = "failed", error or "Worker exited without a terminal result"
             self._finalize(connection, scan_id, status, error)
 

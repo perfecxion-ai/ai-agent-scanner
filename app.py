@@ -359,10 +359,12 @@ def scan_audit(scan_id):
     if not ScanSession.query.filter_by(id=scan_id, organization_id=tenant).first():
         return jsonify({"success": False, "error": "Scan not found"}), 404
     try:
-        limit = min(200, max(1, int(request.args.get("limit", 100))))
-        after = max(0, int(request.args.get("after", 0)))
+        limit = int(request.args.get("limit", 100))
+        after = int(request.args.get("after", 0))
+        if not 1 <= limit <= 200 or not 0 <= after <= 2**63 - 1:
+            raise ValueError("Pagination is outside supported bounds")
     except ValueError:
-        return jsonify({"success": False, "error": "Integer limit and after required"}), 400
+        return jsonify({"success": False, "error": "limit must be 1..200; after must be 0..9223372036854775807"}), 400
     events = AuditEvent.query.filter(AuditEvent.scan_id == scan_id,
                                     AuditEvent.organization_id == tenant,
                                     AuditEvent.id > after).order_by(AuditEvent.id).limit(limit).all()

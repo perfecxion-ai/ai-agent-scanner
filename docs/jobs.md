@@ -77,7 +77,8 @@ Existing column definitions and primary keys must match the supported layout.
 Extra indexes are accepted. Existing records are preserved; missing additive
 tables and the version stamp are committed in one SQLite transaction.
 
-Unknown tables, changed columns, missing versioned tables, or an unsupported
+Unknown tables, views, triggers, additional constraints, changed columns,
+missing versioned tables, or an unsupported
 version stop startup without changing the database. Restore a backup or perform
 an explicit reviewed migration; deleting the version stamp is not a repair.
 This is an acceptance path for these known SQLite releases, not a general

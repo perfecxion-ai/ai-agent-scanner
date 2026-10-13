@@ -28,6 +28,9 @@ def _validate_tables(connection, metadata, names):
         primary = inspector.get_pk_constraint(name)["constrained_columns"]
         if primary != [column.name for column in expected.primary_key.columns]:
             raise SchemaError(f"Unsupported primary key in {name}")
+        if (inspector.get_foreign_keys(name) or inspector.get_check_constraints(name)
+                or inspector.get_unique_constraints(name)):
+            raise SchemaError(f"Unsupported additional constraints in {name}")
 
 
 def initialize_schema(engine, metadata):
@@ -40,6 +43,9 @@ def initialize_schema(engine, metadata):
         connection.exec_driver_sql("BEGIN IMMEDIATE")
         try:
             names = set(inspect(connection).get_table_names())
+            if (inspect(connection).get_view_names() or connection.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE type = 'trigger'").first()):
+                raise SchemaError("Unknown database views or triggers; no automatic changes were made")
             if names - expected:
                 raise SchemaError("Unknown database tables; no automatic changes were made")
             if "schema_version" in names:

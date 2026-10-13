@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
 
 import pytest
-from sqlalchemy import MetaData, create_engine, event, inspect, insert, select, text
+from sqlalchemy import MetaData, create_engine, event, inspect, insert, select, text, CheckConstraint
 
 from src.core.jobs import JobDispatcher
 from src.core.schema import BASE_TABLES, LEGACY_LAYOUTS, SchemaError, initialize_schema
@@ -68,7 +68,8 @@ def test_recognized_legacy_upgrade_preserves_rows_and_creates_no_fake_history(da
 
 
 @pytest.mark.parametrize("mutation", ["unknown_table", "extra_column", "missing_column", "future_version",
-                                      "partial_versioned", "unversioned_audit"])
+                                      "partial_versioned", "unversioned_audit", "unknown_trigger",
+                                      "unknown_view", "unknown_constraint"])
 def test_unknown_schemas_fail_without_changing_database(database, mutation):
     module, engine = database
     if mutation in {"future_version", "partial_versioned"}:
@@ -77,6 +78,8 @@ def test_unknown_schemas_fail_without_changing_database(database, mutation):
         metadata = MetaData()
         for name in BASE_TABLES:
             module.db.metadata.tables[name].to_metadata(metadata)
+        if mutation == "unknown_constraint":
+            metadata.tables["scan_session"].append_constraint(CheckConstraint("status = 'completed'"))
         metadata.create_all(engine)
     with engine.begin() as connection:
         if mutation == "unknown_table":
@@ -89,8 +92,13 @@ def test_unknown_schemas_fail_without_changing_database(database, mutation):
             connection.execute(text("UPDATE schema_version SET version = 9"))
         elif mutation == "partial_versioned":
             connection.execute(text("DROP TABLE scan_result"))
-        else:
+        elif mutation == "unversioned_audit":
             module.AuditEvent.__table__.create(connection)
+        elif mutation == "unknown_trigger":
+            connection.execute(text("CREATE TRIGGER mutate_scan AFTER INSERT ON scan_session "
+                                    "BEGIN UPDATE scan_session SET scan_name = 'changed' WHERE id = NEW.id; END"))
+        elif mutation == "unknown_view":
+            connection.execute(text("CREATE VIEW custom_scan_view AS SELECT id FROM scan_session"))
         before = connection.execute(text("SELECT name, sql FROM sqlite_master ORDER BY name")).all()
     with pytest.raises(SchemaError):
         initialize_schema(engine, module.db.metadata)
@@ -114,6 +122,16 @@ def test_schema_ddl_and_version_stamp_roll_back_together(database):
     assert inspect(engine).get_table_names() == []
     initialize_schema(engine, module.db.metadata)
     assert version(engine, module) == [(1, 1)]
+
+
+def test_benign_extra_index_is_preserved_during_acceptance(database):
+    module, engine = database
+    initialize_schema(engine, module.db.metadata)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE INDEX operator_scan_tenant ON scan_session (organization_id)"))
+    initialize_schema(engine, module.db.metadata)
+    assert any(index["name"] == "operator_scan_tenant"
+               for index in inspect(engine).get_indexes("scan_session"))
 
 
 def test_live_dispatcher_blocks_upgrade_callback_before_database_changes(store):
@@ -149,6 +167,9 @@ def test_tenant_history_contains_only_fixed_transition_fields(api):
     after = page["next_after"]
     assert client.get(f"/api/scans/{scan_id}/audit?after={after}", headers=headers(module)).json["events"][0]["event"] == "terminal"
     assert client.get(f"/api/scans/{scan_id}/audit?after=bad", headers=headers(module)).status_code == 400
+    for pagination in ("after=-1", f"after={2**63}", "after=" + "9" * 4096,
+                       "limit=0", "limit=201", "limit=-1"):
+        assert client.get(f"/api/scans/{scan_id}/audit?{pagination}", headers=headers(module)).status_code == 400
 
 
 def test_transition_retries_do_not_duplicate_audit_events(store):
@@ -246,3 +267,14 @@ def test_recovery_history_is_idempotent_and_persists_across_restart(store):
     assert store.recover() == 1
     assert store.recover() == 0
     assert [(row["event"], row["status"]) for row in history(store)] == [("terminal", "interrupted")]
+
+
+def test_worker_error_overrides_implicit_completed_scan_but_preserves_explicit_interrupt(store):
+    enqueue(store, "failed", "running")
+    with store.engine.begin() as connection:
+        connection.execute(text("UPDATE scan_session SET status = 'completed' WHERE id = 'failed'"))
+    store.finish("failed", "Scan worker failed")
+    assert state(store, "failed") == result(store, "failed")["status"] == "failed"
+    enqueue(store, "interrupted", "running")
+    store.finish("interrupted", "Server stopped during scan", status="interrupted")
+    assert state(store, "interrupted") == result(store, "interrupted")["status"] == "interrupted"
