@@ -3,7 +3,7 @@
 const TERMINAL_STATES = new Set(['completed', 'partial', 'failed', 'cancelled', 'interrupted']);
 
 class AIAgentScanner {
-    constructor(doc = document, fetcher = fetch) {
+    constructor(doc = document, fetcher = (...args) => fetch(...args)) {
         this.doc = doc;
         this.fetcher = fetcher;
         this.token = null;
