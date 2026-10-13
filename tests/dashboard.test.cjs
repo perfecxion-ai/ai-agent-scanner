@@ -143,3 +143,16 @@ test('saved scan history uses authenticated pagination and safe text', async () 
     app.logout();
     assert.equal(app.el('scanHistory').children.length, 0);
 });
+
+test('default fetch adapter does not bind native fetch to the controller', async () => {
+    const original = global.fetch;
+    global.fetch = function () {
+        assert.equal(this, globalThis);
+        return Promise.resolve(response({success: true}));
+    };
+    try {
+        const {app} = fixture();
+        app.token = 'fixture-token';
+        assert.deepEqual(await app.request('/api/agents'), {success: true});
+    } finally { global.fetch = original; }
+});
