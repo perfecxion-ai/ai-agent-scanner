@@ -215,6 +215,11 @@ def start_scan():
                 return jsonify({"success": False, "error": "Source scan not found"}), 404
             if source.status != "completed":
                 return jsonify({"success": False, "error": "Source scan must be completed"}), 400
+            previous = db.session.get(ScanResult, source.id)
+            if not previous:
+                return jsonify({"success": False, "error": "Source scan has no versioned results"}), 400
+            if any(agent.get("endpoint_redacted") for agent in previous.result.get("agents", [])):
+                return jsonify({"success": False, "error": "Source endpoints were redacted; supply fresh targets"}), 400
             source_agents = DiscoveredAgentModel.query.filter_by(scan_id=source.id).all()
             if not source_agents:
                 return jsonify({"success": False, "error": "Source scan has no assets"}), 400
@@ -450,7 +455,15 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
                 )
             )
         if budget.rejections or budget.failures:
-            raise TransportPolicyError("Scan encountered rejected or failed requests")
+            with app.app_context():
+                stored = db.session.get(ScanResult, scan_id)
+                session = db.session.get(ScanSession, scan_id)
+                if stored and session:
+                    session.status = "partial"
+                    stored.result = {**stored.result, "status": "partial"}
+                    db.session.commit()
+                else:
+                    raise TransportPolicyError("Scan encountered rejected or failed requests")
     except Exception as e:
         app.logger.error(f"Scan thread error: {e}", exc_info=True)
         with app.app_context():
@@ -513,7 +526,8 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                     raise SourceReplayError("Source endpoints were redacted; use fresh explicit target configuration")
         _update_progress(scan_id, 10, "Running scan pipeline")
         result = await run_pipeline(discovery_engine, security_engine, risk_assessor,
-                                    scope, scan_type, agents=source_agents)
+                                    scope, scan_type, agents=source_agents,
+                                    agent_validator=lambda agents: validate_agent_endpoints(agents, app.config))
         result["scan_id"] = scan_id
         _update_progress(scan_id, 95, "Saving results")
 
