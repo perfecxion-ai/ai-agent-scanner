@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 import ipaddress
 import dns.resolver
 import logging
+import json
 
 class NetworkScanner:
     """Network-based discovery of AI agents"""
@@ -22,8 +23,7 @@ class NetworkScanner:
             
             # Limit scan size for safety
             if network.num_addresses > 1024:
-                self.logger.warning(f"Network range {network_range} too large, limiting scan")
-                hosts = list(network.hosts())[:1024]
+                raise ValueError("Network range exceeds maximum of 1024 addresses")
             else:
                 hosts = list(network.hosts())
             
@@ -40,6 +40,8 @@ class NetworkScanner:
                 if isinstance(result, list):
                     agents.extend(result)
         
+        except ValueError:
+            raise
         except Exception as e:
             self.logger.error(f"Error scanning network range {network_range}: {e}")
         
@@ -94,8 +96,11 @@ class NetworkScanner:
         agents = []
         
         # Scan common ports
-        for port in self.common_ai_ports:
-            if await self._is_port_open(host, port):
+        open_ports = await asyncio.gather(*(
+            self._is_port_open(host, port) for port in self.common_ai_ports
+        ))
+        for port, is_open in zip(self.common_ai_ports, open_ports):
+            if is_open:
                 # Check for AI services on this port
                 service_agents = await self._identify_ai_service(host, port, ai_signatures)
                 agents.extend(service_agents)
@@ -124,7 +129,8 @@ class NetworkScanner:
         
         for scheme in schemes:
             try:
-                base_url = f"{scheme}://{host}:{port}"
+                authority = f"[{host}]" if ':' in host else host
+                base_url = f"{scheme}://{authority}:{port}"
                 
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
                     # Check common AI API paths
@@ -133,7 +139,7 @@ class NetworkScanner:
                             url = f"{base_url}{path}"
                             
                             try:
-                                async with session.get(url) as response:
+                                async with session.get(url, allow_redirects=False) as response:
                                     # Analyze response for AI service indicators
                                     if await self._is_ai_service(response, signature):
                                         agent = {
@@ -148,7 +154,6 @@ class NetworkScanner:
                                                 'port': port,
                                                 'scheme': scheme,
                                                 'response_status': response.status,
-                                                'response_headers': dict(response.headers),
                                                 'internet_facing': self._is_internet_facing(host)
                                             }
                                         }
@@ -168,34 +173,51 @@ class NetworkScanner:
     async def _is_ai_service(self, response: aiohttp.ClientResponse, signature: Dict) -> bool:
         """Determine if the response indicates an AI service"""
         
-        # Check response headers
+        if response.status not in (200, 401, 403):
+            return False
+        # Generic authentication headers do not identify an AI provider.
         for header in signature.get('headers', []):
+            if header.lower() in {'authorization', 'x-api-key', 'api-key'}:
+                continue
             if header.lower() in response.headers:
                 return True
-        
-        # Check response content (if reasonable size)
-        if response.content_length and response.content_length < 10000:
-            try:
-                content = await response.text()
-                for pattern in signature.get('response_patterns', []):
-                    if pattern in content.lower():
-                        return True
-            except Exception:
-                pass
-        
-        # Check specific status codes that might indicate AI services
-        if response.status == 401:  # Unauthorized - might be protected AI API
-            auth_header = response.headers.get('www-authenticate', '').lower()
-            if any(ai_term in auth_header for ai_term in ['bearer', 'api-key', 'openai']):
-                return True
-        
-        return False
+        if response.status != 200:
+            return False
+        try:
+            body = bytearray()
+            async for chunk in response.content.iter_chunked(4096):
+                body.extend(chunk)
+                if len(body) > 10000:
+                    return False
+            document = json.loads(body)
+        except (ValueError, UnicodeDecodeError, aiohttp.ClientError):
+            return False
+        if not isinstance(document, dict):
+            return False
+        patterns = set(signature.get('response_patterns', []))
+        # Match protocol structures rather than words appearing in HTML or prose.
+        if 'modified_at' in patterns:
+            models = document.get('models')
+            return isinstance(models, list) and all(
+                isinstance(model, dict) and 'name' in model and 'modified_at' in model
+                for model in models
+            )
+        if 'choices' in patterns:
+            return (
+                isinstance(document.get('choices'), list) and 'model' in document
+                and 'usage' in document
+            ) or (
+                document.get('object') == 'list' and isinstance(document.get('data'), list)
+                and all(isinstance(model, dict) and model.get('object') == 'model'
+                        and 'id' in model for model in document['data'])
+            )
+        return len(patterns.intersection(document)) >= 2
     
     async def _resolve_domain(self, domain: str) -> List[str]:
         """Resolve domain to IP addresses"""
         ips = []
         try:
-            answers = dns.resolver.resolve(domain, 'A')
+            answers = await asyncio.to_thread(dns.resolver.resolve, domain, 'A')
             ips = [str(rdata) for rdata in answers]
         except Exception:
             pass

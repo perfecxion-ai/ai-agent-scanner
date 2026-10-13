@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -224,6 +225,8 @@ class DiscoveryEngine:
                     cloud_agents = await self.cloud_scanner.scan_azure(config)
                 elif provider == 'gcp':
                     cloud_agents = await self.cloud_scanner.scan_gcp(config)
+                else:
+                    raise ValueError(f"Unsupported cloud provider: {provider}")
                 
                 agents.extend(cloud_agents)
         
@@ -243,23 +246,31 @@ class DiscoveryEngine:
         return agents
     
     def _deduplicate_agents(self, agents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Remove duplicate agents based on endpoint similarity"""
-        seen_endpoints = set()
-        unique_agents = []
-        
-        for agent in agents:
-            endpoint = agent.get('endpoint', agent.get('name', ''))
-            endpoint_key = self._normalize_endpoint(endpoint)
-            
-            if endpoint_key not in seen_endpoints:
-                seen_endpoints.add(endpoint_key)
-                unique_agents.append(agent)
+        """Merge endpoint observations without collapsing unrelated code assets."""
+        unique = {}
+        for index, observation in enumerate(agents):
+            agent = deepcopy(observation)
+            endpoint = agent.get('endpoint')
+            key = ('endpoint', self._normalize_endpoint(endpoint)) if endpoint else (
+                'asset', agent.get('id') or index,
+            )
+            provenance = {
+                'id': agent.get('id'),
+                'discovery_method': agent.get('discovery_method'),
+                'provider': agent.get('provider'),
+                'confidence': agent.get('confidence', 0.5),
+            }
+            if key not in unique:
+                agent.setdefault('metadata', {})['observations'] = [provenance]
+                unique[key] = agent
             else:
-                # Merge metadata from duplicate
-                existing = next(a for a in unique_agents if self._normalize_endpoint(a.get('endpoint', a.get('name', ''))) == endpoint_key)
-                existing['metadata'].update(agent.get('metadata', {}))
-        
-        return unique_agents
+                existing = unique[key]
+                existing['metadata']['observations'].append(provenance)
+                for name, value in agent.get('metadata', {}).items():
+                    existing['metadata'].setdefault(name, value)
+                existing['confidence'] = max(existing.get('confidence', 0.5),
+                                             agent.get('confidence', 0.5))
+        return list(unique.values())
     
     def _normalize_endpoint(self, endpoint: str) -> str:
         """Normalize endpoint for deduplication"""
@@ -269,7 +280,10 @@ class DiscoveryEngine:
         # Parse URL and normalize
         try:
             parsed = urlparse(endpoint)
-            return f"{parsed.hostname}:{parsed.port or 443}{parsed.path}"
+            if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+                return endpoint.strip()
+            port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+            return f"{parsed.scheme}://{parsed.hostname}:{port}{parsed.path or '/'}?{parsed.query}"
         except Exception:
             return endpoint.lower().strip()
     
@@ -298,7 +312,7 @@ class DiscoveryEngine:
     def _determine_agent_type(self, agent: Dict[str, Any]) -> str:
         """Determine the type of AI agent based on characteristics"""
         
-        endpoint = agent.get('endpoint', '').lower()
+        endpoint = (agent.get('endpoint') or '').lower()
         metadata = agent.get('metadata', {})
         
         # Check for specific patterns
@@ -320,7 +334,7 @@ class DiscoveryEngine:
         capabilities = []
         
         metadata = agent.get('metadata', {})
-        endpoint = agent.get('endpoint', '').lower()
+        endpoint = (agent.get('endpoint') or '').lower()
         
         if metadata.get('has_file_access'):
             capabilities.append('file_system_access')
