@@ -225,5 +225,32 @@ def mcp_command(config, tools_path, fmt, output):
         raise click.ClickException(str(exc)) from exc
 
 
+@cli.command('evaluate')
+@click.option('--suite', type=click.Path(exists=True, dir_okay=False), help='Local labeled replay suite JSON; default synthetic smoke fixtures')
+@click.option('--output', '-o', type=click.Path(dir_okay=False), help='Metrics JSON destination; default stdout')
+def evaluate_command(suite, output):
+    """Evaluate offline transcripts against explicit lab policies and labels."""
+    from pathlib import Path
+    from src.evaluation import evaluate_suite
+    from src.evaluation.fixtures import synthetic_suite
+    from src.mcp import load_json
+
+    try:
+        report = evaluate_suite(load_json(suite) if suite else synthetic_suite())
+        report['fixture_source'] = 'user_supplied' if suite else 'builtin_synthetic'
+        rendered = json.dumps(report, indent=2)
+        if output:
+            destination = Path(output)
+            if suite and (destination.resolve() == Path(suite).resolve() or
+                          destination.exists() and destination.samefile(suite)):
+                raise ValueError('Output must differ from suite input')
+            with destination.open('w', encoding='utf-8') as stream:
+                stream.write(rendered + '\n')
+        else:
+            click.echo(rendered)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 if __name__ == '__main__':
     cli()
