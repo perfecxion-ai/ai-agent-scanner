@@ -60,6 +60,16 @@ def test_endpointless_fallback_is_explicit_and_not_verified_resolution():
     assert next(iter(assets.values()))['identity_basis'] == 'provider_name_fallback'
 
 
+@pytest.mark.parametrize('redacted_side', ['before', 'after'])
+def test_redacted_endpoint_on_either_side_prevents_resolution(redacted_side):
+    before, after = report(), report(False)
+    after['agents'][0]['checks'] = [{'rule_id': 'prompt_injection', 'status': 'passed'}]
+    (before if redacted_side == 'before' else after)['agents'][0]['endpoint_redacted'] = True
+    result = compare_reports(before, after)
+    assert result['resolved'] == []
+    assert len(result['resolution_unverified']) == 1
+
+
 def test_policy_expiry_and_source_immutability():
     source = report()
     original = deepcopy(source)
