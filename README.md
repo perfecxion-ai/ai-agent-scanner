@@ -54,6 +54,8 @@ ai-agent-scanner scan --config lab-targets.json --format sarif --output results.
 ai-agent-scanner mcp --config mcp-client.json --output mcp-review.json
 ai-agent-scanner mcp --tools saved-tools.json --format sarif --output mcp.sarif
 ai-agent-scanner evaluate --suite lab-transcripts.json --output metrics.json
+ai-agent-scanner diff --before baseline.json --after results.json --output changes.json
+ai-agent-scanner triage --report results.json --policy suppressions.json --output triaged.json
 ```
 
 Scan configuration accepts `target_scope` for discovery or `agents` for direct
@@ -69,7 +71,10 @@ security testing. For example, discovery configuration can contain:
 ```
 
 Use `scan --skip-security --config lab-targets.json` for discovery-only output.
-Explicit agent entries require `id`, `name`, `endpoint`, and `provider`.
+Explicit agent entries require `id`, `name`, `endpoint`, and `provider`. Active
+model probes also require an explicitly selected model and a supported protocol;
+missing configuration produces skipped results. See [provider adapters](docs/provider-adapters.md)
+for model and environment-based credential configuration.
 Protected canaries and response markers are optional evidence configuration;
 the scanner cannot infer their provenance. See [scan configuration](docs/scan-results.md)
 and [detection evidence](docs/detection-evidence.md) before active testing.
@@ -132,6 +137,7 @@ Review retained evidence before acting on any finding.
   hardening remain part of the [engineering plan](docs/ENGINEERING_PLAN.md).
 
 See [passive MCP scope](docs/mcp-assessment.md), [replay schema and metrics](docs/replay-evaluations.md),
+[report comparison and suppression policy](docs/report-workflows.md),
 [security policy](SECURITY.md), and [changelog](CHANGELOG.md).
 
 ## Development
