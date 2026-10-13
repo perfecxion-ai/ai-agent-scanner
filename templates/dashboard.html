@@ -1,145 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Agent Scanner - Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Agent Scanner</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <script defer src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <header class="bg-white shadow-sm border-b">
-        <div class="container mx-auto px-4 py-4">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-2">
-                    <span class="text-2xl">🤖</span>
-                    <h1 class="text-xl font-bold text-gray-900">AI Agent Scanner</h1>
-                </div>
-                <nav class="flex space-x-6">
-                    <a href="#dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
-                    <a href="#agents" class="text-gray-600 hover:text-gray-900">Agents</a>
-                    <a href="#scans" class="text-gray-600 hover:text-gray-900">Scans</a>
-                </nav>
-            </div>
+<body>
+  <a class="skip-link" href="#main">Skip to workspace</a>
+  <header class="topbar">
+    <div><span class="brand-mark" aria-hidden="true">A</span><strong>AI Agent Scanner</strong></div>
+    <span class="label">Operator workspace</span>
+  </header>
+  <main id="main">
+    <section class="intro"><p class="eyebrow">Defensive AI security</p><h1>Inspect what runs.<br>Verify what matters.</h1>
+      <p>Discover agents, examine evidence, and track the outcome of an authorized scan.</p></section>
+    <section class="panel auth" aria-labelledby="accessTitle">
+      <div><h2 id="accessTitle">Operator access</h2><p>Your session stays in memory. Reloading this page signs you out.</p></div>
+      <form id="loginForm"><label for="operatorKey">Operator API key</label><div class="inline">
+        <input id="operatorKey" type="password" autocomplete="off" required>
+        <button id="loginBtn" type="submit">Sign in</button><button id="logoutBtn" class="secondary" type="button" disabled>Sign out</button>
+      </div></form>
+    </section>
+    <p id="notice" class="notice" role="status" aria-live="polite">Sign in to access scans.</p>
+    <div class="workspace">
+      <section class="panel" aria-labelledby="scopeTitle"><p class="eyebrow">01 / Configure</p><h2 id="scopeTitle">New scan</h2>
+        <p>Targets must be permitted by the server's scan policy. Cloud scans are available through the CLI.</p>
+        <form id="scanForm"><fieldset id="scanControls" disabled>
+          <label for="scanName">Scan name</label><input id="scanName" maxlength="255" value="Agent assessment" required>
+          <label for="scanType">Assessment mode</label><select id="scanType">
+            <option value="discovery_only">Discovery only</option><option value="full">Discovery and security</option>
+            <option value="security_only">Security from a previous scan</option>
+          </select>
+          <p class="hint">Active model probes need a selected model. Unconfigured targets are skipped. Discover first, then select models in a source scan.</p>
+          <div id="targetFields">
+            <label for="networkRanges">Networks and domains</label><textarea id="networkRanges" rows="3" placeholder="192.0.2.0/28&#10;lab.example.test"></textarea>
+            <p class="hint">One IP address, CIDR, or domain per line.</p>
+            <details><summary>Repository and traffic inputs</summary>
+              <label for="repositories">Repository paths</label><textarea id="repositories" rows="2" placeholder="/srv/scan-inputs/repository"></textarea>
+              <label for="trafficSources">Traffic file paths</label><textarea id="trafficSources" rows="2" placeholder="/srv/scan-inputs/traffic.json"></textarea>
+              <p class="hint">Use absolute paths within the server's configured roots.</p>
+            </details>
+          </div>
+          <div id="sourceFields" hidden><label for="sourceScanId">Completed source scan ID</label><input id="sourceScanId" maxlength="64">
+            <p class="hint">Uses stored assets from your organization. Redacted endpoints cannot be replayed.</p>
+            <label for="modelOverrides">Model selections (optional JSON)</label><textarea id="modelOverrides" rows="3" placeholder='{"asset-id":"operator-selected-model"}'></textarea>
+            <p class="hint">Map source asset IDs to model names. Do not include credentials or endpoints.</p></div>
+          <button id="startScanBtn" type="submit">Queue scan</button>
+        </fieldset></form>
+      </section>
+      <section class="panel results" aria-labelledby="resultsTitle"><p class="eyebrow">02 / Inspect</p><h2 id="resultsTitle">Scan results</h2>
+        <div class="history"><label for="scanHistory">Saved scans</label><div class="inline">
+          <select id="scanHistory" disabled><option value="">Sign in to load history</option></select>
+          <button id="openHistoryBtn" class="secondary" disabled>Open</button><button id="refreshHistoryBtn" class="secondary" disabled>Refresh</button>
+        </div><div class="actions"><button id="previousHistoryBtn" class="secondary" disabled>Previous</button>
+          <button id="nextHistoryBtn" class="secondary" disabled>Next</button><span id="historyCount" class="hint"></span></div></div>
+        <form id="openScanForm" class="open-form"><label for="openScanId">Open a saved scan</label><div class="inline">
+          <input id="openScanId" maxlength="64" placeholder="Scan ID" required><button id="openScanBtn" class="secondary" disabled>Open</button>
+        </div></form>
+        <div id="scanState" hidden>
+          <div class="scan-heading"><code id="selectedScanId"></code><span id="scanStatus" class="badge"></span></div>
+          <label for="scanProgress">Progress</label><progress id="scanProgress" max="100" value="0"></progress>
+          <p id="scanPhase" class="hint"></p>
+          <div class="actions"><button id="cancelScanBtn" class="secondary" disabled>Cancel scan</button>
+            <button id="jsonBtn" class="secondary" disabled>Download JSON</button><button id="sarifBtn" class="secondary" disabled>Download SARIF</button></div>
         </div>
-    </header>
-
-    <main class="container mx-auto px-4 py-8">
-        <form id="loginForm" class="bg-white rounded-lg shadow p-6 mb-8">
-            <label for="operatorKey">Operator API key</label>
-            <input id="operatorKey" type="password" autocomplete="off" required class="border rounded p-2">
-            <button type="submit">Sign in</button>
-            <button id="logoutBtn" type="button">Sign out</button>
-            <p id="authStatus" role="status">Sign in to access scans.</p>
-        </form>
-        <!-- Dashboard Overview -->
-        <div class="mb-8">
-            <h2 class="text-3xl font-bold text-gray-900 mb-6">Security Overview</h2>
-            
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-blue-100 rounded-lg">
-                            <span class="text-2xl">🤖</span>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">Agents Found</p>
-                            <p class="text-2xl font-bold text-gray-900" id="agents-count">-</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-red-100 rounded-lg">
-                            <span class="text-2xl">⚠️</span>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">Vulnerabilities</p>
-                            <p class="text-2xl font-bold text-red-600" id="vulns-count">-</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-yellow-100 rounded-lg">
-                            <span class="text-2xl">📊</span>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">Risk Score</p>
-                            <p class="text-2xl font-bold text-yellow-600" id="risk-score">-</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-green-100 rounded-lg">
-                            <span class="text-2xl">🔍</span>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">Last Scan</p>
-                            <p class="text-sm font-bold text-gray-900" id="last-scan">-</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <p id="emptyState" class="empty">Queue a scan or open a saved scan ID to inspect its results.</p>
+        <div id="reportView" hidden>
+          <div class="metrics"><div><span>Assets</span><strong id="assetCount">0</strong></div><div><span>Findings</span><strong id="findingCount">0</strong></div>
+            <div><span>Highest risk</span><strong id="riskScore">Not assessed</strong></div></div>
+          <p id="reportNote" class="hint"></p>
+          <h3>Assets and assessment state</h3><div id="assetList" class="items"></div>
+          <h3>Findings</h3><p class="hint">Recorded security findings. Review the evidence before taking action.</p><div id="findingList" class="items"></div>
+          <h3>Observations</h3><p class="hint">Heuristic or inconclusive signals, separate from confirmed findings.</p><div id="observationList" class="items"></div>
         </div>
-
-        <!-- Start New Scan -->
-        <div class="bg-white rounded-lg shadow-lg p-8 mb-8">
-            <h3 class="text-2xl font-bold mb-6">🔍 Start New Scan</h3>
-            
-            <form id="scanForm" class="space-y-6">
-                <div class="grid md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Scan Name</label>
-                        <input type="text" id="scanName" 
-                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                               placeholder="Network Security Scan">
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Scan Type</label>
-                        <select id="scanType" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
-                            <option value="full">Full Scan (Discovery + Security)</option>
-                            <option value="discovery_only">Discovery Only</option>
-                            <option value="security_only">Security Testing Only</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Network Ranges</label>
-                    <textarea id="networkRanges" 
-                              class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                              placeholder="192.168.1.0/24&#10;10.0.0.0/8&#10;company.com"
-                              rows="3"></textarea>
-                    <p class="text-xs text-gray-500 mt-1">Enter IP ranges and domains, one per line</p>
-                </div>
-                
-                <button type="submit" id="startScanBtn"
-                        class="w-full bg-blue-600 text-white py-4 px-8 rounded-md hover:bg-blue-700 transition duration-200 font-medium text-lg">
-                    🚀 Start Scan
-                </button>
-            </form>
-        </div>
-
-        <!-- Recent Scans -->
-        <div class="bg-white rounded-lg shadow-lg p-8">
-            <h3 class="text-2xl font-bold mb-6">Recent Scans</h3>
-            <div id="recent-scans" class="space-y-4">
-                <!-- Populated by JavaScript -->
-            </div>
-        </div>
-    </main>
-
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+      </section>
+    </div>
+    <footer>Assessment results describe the checks performed. Missing findings are not proof of security.</footer>
+  </main>
 </body>
 </html>

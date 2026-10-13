@@ -36,6 +36,7 @@ from src.reporting.report_generator import ReportGenerator
 from src.utils.auth import require_auth, create_jwt_token
 from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.model_selection import apply_model_overrides
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
 from src.core.transport import ScanBudget, scan_transport, TransportPolicyError
 from src.core.jobs import JobStore, JobDispatcher, TERMINAL_STATES
@@ -189,6 +190,21 @@ def dashboard():
     return render_template("dashboard.html")
 
 
+@app.after_request
+def response_boundaries(response):
+    """Keep API data out of caches and restrict the dashboard to local resources."""
+    if request.path == "/api" or request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    if response.mimetype == "text/html":
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+            "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        )
+    return response
+
+
 @app.route("/api/auth/token", methods=["POST"])
 def get_token():
     """Authenticate the configured operator; identity is controlled by the server."""
@@ -213,6 +229,31 @@ def get_token():
     return response
 
 
+@app.route("/api/scans", methods=["GET"])
+@require_auth
+def list_scans():
+    """List only the authenticated organization's saved scan summaries."""
+    try:
+        limit = int(request.args.get("limit", "25"))
+        offset = int(request.args.get("offset", "0"))
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid pagination"}), 400
+    if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
+        return jsonify({"success": False, "error": "Invalid pagination"}), 400
+    query = ScanSession.query.filter_by(organization_id=g.user["organization_id"])
+    scans = query.order_by(ScanSession.created_at.desc(), ScanSession.id.desc()).offset(offset).limit(limit).all()
+    return jsonify({
+        "success": True, "total": query.count(), "limit": limit, "offset": offset,
+        "scans": [{
+            "scan_id": scan.id, "scan_name": scan.scan_name, "scan_type": scan.scan_type,
+            "status": scan.status, "created_at": scan.created_at.isoformat(),
+            "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
+            "agents_discovered": scan.agents_discovered,
+            "vulnerabilities_found": scan.vulnerabilities_found,
+        } for scan in scans],
+    })
+
+
 @app.route("/api/scans", methods=["POST"])
 @require_auth
 def start_scan():
@@ -234,6 +275,10 @@ def start_scan():
                 return jsonify({"success": False, "error": "Source scan has no versioned results"}), 400
             if any(agent.get("endpoint_redacted") for agent in previous.result.get("agents", [])):
                 return jsonify({"success": False, "error": "Source endpoints were redacted; supply fresh targets"}), 400
+            try:
+                apply_model_overrides(previous.result.get("agents", []), scan_config.get("model_overrides", {}))
+            except ValueError as exc:
+                raise ScopeValidationError(str(exc)) from exc
             source_agents = DiscoveredAgentModel.query.filter_by(scan_id=source.id).all()
             if not source_agents:
                 return jsonify({"success": False, "error": "Source scan has no assets"}), 400
@@ -623,6 +668,7 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                 source_agents = previous.result["agents"]
                 if any(agent.get("endpoint_redacted") for agent in source_agents):
                     raise SourceReplayError("Source endpoints were redacted; use fresh explicit target configuration")
+                source_agents = apply_model_overrides(source_agents, scan_config.get("model_overrides", {}))
         _update_progress(scan_id, 10, "Running scan pipeline")
         result = await run_pipeline(discovery_engine, security_engine, risk_assessor,
                                     scope, scan_type, agents=source_agents,

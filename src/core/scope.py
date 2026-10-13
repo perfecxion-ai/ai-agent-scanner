@@ -11,6 +11,8 @@ from urllib.parse import urlsplit
 import dns.exception
 import dns.resolver
 
+from src.core.model_selection import validate_model_overrides
+
 
 class ScopeValidationError(ValueError):
     """A request violates the configured scan boundary."""
@@ -161,7 +163,7 @@ def validate_request(data, config, resolver=None):
     options = data.get("scan_config", {})
     if not isinstance(scope, dict) or not isinstance(options, dict):
         raise ScopeValidationError("target_scope and scan_config must be JSON objects")
-    if set(options) - {"source_scan_id", "timeout_seconds"}:
+    if set(options) - {"source_scan_id", "timeout_seconds", "model_overrides"}:
         raise ScopeValidationError("Unsupported scan_config field")
     if set(scope) - {*_TARGET_FIELDS, "cloud_accounts", "include_network",
                      "include_repositories", "include_traffic", "include_cloud"}:
@@ -190,7 +192,14 @@ def validate_request(data, config, resolver=None):
             raise ScopeValidationError("security_only requires scan_config.source_scan_id")
         if any(normalized.values()):
             raise ScopeValidationError("security_only uses source_scan_id, not new targets")
+        if "model_overrides" in options:
+            try:
+                options["model_overrides"] = validate_model_overrides(options["model_overrides"])
+            except ValueError as exc:
+                raise ScopeValidationError(str(exc)) from exc
         return name.strip(), scan_type, {}, options
+    if "model_overrides" in options:
+        raise ScopeValidationError("model_overrides is only valid for security_only")
     if "source_scan_id" in options:
         raise ScopeValidationError("source_scan_id is only valid for security_only")
     if not any(normalized.values()):
