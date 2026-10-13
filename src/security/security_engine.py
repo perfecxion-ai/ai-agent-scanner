@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Callable
 import logging
+from src.core.transport import current_budget
 
 # Import test modules from guardrail tester
 from .prompt_injection_tests import PromptInjectionTester
@@ -66,6 +67,8 @@ class SecurityTestEngine:
             return test_results
         
         try:
+            budget = current_budget()
+            errors_before = budget.failures + budget.rejections if budget else 0
             # Test 1: Prompt Injection Vulnerabilities
             prompt_results = await self.prompt_tester.test_agent(agent)
             test_results['vulnerabilities'].extend(prompt_results)
@@ -88,6 +91,9 @@ class SecurityTestEngine:
             )
             
             test_results['status'] = 'completed'
+            if budget and budget.failures + budget.rejections > errors_before:
+                test_results['status'] = 'partial'
+                test_results['limitations'].append('Some requests failed or were refused by transport policy.')
             
         except Exception as e:
             self.logger.error(f"Error testing agent {agent['id']}: {e}")

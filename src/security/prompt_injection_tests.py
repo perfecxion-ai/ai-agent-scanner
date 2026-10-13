@@ -19,6 +19,7 @@ you own or have explicit permission to test.
 
 import asyncio
 import aiohttp
+from src.core.transport import SafeSession
 import logging
 import re
 from typing import List, Dict, Any, Optional
@@ -302,7 +303,7 @@ class PromptInjectionTester:
                                  category: str, payload: str) -> Optional[Dict[str, Any]]:
         """Test a single injection payload against an agent"""
         
-        async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
+        async with SafeSession(timeout=self.session_timeout) as session:
             # Try to construct request based on agent type
             request_data = self._construct_request(agent, payload)
             
