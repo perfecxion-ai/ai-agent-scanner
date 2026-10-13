@@ -60,8 +60,16 @@ async def test_local_provider_to_redacted_report(provider, discovery_path, reque
     finally:
         await runner.cleanup()
     assert observed
-    assert report['status'] == 'completed'
-    assert report['summary']['agents_tested'] == 1
+    # The fixture rejects GET access/session probes while serving valid model calls.
+    assert report['status'] == 'partial'
+    assert report['agents'][0]['risk_score'] is None
+    assert any(check['status'] == 'failed' for check in report['agents'][0]['checks'])
+    prompt_check = next(check for check in report['agents'][0]['checks']
+                        if check['rule_id'] == 'prompt_injection.system_prompt_extraction')
+    assert prompt_check['status'] == 'completed'
+    assert prompt_check['outcome'] == ('confirmed' if disclose else 'passed')
+    assert report['summary']['agents_tested'] == 0
+    assert report['summary']['agents_partial'] == 1
     findings = report['agents'][0]['vulnerabilities']
     assert bool(findings) is disclose
     if disclose:

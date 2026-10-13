@@ -25,6 +25,13 @@ from typing import List, Dict, Any, Optional
 from urllib.parse import urljoin
 import uuid
 from datetime import datetime, timezone
+from src.core.contracts import checked, has_canary, record_interaction
+
+
+def _authentication_prerequisite(agent):
+    if agent.get('authentication_required') is not True or not has_canary(agent, 'protected_response_marker'):
+        return "A protected response marker and explicit authentication requirement are required"
+    return None
 
 class AccessControlTester:
     """
@@ -123,6 +130,8 @@ class AccessControlTester:
         
         return vulnerabilities
     
+    @checked("authentication_bypass", "18-header-variations-denied-control-v1",
+             prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_authentication_bypass(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for authentication bypass vulnerabilities"""
         vulnerabilities = []
@@ -191,6 +200,9 @@ class AccessControlTester:
                 ) as response:
                     
                     response_text = await response.text()
+                    record_interaction(response.status in (401, 403) or 200 <= response.status < 300,
+                                       response.status in (401, 403)
+                                       and agent['protected_response_marker'] not in response_text)
                     
                     # Check if bypass was successful
                     if self._is_successful_bypass(response.status, response_text, agent.get('protected_response_marker')):
@@ -213,11 +225,14 @@ class AccessControlTester:
                         }
                         
             except Exception as e:
+                record_interaction(False)
                 self.logger.debug(f"Bypass test failed: {str(e)}")
                 return None
         
         return None
     
+    @checked("weak_credentials", lambda self: self.weak_credentials[:5],
+             prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_weak_credentials(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for weak or default credentials"""
         vulnerabilities = []
@@ -236,7 +251,11 @@ class AccessControlTester:
                         headers={'Authorization': f'Basic {credentials}'}, allow_redirects=False
                     ) as response:
                         
-                        if self._is_successful_bypass(response.status, await response.text(), agent.get('protected_response_marker')):
+                        text = await response.text()
+                        record_interaction(response.status in (401, 403) or 200 <= response.status < 300,
+                                           response.status in (401, 403)
+                                           and agent['protected_response_marker'] not in text)
+                        if self._is_successful_bypass(response.status, text, agent.get('protected_response_marker')):
                             vulnerabilities.append({
                                 'id': str(uuid.uuid4()),
                                 'agent_id': agent.get('id'),
@@ -257,11 +276,14 @@ class AccessControlTester:
                 await asyncio.sleep(1)  # Rate limiting
                 
             except Exception as e:
+                record_interaction(False)
                 self.logger.debug(f"Credential test failed: {str(e)}")
                 continue
         
         return vulnerabilities
     
+    @checked("weak_api_key", lambda self: [self.test_api_keys[:5], "six-header-variations-v1"],
+             prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_api_key_security(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test API key security implementation"""
         vulnerabilities = []
@@ -286,7 +308,11 @@ class AccessControlTester:
                     async with SafeSession(timeout=self.session_timeout) as session:
                         async with session.get(endpoint, headers=headers, allow_redirects=False) as response:
                             
-                            if self._is_successful_bypass(response.status, await response.text(), agent.get('protected_response_marker')):
+                            text = await response.text()
+                            record_interaction(response.status in (401, 403) or 200 <= response.status < 300,
+                                               response.status in (401, 403)
+                                               and agent['protected_response_marker'] not in text)
+                            if self._is_successful_bypass(response.status, text, agent.get('protected_response_marker')):
                                 vulnerabilities.append({
                                     'id': str(uuid.uuid4()),
                                     'agent_id': agent.get('id'),
@@ -308,11 +334,19 @@ class AccessControlTester:
                     await asyncio.sleep(0.3)
                 
             except Exception as e:
+                record_interaction(False)
                 self.logger.debug(f"API key test failed: {str(e)}")
                 continue
         
         return vulnerabilities
     
+    @checked("authorization_bypass", "first-eight-admin-paths-v1",
+             prerequisite=lambda agent: None if any(
+                 has_canary(agent.get('protected_path_markers', {}), path)
+                 for path in ('/admin', '/admin/', '/administrator', '/api/admin',
+                              '/api/v1/admin', '/admin/users', '/admin/config', '/system'))
+             else "Protected admin-path markers are required",
+             oracle=lambda agent: True)
     async def _test_authorization_bypass(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for authorization bypass vulnerabilities"""
         vulnerabilities = []
@@ -349,6 +383,8 @@ class AccessControlTester:
                     async with session.get(test_url, allow_redirects=False) as response:
                         
                         response_text = await response.text()
+                        record_interaction(response.status in (401, 403) or 200 <= response.status < 300,
+                                           response.status in (401, 403) and marker not in response_text)
                         
                         # Check for successful access to restricted areas
                         if self._is_admin_access(response.status, response_text, marker):
@@ -372,11 +408,13 @@ class AccessControlTester:
                 await asyncio.sleep(0.5)
                 
             except Exception as e:
+                record_interaction(False)
                 self.logger.debug(f"Authorization bypass test failed: {str(e)}")
                 continue
         
         return vulnerabilities
     
+    @checked("no_rate_limiting", lambda self: ["sample-only-v1", min(20, self.rate_limit_requests)])
     async def _test_rate_limiting(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for rate limiting implementation"""
         vulnerabilities = []
@@ -393,9 +431,11 @@ class AccessControlTester:
                     
                     try:
                         async with session.get(endpoint) as response:
+                            record_interaction(response.status in (401, 403, 429) or 200 <= response.status < 300)
                             status_codes.append(response.status)
                             request_times.append((datetime.now(timezone.utc) - start_time).total_seconds())
                     except Exception:
+                        record_interaction(False)
                         break
                     
                     # Small delay to avoid connection limits
@@ -424,10 +464,12 @@ class AccessControlTester:
                     })
         
         except Exception as e:
+            record_interaction(False)
             self.logger.debug(f"Rate limiting test failed: {str(e)}")
         
         return vulnerabilities
     
+    @checked("insecure_session_management", "cookie-attribute-observations-v1")
     async def _test_session_management(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test session management security"""
         vulnerabilities = []
@@ -437,6 +479,7 @@ class AccessControlTester:
             # Test session fixation and cookie security
             async with SafeSession(timeout=self.session_timeout) as session:
                 async with session.get(endpoint) as response:
+                    record_interaction(200 <= response.status < 300)
                     
                     # Check cookie security attributes
                     if 'set-cookie' in response.headers:
@@ -474,6 +517,7 @@ class AccessControlTester:
                                 })
         
         except Exception as e:
+            record_interaction(False)
             self.logger.debug(f"Session management test failed: {str(e)}")
         
         return vulnerabilities
@@ -486,8 +530,12 @@ class AccessControlTester:
         try:
             async with SafeSession(timeout=self.session_timeout) as session:
                 async with session.get(agent['endpoint'], headers={'Authorization': f'Bearer scanner-invalid-{uuid.uuid4()}'}, allow_redirects=False) as response:
-                    return response.status in (401, 403)
+                    text = await response.text()
+                    denied = response.status in (401, 403) and marker not in text
+                    record_interaction(denied, denied)
+                    return denied
         except Exception:
+            record_interaction(False)
             return False
 
     def _is_successful_bypass(self, status_code: int, response_text: str, marker: Optional[str] = None) -> bool:

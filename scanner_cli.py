@@ -80,7 +80,8 @@ def load_targets(network, domain, repository=(), traffic=(), config=None):
                 raise click.ClickException("Each agent requires id, name, endpoint, and provider")
             allowed = {'id', 'name', 'endpoint', 'provider', 'type', 'discovery_method', 'metadata',
                        'system_prompt_canary', 'cross_tenant_canary', 'authentication_required',
-                       'protected_response_marker', 'protected_path_markers', 'model', 'api_key_env'}
+                       'protected_response_marker', 'protected_path_markers', 'model', 'api_key_env',
+                       'evidence_context_id'}
             if set(agent) - allowed:
                 raise click.ClickException("Unsupported agent configuration fields")
             for field in ('model', 'api_key_env'):
@@ -88,6 +89,11 @@ def load_targets(network, domain, repository=(), traffic=(), config=None):
                     raise click.ClickException(f"{field} must be a nonempty string")
             if 'api_key_env' in agent and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', agent['api_key_env']):
                 raise click.ClickException("api_key_env must be an environment variable name")
+            context = agent.get('evidence_context_id')
+            if 'evidence_context_id' in agent and not (
+                    isinstance(context, str) and context.strip() and len(context) <= 128
+                    and '[' not in context and ']' not in context):
+                raise click.ClickException("evidence_context_id must be nonempty public text of at most 128 characters without brackets")
             endpoint = urlsplit(agent['endpoint'])
             if endpoint.scheme not in {'http', 'https'} or not endpoint.hostname or endpoint.username or endpoint.password:
                 raise click.ClickException("Agent endpoint must be HTTP(S) without embedded credentials")

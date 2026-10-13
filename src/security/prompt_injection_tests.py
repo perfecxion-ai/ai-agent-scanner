@@ -27,6 +27,7 @@ import uuid
 from datetime import datetime, timezone
 
 from src.utils.request_builder import construct_agent_request, extract_response_text
+from src.core.contracts import checked, has_canary, record_interaction, usable_model_response
 
 
 class PromptInjectionTester:
@@ -276,7 +277,10 @@ class PromptInjectionTester:
         
         return vulnerabilities
     
-    async def _test_injection_category(self, agent: Dict[str, Any], 
+    @checked(lambda self, category, payloads: "prompt_injection." + category,
+             lambda self, category, payloads: payloads[:5],
+             oracle=lambda agent: has_canary(agent, 'system_prompt_canary'))
+    async def _test_injection_category(self, agent: Dict[str, Any],
                                      category: str, payloads: List[str]) -> List[Dict[str, Any]]:
         """Test a specific category of injection attacks"""
         vulnerabilities = []
@@ -319,9 +323,16 @@ class PromptInjectionTester:
                     data=request_data.get('data')
                 ) as response:
                     if not 200 <= response.status < 300:
+                        record_interaction(False)
                         record_response_failure()
                         return None
                     response_text = await response.text()
+                    usable = usable_model_response(response_text)
+                    record_interaction(usable,
+                                       has_canary(agent, 'system_prompt_canary')
+                                       and agent['system_prompt_canary'] not in payload)
+                    if not usable:
+                        return None
                     
                     # Analyze response for vulnerability indicators
                     vulnerability = self._analyze_response(
@@ -331,6 +342,7 @@ class PromptInjectionTester:
                     return vulnerability
                     
             except Exception as e:
+                record_interaction(False)
                 self.logger.debug(f"Request failed: {str(e)}")
                 return None
     

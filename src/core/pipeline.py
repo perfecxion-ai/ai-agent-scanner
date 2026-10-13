@@ -8,6 +8,7 @@ from src.core.transport import current_budget, scan_transport, ScanBudget
 from src.core.redaction import collect_secrets, redact_secrets
 from src.reporting.sarif_output import generate_sarif
 from src.utils.request_builder import resolve_api_key
+from src.core.contracts import CHECK_SCHEMA_VERSION, missing_checks, validate_checks, validate_scan_result
 
 
 SCHEMA_VERSION = "1.0"
@@ -18,6 +19,11 @@ def public_metadata(metadata):
     clean = {key: value for key, value in metadata.items() if key in allowed and isinstance(value, bool)}
     if metadata.get("environment") in {"production", "development", "staging", "test"}:
         clean["environment"] = metadata["environment"]
+    resource = metadata.get("resource_id")
+    if isinstance(resource, str) and resource.strip() and len(resource) <= 2048:
+        clean["resource_id"] = resource
+    if metadata.get("cloud") in {"aws", "azure", "gcp"}:
+        clean["cloud"] = metadata["cloud"]
     return clean
 
 
@@ -58,6 +64,15 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
             # Do not persist arbitrary transport exceptions that may contain credentials.
             if result.get("error"):
                 result["error"] = "Security testing failed"
+            if "checks" in result:
+                try:
+                    validate_checks(result["checks"])
+                    if any(check["status"] == "failed" for check in result["checks"]) and result["status"] == "completed":
+                        result["status"] = "partial"
+                except (TypeError, ValueError):
+                    result.update(status="failed", error="Invalid security check result", vulnerabilities=[], checks=[])
+            else:
+                result["checks"] = missing_checks([], "No check-level evidence supplied")
             result["metadata"] = public_metadata(agent.get("metadata", {}))
             secrets.update(collect_secrets(result))
             security_results.append(result)
@@ -88,6 +103,7 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         assessment = risks_by_id.get(agent["id"], {})
         agent["security_status"] = test.get("status", "not_tested")
         agent["vulnerabilities"] = test.get("vulnerabilities", [])
+        agent["checks"] = test.get("checks", missing_checks([], "Security testing was not requested"))
         agent["risk_score"] = assessment.get("overall_risk_score")
         agent["risk_level"] = assessment.get("risk_level", "unknown")
         public_agents.append(agent)
@@ -98,8 +114,9 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
     skipped = sum(result["status"] == "skipped" for result in security_results)
     budget = current_budget()
     transport_incomplete = bool(budget and (budget.failures or budget.rejections))
-    return redact_secrets({
+    report = redact_secrets({
         "schema_version": SCHEMA_VERSION,
+        "check_schema_version": CHECK_SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": scan_type,
         "status": "partial" if failed or partial or transport_incomplete or risk_status == "failed" else "completed",
@@ -115,8 +132,12 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
             "agents_tested": len(completed), "agents_failed": failed, "agents_skipped": skipped,
             "agents_partial": partial,
             "agents_not_tested": len(observations) - len(security_results),
+            "checks_completed": sum(check["status"] == "completed" for agent in observations for check in agent["checks"]),
+            "checks_skipped": sum(check["status"] == "skipped" for agent in observations for check in agent["checks"]),
+            "checks_failed": sum(check["status"] == "failed" for agent in observations for check in agent["checks"]),
         },
     }, secrets)
+    return validate_scan_result(report)
 
 
 def to_sarif(result):
@@ -131,5 +152,10 @@ def to_sarif(result):
         summary.get(key, 0) for key in ("agents_failed", "agents_partial", "agents_skipped", "agents_not_tested")
     )
     report["runs"][0]["invocations"][0]["executionSuccessful"] = complete
-    report["runs"][0]["properties"] = {"scan_status": result.get("status"), "summary": summary}
+    report["runs"][0]["properties"] = {
+        "scan_status": result.get("status"), "summary": summary,
+        "check_schema_version": result.get("check_schema_version"),
+        "checks": [{"agent_id": agent["id"], **check}
+                   for agent in result.get("agents", []) for check in agent.get("checks", [])],
+    }
     return report

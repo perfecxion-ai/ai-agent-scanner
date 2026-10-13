@@ -26,6 +26,7 @@ import uuid
 from datetime import datetime, timezone
 
 from src.utils.request_builder import construct_agent_request, extract_response_text
+from src.core.contracts import checked, has_canary, record_interaction, usable_model_response
 
 
 class DataPrivacyTester:
@@ -160,6 +161,7 @@ class DataPrivacyTester:
         
         return vulnerabilities
     
+    @checked("pii_disclosure", lambda self: self.pii_extraction_prompts[:5])
     async def _test_pii_disclosure(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for PII disclosure in AI responses"""
         vulnerabilities = []
@@ -199,6 +201,10 @@ class DataPrivacyTester:
         
         return vulnerabilities
     
+    @checked("tenant_isolation_violation", lambda self: self.tenant_isolation_prompts[:5],
+             prerequisite=lambda agent: None if has_canary(agent, 'cross_tenant_canary')
+             else "A protected foreign-tenant canary is required",
+             oracle=lambda agent: has_canary(agent, 'cross_tenant_canary'))
     async def _test_tenant_isolation(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for cross-tenant data leakage"""
         vulnerabilities = []
@@ -233,6 +239,8 @@ class DataPrivacyTester:
         
         return vulnerabilities
     
+    @checked("data_retention", "expiry-deletion-adapter-unavailable-v1",
+             prerequisite=lambda agent: "No verified expiry/deletion and session-boundary adapter")
     async def _test_data_retention(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Recall alone cannot establish a retention-policy violation.
 
@@ -240,6 +248,7 @@ class DataPrivacyTester:
         """
         return []
     
+    @checked("privacy_transparency_issue", lambda self: self.compliance_test_prompts[:5])
     async def _test_privacy_compliance(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test privacy policy compliance and transparency"""
         vulnerabilities = []
@@ -274,6 +283,7 @@ class DataPrivacyTester:
         
         return vulnerabilities
     
+    @checked("information_disclosure_in_errors", "six-malformed-input-samples-v1")
     async def _test_error_information_disclosure(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for sensitive information disclosure in error messages"""
         vulnerabilities = []
@@ -345,11 +355,18 @@ class DataPrivacyTester:
                 ) as response:
                     
                     if not 200 <= response.status < 300:
+                        record_interaction(False)
                         record_response_failure()
                         return None
-                    return extract_response_text(await response.text())
+                    raw = await response.text()
+                    text = extract_response_text(raw)
+                    usable = usable_model_response(raw)
+                    record_interaction(usable, has_canary(agent, 'cross_tenant_canary')
+                                       and agent['cross_tenant_canary'] not in prompt)
+                    return text if usable else None
                     
             except Exception as e:
+                record_interaction(False)
                 self.logger.debug(f"Request failed: {str(e)}")
                 return None
     
