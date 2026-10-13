@@ -32,9 +32,11 @@ arguments return 2. No latency or throughput threshold is treated as acceptance.
 
 Inputs are bounded to 4..5000 jobs, 1..32 workers, 0..1000 milliseconds of fixed
 synthetic worker latency, and a 1..60 second execution deadline. Deadline expiry
-stops claims and cooperatively interrupts workers. Shutdown allows a further
-bounded five-second cleanup grace. A deliberately insufficient deadline provides
-a repeatable failure check:
+stops claims and cooperatively interrupts workers. Shutdown waits up to five
+seconds for the coordinator, then up to five seconds for workers. Cooperative
+SQLite calls can finish later, so the execution deadline is an acceptance bound,
+not a hard wall-clock termination guarantee. A deliberately insufficient deadline
+provides a repeatable failure check:
 
 ```bash
 python scripts/benchmark-jobs.py --jobs 200 --latency-ms 1000 --timeout-seconds 1
