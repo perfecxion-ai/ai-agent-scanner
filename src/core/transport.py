@@ -19,6 +19,7 @@ class TransportPolicyError(ValueError):
 @dataclass
 class ScanBudget:
     allowed_networks: tuple[str, ...] | None = None
+    allow_loopback: bool = False
     max_requests: int = 500
     max_response_bytes: int = 1_048_576
     requests: int = 0
@@ -37,6 +38,13 @@ class ScanBudget:
             return
         if ip.is_link_local or ip.is_multicast or ip.is_unspecified or getattr(ip, 'ipv4_mapped', None):
             raise TransportPolicyError('Address class is not permitted')
+        if ip.is_loopback and not self.allow_loopback:
+            raise TransportPolicyError('Loopback requires explicit opt-in')
+        denied = ('0.0.0.0/8', '240.0.0.0/4', '100.100.100.200/32',
+                  '168.63.129.16/32', 'fd00:ec2::254/128')
+        if any(ip.version == network.version and ip in network
+               for network in map(ipaddress.ip_network, denied)):
+            raise TransportPolicyError('Metadata or reserved address is not permitted')
         if not any(ip.version == network.version and ip in network for network in self.networks):
             raise TransportPolicyError('Address is outside the scan allowlist')
 

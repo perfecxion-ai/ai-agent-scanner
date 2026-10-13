@@ -36,7 +36,7 @@ async def target_server():
 @pytest.mark.asyncio
 async def test_redirect_cannot_escape_target(target_server):
     url, visited = target_server
-    with scan_transport(ScanBudget(allowed_networks=('127.0.0.1/32',))):
+    with scan_transport(ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True)):
         async with SafeSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
             async with session.get(url + '/redirect', allow_redirects=True) as response:
                 assert response.status == 302
@@ -46,7 +46,7 @@ async def test_redirect_cannot_escape_target(target_server):
 @pytest.mark.asyncio
 async def test_shared_budget_counts_across_sessions(target_server):
     url, visited = target_server
-    budget = ScanBudget(allowed_networks=('127.0.0.1/32',), max_requests=1)
+    budget = ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True, max_requests=1)
     with scan_transport(budget):
         async with SafeSession() as session:
             async with session.get(url) as response:
@@ -76,7 +76,7 @@ async def test_literal_ip_rejected_before_connection(target_server):
     url, visited = target_server
     with scan_transport(ScanBudget(allowed_networks=('192.0.2.0/24',))):
         async with SafeSession() as session:
-            with pytest.raises(TransportPolicyError, match='allowlist'):
+            with pytest.raises(TransportPolicyError):
                 async with session.get(url):
                     pass
     assert visited == []
@@ -119,3 +119,10 @@ async def test_tcp_discovery_consumes_shared_budget():
         assert not await NetworkScanner()._is_port_open('192.0.2.1', 443)
         assert connect.call_count == 1
     assert budget.rejections == 1
+
+
+@pytest.mark.parametrize('address', ['127.0.0.1', '100.100.100.200', '168.63.129.16',
+                                     '0.0.0.1', '240.0.0.1', 'fd00:ec2::254'])
+def test_broad_allowlist_cannot_authorize_metadata_or_implicit_loopback(address):
+    with pytest.raises(TransportPolicyError):
+        ScanBudget(allowed_networks=('0.0.0.0/0', '::/0')).check_address(address)
