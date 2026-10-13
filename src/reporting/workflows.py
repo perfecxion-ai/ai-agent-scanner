@@ -92,6 +92,7 @@ def compare_reports(before, after):
         verified = (_complete(after) and asset and asset["security_status"] == "completed"
                     and not asset["ambiguous"] and not old_assets[item["asset_key"]]["ambiguous"]
                     and asset["identity_basis"] == "endpoint"
+                    and old_assets[item["asset_key"]]["identity_basis"] == "endpoint"
                     and any(isinstance(check, dict) and check.get("rule_id") == item["rule_id"]
                             and check.get("status") == "passed" for check in asset.get("checks", [])))
         (resolved if verified else unverified).append(item)
