@@ -250,6 +250,51 @@ def evaluate_command(suite, output):
             click.echo(rendered)
     except (OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
+def _read_report_file(path):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError) as exc:
+        raise click.ClickException("Unable to read report or policy JSON") from exc
+
+
+def _write_derived_report(document, output, sources):
+    destination = Path(output)
+    for source in sources:
+        path = Path(source)
+        if destination.resolve() == path.resolve() or (destination.exists() and destination.samefile(path)):
+            raise click.ClickException("Output must be a different file from the inputs")
+    try:
+        destination.write_text(json.dumps(document, indent=2) + '\n')
+    except OSError as exc:
+        raise click.ClickException("Unable to write derived report") from exc
+
+
+@cli.command('diff')
+@click.option('--before', required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option('--after', required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option('--output', '-o', required=True, type=click.Path(dir_okay=False))
+def diff_reports(before, after, output):
+    """Compare inventory and findings from two saved JSON scan reports."""
+    from src.reporting.workflows import compare_reports
+    try:
+        report = compare_reports(_read_report_file(before), _read_report_file(after))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise click.ClickException(f"Invalid scan report: {exc}") from exc
+    _write_derived_report(report, output, (before, after))
+
+
+@cli.command('triage')
+@click.option('--report', required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option('--policy', required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option('--output', '-o', required=True, type=click.Path(dir_okay=False))
+def triage_report(report, policy, output):
+    """Apply explicit expiring suppressions without changing source evidence."""
+    from src.reporting.workflows import apply_policy
+    try:
+        derived = apply_policy(_read_report_file(report), _read_report_file(policy))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise click.ClickException(f"Invalid report or policy: {exc}") from exc
+    _write_derived_report(derived, output, (report, policy))
 
 
 if __name__ == '__main__':

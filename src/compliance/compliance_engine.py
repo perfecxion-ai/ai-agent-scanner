@@ -228,7 +228,7 @@ class ComplianceEngine:
                         ),
                     })
 
-            status = 'non_compliant' if controls_triggered else 'compliant'
+            status = 'requires_review' if controls_triggered else 'not_assessed'
             if controls_triggered:
                 frameworks_impacted += 1
                 total_violations += len(controls_triggered)
@@ -236,22 +236,25 @@ class ComplianceEngine:
             framework_results[fw_key] = {
                 'name': framework['name'],
                 'status': status,
-                'controls_violated': len(controls_triggered),
-                'total_controls_assessed': len(framework['controls']),
+                'controls_with_findings': len(controls_triggered),
+                'controls_in_mapping': len(framework['controls']),
                 'details': controls_triggered,
             }
 
         return {
+            'assessment_type': 'finding_to_control_mapping',
+            'limitations': [
+                'Mappings identify controls for review, not compliance violations or certification.',
+                'No matching finding does not establish compliance or prove a control was tested.',
+                'Applicability, jurisdiction, and framework versions require independent review.',
+            ],
             'assessment_timestamp': datetime.now(timezone.utc).isoformat(),
             'agents_assessed': len(agents),
             'vulnerabilities_assessed': len(vulns),
             'summary': {
-                'frameworks_assessed': len(FRAMEWORKS),
+                'frameworks_mapped': len(FRAMEWORKS),
                 'frameworks_impacted': frameworks_impacted,
-                'total_control_violations': total_violations,
-                'compliance_score': round(
-                    (1 - frameworks_impacted / len(FRAMEWORKS)) * 100, 1
-                ) if FRAMEWORKS else 100.0,
+                'controls_with_findings': total_violations,
             },
             'frameworks': framework_results,
         }
