@@ -1,226 +1,147 @@
 # AI Agent Scanner
 
-Web/API deployment requires configured operator authentication. See [authentication setup](docs/authentication.md).
+Discover AI integrations and assess configured targets with a local CLI or a
+single-operator web application. Findings carry evidence; uncertain indicators
+remain observations. This project is a beta, not a compliance certification or
+a comprehensive test of every AI attack surface.
 
-**Find the AI you don't know about. Secure the AI you do.**
+## Install and try locally
 
-Asset inventory and security assessment for AI agents — the first open-source tool that discovers shadow AI across your infrastructure, tests it for vulnerabilities, and maps findings to compliance frameworks.
-
-![AI Agent Scanner Demo](docs/images/scan-demo.png)
-
-## The Problem
-
-Security teams are securing AI systems they know about.
-
-They are not securing the ones they don't.
-
-Most organizations have more AI agents in production than their security team can account for. Developers integrate AI APIs in minutes. Cloud providers ship one-click model deployments. No one files a ticket.
-
-Most teams underestimate how much AI is already running in their environment. Until they scan.
-
-This tool finds them.
-
-## Quick Start (1-minute scan)
+Python 3.10 through 3.13 are supported.
 
 ```bash
 git clone https://github.com/perfecxion-ai/ai-agent-scanner.git
 cd ai-agent-scanner
-pip install -r requirements.txt
-
-# Scan your network for AI agents
-python scanner_cli.py discover --network 192.168.1.0/24
-
-# Full scan with risk scoring
-python scanner_cli.py scan --network 192.168.1.0/24 --output results.json
-
-# See what's covered
-python scanner_cli.py coverage
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install .
+ai-agent-scanner --help
 ```
 
-**Have Ollama running locally?** Try this right now:
+Run the built-in offline evaluation fixtures without a model or API key:
 
 ```bash
-python scanner_cli.py scan --network 127.0.0.0/30 --output local_scan.json
+ai-agent-scanner evaluate --output fixture-metrics.json
 ```
 
-It will find your Ollama instance, test it for vulnerabilities, and show you the risk score. Takes about 2 minutes.
+To discover an already running local Ollama service, scan only its host:
 
-## What Makes This Different
-
-Most AI security tools assume you already know what to test.
-
-This one doesn't.
-
-It answers the first question security teams actually have:
-
-**What AI is running in my environment right now?**
-
-This is asset inventory for AI.
-
-Then it tests what it finds and tells you what it means for the business:
-
-```
-Discovery (find it) --> Security Testing (break it) --> Risk Scoring (prioritize it)
+```bash
+ai-agent-scanner discover --network 127.0.0.1/32 --output local-inventory.json
 ```
 
-No other tool — not Garak, Giskard, PyRIT, or Lakera — does discovery. They all start from a known endpoint. This starts from "what's out there?"
+This runs network discovery, not model generation or a complete vulnerability
+assessment. Discovery checks service signatures on common ports, including
+Ollama's default port. A missing service can produce an empty inventory.
+The shared transport has a default budget of 500 TCP/HTTP probes and a 1 MiB
+response limit; exhausted budgets produce incomplete results. Local CLI targets
+are operator-selected. Server scans additionally require explicit allowlists.
 
-## Who This Is For
+## Supported workflows
 
-- **Security teams** — discover shadow AI and assess risk
-- **AppSec leads** — integrate AI security checks into CI/CD (SARIF output included)
-- **Platform engineers** — scan deployments before they become exposures
-- **Compliance** — map AI risk to GDPR, SOC 2, HIPAA, NIST AI RMF, EU AI Act
-- **Researchers** — extend attack coverage and contribute detection modules
+| Workflow | What it does | What it does not establish |
+| --- | --- | --- |
+| Discovery | Looks for service signatures, code integrations, supported traffic records, and optional cloud inventory | Complete asset inventory or exploitability |
+| Active security probes | Sends prompt, access-control, and privacy probes to configured endpoints | Successful testing when the provider rejects requests or the adapter is unsupported |
+| Passive MCP review | Inspects local configuration and saved tool schemas; emits JSON or SARIF | Live MCP authorization, sandbox enforcement, or tool exploitation |
+| Offline replay | Compares recorded outputs and tool requests against explicit policies and labels | Production accuracy, a live injection campaign, or proof of tool execution |
+| Reporting | Preserves findings, observations, phase status, and risk estimates; exports JSON/SARIF | Compliance certification or a standardized CVSS score |
 
-## Discovery Coverage
-
-The scanner finds AI agents across four surfaces:
-
-- **Network** — exposed AI endpoints (OpenAI-compatible APIs, Ollama, custom)
-- **Code** — SDK usage, API keys, endpoint configs in repositories
-- **Traffic** — AI API calls in logs and HAR files
-- **Cloud** — managed AI services (SageMaker, Bedrock, Azure OpenAI, Vertex AI)
-
-Cloud scanning requires optional SDKs: `pip install ai-agent-scanner[cloud]`
-
-Each method catches what the others miss.
-
-## Example Output
-
+```bash
+ai-agent-scanner discover --repository ./src --output code-inventory.json
+ai-agent-scanner scan --config lab-targets.json --output results.json
+ai-agent-scanner scan --config lab-targets.json --format sarif --output results.sarif
+ai-agent-scanner mcp --config mcp-client.json --output mcp-review.json
+ai-agent-scanner mcp --tools saved-tools.json --format sarif --output mcp.sarif
+ai-agent-scanner evaluate --suite lab-transcripts.json --output metrics.json
 ```
-  Phase 1: Discovering AI agents...
-  Found 4 AI agent(s)
 
-  Phase 2: Security testing...
-    Internal Chatbot:     3 vulnerabilities (completed)
-    Customer Support Bot: 5 vulnerabilities (completed)
-
-  Phase 3: Risk assessment...
-    Internal Chatbot:     Score 42.0/100 (MEDIUM)
-    Customer Support Bot: Score 78.5/100 (HIGH)
-
-  ============================================================
-  SCAN SUMMARY
-  ============================================================
-  Agents discovered:     4
-  Vulnerabilities found: 8
-  Highest risk score:    78.5/100
-  Output:                results.json
-```
+Scan configuration accepts `target_scope` for discovery or `agents` for direct
+security testing. For example, discovery configuration can contain:
 
 ```json
 {
-  "agents_discovered": 4,
-  "total_vulnerabilities": 8,
-  "risk_assessments": [{
-    "agent_name": "Customer Support Bot",
-    "overall_risk_score": 78.5,
-    "risk_level": "high",
-    "critical_findings": ["No authentication", "PII disclosure"],
-    "compliance_implications": ["GDPR Article 32", "SOC 2 CC6.1"]
-  }]
+  "target_scope": {
+    "network_ranges": ["127.0.0.1/32"],
+    "include_network": true
+  }
 }
 ```
 
-## Coverage (Honest View)
+Use `scan --skip-security --config lab-targets.json` for discovery-only output.
+Explicit agent entries require `id`, `name`, `endpoint`, and `provider`.
+Protected canaries and response markers are optional evidence configuration;
+the scanner cannot infer their provenance. See [scan configuration](docs/scan-results.md)
+and [detection evidence](docs/detection-evidence.md) before active testing.
+Cloud discovery requires `python -m pip install '.[cloud]'` and provider-specific
+configuration. The web API does not accept caller-supplied cloud credentials.
 
-**Tested:**
-- Direct prompt injection (70+ payloads across 7 categories)
-- Auth bypass (15+ techniques), weak credentials, API key security
-- PII disclosure (7 data types), cross-tenant leakage, session security
-- Rate limiting, error info disclosure, privacy compliance
+## Web application
 
-**Not yet covered:**
-- Indirect prompt injection (highest real-world attack vector in 2025)
-- MCP server security / agentic workflow attacks
-- RAG poisoning and retrieval manipulation
-- Multi-modal injection (image/PDF-based)
-- Model extraction and adversarial suffixes
-
-Run `python scanner_cli.py coverage` for the live OWASP LLM Top 10 matrix:
-
-```
-[FULL]     LLM01: Prompt Injection     (direct only — indirect planned)
-[FULL]     LLM02: Sensitive Info Disclosure
-[PLANNED]  LLM03: Supply Chain
-[PLANNED]  LLM04: Data/Model Poisoning
-[PARTIAL]  LLM05: Improper Output Handling
-[PARTIAL]  LLM06: Excessive Agency
-[FULL]     LLM07: System Prompt Leakage
-[PLANNED]  LLM08: Vector/Embedding Weaknesses
-[PLANNED]  LLM09: Misinformation
-[PARTIAL]  LLM10: Unbounded Consumption
-```
-
-6/10 categories actively tested. 4 planned.
-
-## Risk Scoring
-
-Findings are scored using a CVSS-inspired model:
-
-- **Severity** — vulnerability type + confidence weighting
-- **Exposure** — internet-facing (1.5x), production (1.3x), public API (1.4x)
-- **Business impact** — PII access (1.3x), financial data (1.4x), healthcare (1.5x)
-
-Every finding is mapped to:
-- **OWASP LLM Top 10 (2025)** and **MITRE ATLAS**
-- **GDPR**, **SOC 2**, **HIPAA**, **PCI DSS**, **NIST AI RMF**, **EU AI Act**
-
-## Output Formats
-
-- **JSON** — structured report with full vulnerability details and framework mappings
-- **SARIF** — v2.1.0 for GitHub Code Scanning and Azure DevOps
-- **Executive summary** — text format for quick review
+The supported identity model is one operator and one configured organization.
+Authentication, scan ownership, and target policy are enforced server-side.
+For a local checkout:
 
 ```bash
-# SARIF for CI/CD
-python scanner_cli.py scan --network 10.0.0.0/24 --format sarif --output results.sarif
+python -m pip install '.[server]'
+export SECRET_KEY="$(openssl rand -hex 32)"
+export OPERATOR_API_KEY="$(openssl rand -hex 32)"
+export OPERATOR_ORGANIZATION_ID=local-lab
+export SCAN_ALLOWED_NETWORKS=127.0.0.1/32
+export SCAN_ALLOW_LOOPBACK=true
+python -c 'from app import app, db; ctx = app.app_context(); ctx.push(); db.create_all(); ctx.pop()'
+gunicorn --bind 127.0.0.1:5000 --workers 1 --threads 4 app:app
 ```
 
-## Architecture
+Enter the generated operator key in the dashboard at `http://127.0.0.1:5000`.
+The browser keeps its bearer token in memory. Store deployment secrets outside
+version control. `.env.example` lists supported server settings; the application
+does not automatically load a `.env` file.
 
-```
-CLI / Web API / REST
-    |
-Discovery Engine (Network + Code + Cloud + Traffic)
-    |
-Security Testing (Prompt Injection + Access Control + Privacy)
-    |
-Risk Assessment + Compliance (OWASP + ATLAS + 6 frameworks)
-    |
-Reporting (JSON + SARIF + Executive Summary)
-```
+Use one server worker while job coordination remains process-local. Active scans
+can be interrupted by restart. Database table creation does not migrate an older
+schema. Review [authentication](docs/authentication.md), [server scan policy](docs/scan-policy.md),
+and [development/container instructions](docs/DEVELOPMENT.md) before deployment.
 
-## Installation
+## Interpreting results
+
+A refusal is not a successful injection. Generated example PII is not proven
+data leakage. HTTP 200 or an administrative keyword alone is not authorization
+bypass. Confirmed disclosure checks need a seeded protected canary; authentication
+checks need protected response evidence and a denied control.
+
+Failed, skipped, and partial tests remain distinguishable from completed checks.
+Risk estimates apply only where sufficient testing completed; an empty finding
+list does not mean a target is secure. Framework references and the `coverage`
+command describe mappings and implementation scope, not verified compliance.
+Review retained evidence before acting on any finding.
+
+## Limits and roadmap
+
+- Durable job recovery, distributed execution, full cancellation, and schema
+  migrations remain unfinished.
+- Enterprise identity, granular roles, production tenant provisioning, and
+  immutable audit trails are not implemented.
+- Passive MCP analysis and offline RAG/injection/tool replay do not replace
+  live integration tests against those systems.
+- Discovery and provider compatibility are incomplete. Transport errors and
+  unsupported responses limit coverage; request budgets can truncate a scan.
+- Secret redaction reduces exposure but is not a general data-loss prevention
+  guarantee. Reports may contain sensitive target responses or source evidence.
+- Broader lifecycle workflows, integrations, performance evaluation, and release
+  hardening remain part of the [engineering plan](docs/ENGINEERING_PLAN.md).
+
+See [passive MCP scope](docs/mcp-assessment.md), [replay schema and metrics](docs/replay-evaluations.md),
+[security policy](SECURITY.md), and [changelog](CHANGELOG.md).
+
+## Development
 
 ```bash
-# Standard
-pip install -r requirements.txt
-
-# With cloud scanning (AWS, Azure, GCP)
-pip install -r requirements.txt boto3 azure-identity azure-mgmt-cognitiveservices google-cloud-aiplatform
-
-# Development
-pip install -e ".[dev]"
+python -m pip install '.[dev]'
+python -m pytest tests/
+ruff check .
 ```
 
-**Requirements:** Python 3.10+
-
-## Responsible Use
-
-This tool is for defensive security only. Scan systems you own or have explicit written permission to test.
-
-Tested across lab environments and authorized enterprise assessments. Built-in safeguards: rate limiting, payload caps, host limits, request timeouts, non-destructive testing only.
-
-## Contributing
-
-PRs welcome. Add tests for new functionality. Run `pytest tests/ -v` before submitting.
-
-## License
-
-[GNU General Public License v3.0](LICENSE) | Copyright (c) 2025 Scott C Thornton
-
----
-
-**Built by [perfecXion.ai](https://perfecxion.ai)** | The AI agents are already running in your infrastructure. The only question is whether you know where they are.
+CI also builds distributions, tests the installed CLI outside the checkout,
+audits dependencies, and builds the container. Publication is a separate release
+action. The project is licensed under [GPL-3.0-only](LICENSE).

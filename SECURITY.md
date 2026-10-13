@@ -1,119 +1,62 @@
-# Security Policy
+# Security policy
 
-## Defensive Security Tool
+AI Agent Scanner is a defensive assessment tool for systems within your authorized
+scope. Active probes send adversarial prompts and authentication attempts and can
+consume target resources. The scanner does not guarantee that a target agent will
+avoid side effects when processing those requests. Use isolated fixtures and
+synthetic secrets when testing agent behavior.
 
-This repository contains a defensive cybersecurity tool designed exclusively for discovering and assessing AI agents in authorized environments. It helps organizations maintain visibility and security posture across their AI infrastructure.
+## Deployment boundary
 
-### Tool Purpose
+The web application supports one configured operator and organization. It does
+not provide SSO, user enrollment, granular roles, or enterprise tenant provisioning.
+Set independent random `SECRET_KEY` and `OPERATOR_API_KEY` values. An unset
+operator key disables token issuance and protected API access. Use TLS and an
+access-controlled proxy for remote access; enforce login throttling there.
 
-**AI Agent Scanner** is designed for:
-- ✅ Discovering AI agents in your own infrastructure
-- ✅ Identifying vulnerabilities for remediation
-- ✅ Supporting compliance and governance initiatives
-- ✅ Enabling proactive security assessments
+JWTs expire after one hour. Signing out clears the browser's copy but does not
+revoke a copied token. Rotating `SECRET_KEY` invalidates existing tokens.
+Rotating only the operator key prevents subsequent login with the old key.
+See [authentication details](docs/authentication.md).
 
-**Important:** This tool is designed for defensive cybersecurity purposes only.
+API targets are denied by default. Configure authorized network ranges and trusted
+filesystem roots. Loopback additionally requires explicit opt-in. Cloud discovery
+through the API is disabled. Connection-time policy rejects out-of-scope resolved
+addresses, redirects are disabled, and requests and response bodies are bounded.
+Filesystem preflight is not a sandbox: allowed roots must not be concurrently
+modified by untrusted users. See [scan policy and limits](docs/scan-policy.md).
 
-## Authorized Use
+Keep one server worker. Admission control and active jobs are process-local;
+restart can interrupt work. Deadlines cancel asynchronous work, but synchronous
+operations must return before cancellation takes effect. The project does not
+yet provide durable job recovery or database migrations.
 
-✅ **Permitted:**
-- Scanning systems you own or manage
-- Authorized security assessments with explicit permission
-- Compliance audits and governance initiatives
-- Internal security testing and validation
-- Educational learning about AI security vulnerabilities
-- Research in controlled environments
+## Data handling and evidence
 
-❌ **Not Permitted:**
-- Scanning systems without authorization
-- Unauthorized penetration testing
-- Malicious security research
-- Attacking production systems
-- Violating terms of service or acceptable use policies
+JSON/SARIF exports remove recognized credential fields and credential-bearing URL
+components. Issued cookie values are not included in cookie findings. Redaction
+does not guarantee removal of arbitrary sensitive data in model output, source
+files, or unfamiliar credential formats. Treat reports and the database as
+sensitive. Enforce encryption, backups, access restrictions, and retention in
+your deployment; the application does not supply a general encryption-at-rest,
+automated retention, or immutable audit-log feature.
 
-## Responsible Testing
+Heuristic observations are separated from confirmed findings. Request failures
+and incomplete phases must not be interpreted as passed tests. Canaries require
+operator-controlled provenance. Same-session recall is not a retention violation,
+and framework mappings do not certify regulatory compliance.
 
-When using this tool:
+MCP configuration review and transcript evaluation are offline operations. They
+do not start configured commands, connect to servers, fetch schemas, or execute
+tool calls. Their results describe supplied configuration or fixtures only.
 
-1. **Obtain Authorization** - Only scan systems you own or have explicit written permission to test
-2. **Respect Rate Limits** - Tool includes built-in delays and request limits
-3. **Non-Destructive** - All testing is designed to be respectful and non-destructive
-4. **Audit Logging** - Maintain complete activity trails for compliance
-5. **Data Protection** - Sanitize PII and sensitive data in logs and reports
-6. **Compliance** - Follow all applicable laws and regulations
+## Reporting a vulnerability
 
-## Security Features
+Send security reports to **scott@perfecxion.ai**. Include the affected commit or
+version, a minimal reproduction, expected and observed behavior, and impact.
+Use synthetic credentials and remove customer data. Coordinate privately before
+publishing exploit details. Response times depend on maintainer availability;
+there is no guaranteed response SLA.
 
-### Built-in Safety Controls
-- **Rate Limiting**: Automatic delays between requests
-- **Request Limits**: Maximum 5 payloads per category
-- **Graceful Failures**: No destructive operations
-- **PII Sanitization**: Automatic redaction in logs
-- **Audit Trails**: Complete activity logging
-
-### Data Protection
-- Secure storage with encryption options
-- Role-based access control for multi-user environments
-- Configurable data retention policies
-- Compliance-ready logging (GDPR, SOC 2, HIPAA)
-
-## Real-World Impact
-
-Understanding AI security vulnerabilities helps build better defenses:
-
-- **Prompt Injection**: Can manipulate AI behavior and bypass safety controls
-- **Data Leakage**: AI systems may inadvertently expose sensitive information
-- **Access Control**: Weak authentication can allow unauthorized AI access
-- **Business Impact**: AI security incidents can cost millions and damage reputation
-
-This tool helps identify these vulnerabilities before they become incidents.
-
-## Reporting Security Issues
-
-If you discover security vulnerabilities in this tool or its code:
-
-**Email:** scott@perfecxion.ai
-
-Please include:
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Suggested fixes
-
-### Response Timeline
-
-- **Initial Response:** Within 48 hours
-- **Assessment:** Within 7 days
-- **Resolution:** Based on severity
-
-## Supported Versions
-
-| Version | Supported          |
-| ------- | ------------------ |
-| main    | :white_check_mark: |
-
-## Best Practices
-
-When deploying this tool:
-
-1. **Secure Deployment** - Use strong authentication and HTTPS
-2. **Network Segmentation** - Deploy in secure network segments
-3. **Access Control** - Implement role-based access control
-4. **Regular Updates** - Keep dependencies and signatures current
-5. **Audit Reviews** - Regularly review scan logs and results
-6. **Incident Response** - Have procedures for discovered vulnerabilities
-
-## Compliance Considerations
-
-This tool supports compliance with:
-- **GDPR**: Data privacy and protection requirements
-- **SOC 2**: Access controls and session management
-- **HIPAA**: Healthcare data protection requirements
-- **PCI DSS**: Payment data security standards
-
-## Contact
-
-- **Email:** scott@perfecxion.ai
-- **Alternative:** scthornton@gmail.com
-
-For questions about responsible use, authorized testing, or defensive AI security, contact scott@perfecxion.ai.
+There is no published long-term support matrix. Review the current source,
+changelog, dependency audit, and open advisories before deploying a version.

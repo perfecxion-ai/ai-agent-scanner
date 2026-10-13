@@ -1,47 +1,43 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## Unreleased
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+These changes are engineering work on the current branch, not a published release.
 
-## [Unreleased]
+### Security and correctness
 
-### Added
-- Enterprise-grade AI security assessment platform
-- Comprehensive AI agent discovery across network, code, cloud, and traffic
-- Security testing with 70+ prompt injection attack payloads
-- OWASP LLM Top 10 complete coverage
-- CVSS-inspired risk assessment with business impact analysis
-- Multiple interfaces: web dashboard, CLI tool, REST API
-- Support for all major AI providers (OpenAI, Anthropic, Google, custom APIs)
-- Real-time scanning progress tracking and reporting
-- Complete test suite with 157 test cases
-- Automated vulnerability scoring with confidence levels
-- Compliance mapping (GDPR, SOC 2, HIPAA, PCI DSS)
+- Require configured operator authentication and scope scan access to its organization.
+- Add server-owned network and filesystem boundaries, bounded admission, scan
+  deadlines, connection-time address checks, and request/response budgets.
+- Replace keyword-only vulnerability claims with conservative evidence requirements.
+  Separate heuristic observations from confirmed findings and preserve incomplete status.
+- Remove retention claims based solely on conversational recall.
+- Redact recognized credentials in nested reports and omit issued cookie values.
 
-### Security Testing Framework
-- **Prompt Injection Testing**: 70+ attack payloads across 7 categories
-- **Access Control Testing**: 15+ authentication bypass techniques
-- **Data Privacy Testing**: 7 PII detection types and leakage detection
-- **Network Scanning**: IP range and domain support with AI service signatures
-- **Code Repository Analysis**: Detection of AI integrations in source code
-- **Cloud Infrastructure Scanning**: AWS, Azure, GCP discovery
-- **Traffic Analysis**: Runtime AI service detection
+### Results and interfaces
 
-### Features
-- **Discovery Engine**: Multi-method AI agent discovery with confidence scoring
-- **Security Engine**: Comprehensive vulnerability assessment framework
-- **Risk Assessor**: Business-focused vulnerability prioritization
-- **Web Dashboard**: Modern responsive UI with Tailwind CSS
-- **CLI Tool**: Automation and scripting support
-- **Database**: SQLAlchemy ORM with SQLite/PostgreSQL support
-- **Background Tasks**: Threading-based task management
+- Persist versioned scan snapshots, findings, and risk results; keep repeated
+  discoveries separate and support organization-scoped JSON/SARIF exports.
+- Share a scan pipeline between CLI and API; support explicit agent configuration
+  and security-only runs from eligible source scans.
+- Add passive local MCP configuration and tool-schema assessment with versioned rules.
+- Add offline replay fixtures for indirect markers, foreign-tenant document
+  canaries, and tool-request policies, with labeled confusion and accuracy metrics.
 
-### Documentation
-- Complete API documentation with examples
-- Security best practices and deployment guides
-- Comprehensive test coverage documentation
-- Troubleshooting and maintenance procedures
+### Delivery and documentation
 
-[Unreleased]: https://github.com/scthornton/ai-agent-scanner/commits/main
+- Include the CLI entry point in distributions and test installed wheels outside
+  the source checkout.
+- Gate publication on CI, including tests, lint, package checks, dependency audit,
+  and container smoke checks.
+- Document current boundaries and remove unsupported claims of complete framework
+  coverage, enterprise controls, and production security guarantees.
+
+### Still incomplete
+
+- Durable execution, restart recovery, comprehensive migrations, and distributed workers.
+- Enterprise identity, complete finding lifecycle workflows, and audit guarantees.
+- Live coverage of all MCP, indirect injection, RAG, multimodal, and supply-chain scenarios.
+- Representative accuracy and performance benchmarks and release-candidate acceptance.
+
+See [engineering milestones](docs/ENGINEERING_PLAN.md) for acceptance criteria.
