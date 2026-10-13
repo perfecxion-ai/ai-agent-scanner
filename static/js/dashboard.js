@@ -98,7 +98,7 @@ class AIAgentScanner {
             const data = await this.api(`/api/scans/${this.currentScanId}/status`);
             document.getElementById('recent-scans').textContent =
                 `${data.scan_id}: ${data.status} (${data.progress}%)`;
-            if (['completed', 'failed'].includes(data.status)) {
+            if (['completed', 'partial', 'failed'].includes(data.status)) {
                 clearInterval(this.pollInterval);
                 document.getElementById('last-scan').textContent = data.status;
                 await this.loadAgents();

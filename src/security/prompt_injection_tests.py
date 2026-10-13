@@ -19,7 +19,7 @@ you own or have explicit permission to test.
 
 import asyncio
 import aiohttp
-from src.core.transport import SafeSession
+from src.core.transport import SafeSession, record_response_failure
 import logging
 import re
 from typing import List, Dict, Any, Optional
@@ -318,7 +318,9 @@ class PromptInjectionTester:
                     json=request_data.get('json'),
                     data=request_data.get('data')
                 ) as response:
-                    
+                    if not 200 <= response.status < 300:
+                        record_response_failure()
+                        return None
                     response_text = await response.text()
                     
                     # Analyze response for vulnerability indicators

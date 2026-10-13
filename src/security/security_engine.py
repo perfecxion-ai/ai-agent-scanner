@@ -93,6 +93,7 @@ class SecurityTestEngine:
             test_results['status'] = 'completed'
             if budget and budget.failures + budget.rejections > errors_before:
                 test_results['status'] = 'partial'
+                test_results['overall_risk_score'] = None
                 test_results['limitations'].append('Some requests failed or were refused by transport policy.')
             
         except Exception as e:
