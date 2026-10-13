@@ -17,6 +17,7 @@ vulnerabilities in their AI systems for remediation purposes.
 
 import asyncio
 import aiohttp
+from src.core.transport import SafeSession
 import logging
 import base64
 from typing import List, Dict, Any, Optional
@@ -178,7 +179,7 @@ class AccessControlTester:
         if not await self._has_denied_control(agent):
             return None
         
-        async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
+        async with SafeSession(timeout=self.session_timeout) as session:
             endpoint = agent.get('endpoint')
             
             # Try the bypass method
@@ -228,7 +229,7 @@ class AccessControlTester:
             try:
                 credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
                 
-                async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
+                async with SafeSession(timeout=self.session_timeout) as session:
                     async with session.get(
                         endpoint,
                         headers={'Authorization': f'Basic {credentials}'}, allow_redirects=False
@@ -281,7 +282,7 @@ class AccessControlTester:
                 ]
                 
                 for headers in header_variations:
-                    async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
+                    async with SafeSession(timeout=self.session_timeout) as session:
                         async with session.get(endpoint, headers=headers, allow_redirects=False) as response:
                             
                             if self._is_successful_bypass(response.status, await response.text(), agent.get('protected_response_marker')):
@@ -343,7 +344,7 @@ class AccessControlTester:
             try:
                 test_url = urljoin(endpoint.rstrip('/'), path)
                 
-                async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
+                async with SafeSession(timeout=self.session_timeout) as session:
                     async with session.get(test_url, allow_redirects=False) as response:
                         
                         response_text = await response.text()
@@ -385,7 +386,7 @@ class AccessControlTester:
             request_times = []
             status_codes = []
             
-            async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
+            async with SafeSession(timeout=self.session_timeout) as session:
                 for i in range(min(20, self.rate_limit_requests)):  # Test with 20 requests
                     start_time = datetime.now(timezone.utc)
                     
@@ -433,7 +434,7 @@ class AccessControlTester:
         
         try:
             # Test session fixation and cookie security
-            async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
+            async with SafeSession(timeout=self.session_timeout) as session:
                 async with session.get(endpoint) as response:
                     
                     # Check cookie security attributes
@@ -476,7 +477,7 @@ class AccessControlTester:
         if agent.get('authentication_required') is not True or not isinstance(marker, str) or len(marker) < 16:
             return False
         try:
-            async with aiohttp.ClientSession(timeout=self.session_timeout) as session:
+            async with SafeSession(timeout=self.session_timeout) as session:
                 async with session.get(agent['endpoint'], headers={'Authorization': f'Bearer scanner-invalid-{uuid.uuid4()}'}, allow_redirects=False) as response:
                     return response.status in (401, 403)
         except Exception:

@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+from src.core.transport import SafeSession
 from typing import List, Dict, Any
 import ipaddress
 import dns.resolver
@@ -126,7 +127,7 @@ class NetworkScanner:
             try:
                 base_url = f"{scheme}://{host}:{port}"
                 
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+                async with SafeSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
                     # Check common AI API paths
                     for provider, signature in ai_signatures.items():
                         for path in signature.get('paths', ['/']):
