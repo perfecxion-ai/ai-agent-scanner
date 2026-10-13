@@ -1,7 +1,6 @@
 """Synthetic request, filesystem, and network boundary regression cases."""
 
 import asyncio
-import threading
 from unittest.mock import Mock, patch
 
 import pytest
@@ -146,17 +145,15 @@ def test_api_payload_limit_is_413(api):
     assert response.status_code == 413
 
 
-def test_concurrency_limit_and_startup_failure_release_slot(api, monkeypatch):
+def test_queue_limit_does_not_create_extra_scan(api, monkeypatch):
     module, client = api
-    monkeypatch.setattr(module, "_scan_slots", threading.BoundedSemaphore(1))
+    monkeypatch.setitem(module.app.config, "SCAN_MAX_QUEUED", 1)
     body = request_body(network_ranges=["192.0.2.1/32"])
     with patch.object(module.threading, "Thread") as thread:
-        thread.return_value.start.side_effect = RuntimeError("fixture")
-        assert client.post("/api/scans", headers=headers(module), json=body).status_code == 500
-    with patch.object(module.threading, "Thread"):
-        assert client.post("/api/scans", headers=headers(module), json=body).status_code == 200
+        assert client.post("/api/scans", headers=headers(module), json=body).status_code == 202
         assert client.post("/api/scans", headers=headers(module), json=body).status_code == 429
-    assert module.ScanSession.query.filter_by(status="failed").count() == 1
+        thread.assert_not_called()
+    assert module.ScanSession.query.count() == module.ScanJob.query.count() == 1
 
 
 def test_security_source_is_tenant_scoped(api):
@@ -171,7 +168,7 @@ def test_security_source_is_tenant_scoped(api):
         assert response.json["error"] == "Source scan not found"
 
 
-def test_deadline_marks_failed_and_worker_releases_capacity(api, monkeypatch):
+def test_deadline_marks_failed_with_consistent_report(api, monkeypatch):
     module, _ = api
     module.db.session.add(module.ScanSession(id="deadline", organization_id="tenant-a", scan_name="x",
                           scan_type="discovery_only", target_scope={}, scan_config={}))
@@ -181,12 +178,10 @@ def test_deadline_marks_failed_and_worker_releases_capacity(api, monkeypatch):
         await asyncio.Event().wait()
 
     monkeypatch.setattr(module, "_execute_scan", forever)
-    monkeypatch.setattr(module, "_scan_slots", threading.BoundedSemaphore(1))
-    assert module._scan_slots.acquire(blocking=False)
-    module._run_admitted_scan("deadline", "discovery_only", {}, {"timeout_seconds": 0.01})
+    module._run_scan_in_thread("deadline", "discovery_only", {}, {"timeout_seconds": 0.01})
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, "deadline").status == "failed"
-    assert module._scan_slots.acquire(blocking=False)
+    assert module.db.session.get(module.ScanResult, "deadline").result["status"] == "failed"
 
 
 @pytest.mark.parametrize("counter", ["failures", "rejections"])

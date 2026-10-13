@@ -17,6 +17,7 @@ import threading
 import asyncio
 import hmac
 import uuid
+from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Dict, Any
 
@@ -24,7 +25,7 @@ from flask import Flask, render_template, request, jsonify, g
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, DateTime, Integer, Float, Boolean, Text, JSON
+from sqlalchemy import String, DateTime, Integer, Float, Boolean, Text, JSON, select
 from werkzeug.exceptions import HTTPException
 
 from src.discovery.discovery_engine import DiscoveryEngine, DiscoveryScope
@@ -37,6 +38,7 @@ from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
 from src.core.transport import ScanBudget, scan_transport, TransportPolicyError
+from src.core.jobs import JobStore, JobDispatcher, TERMINAL_STATES
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -72,6 +74,7 @@ for _setting, _default, _maximum in (
     ("SCAN_MAX_HOSTS", 1024, 65536), ("SCAN_MAX_FILES", 10000, 100000),
     ("SCAN_TIMEOUT_SECONDS", 300, 3600), ("MAX_CONCURRENT_SCANS", 2, 32),
     ("SCAN_MAX_REQUESTS", 500, 10000), ("SCAN_MAX_RESPONSE_BYTES", 1048576, 16777216),
+    ("SCAN_MAX_QUEUED", 32, 10000),
 ):
     app.config[_setting] = bounded_integer(int(os.environ.get(_setting, _default)), _setting, _maximum)
 
@@ -92,7 +95,9 @@ report_generator = ReportGenerator()
 # --- Thread-safe scan tracking ---
 _active_scans: Dict[str, Dict[str, Any]] = {}
 _scans_lock = threading.Lock()
-_scan_slots = threading.BoundedSemaphore(app.config["MAX_CONCURRENT_SCANS"])
+_admission_lock = threading.Lock()
+_dispatcher_lock = threading.Lock()
+_job_dispatcher = None
 
 VERSION = "1.1.0"
 
@@ -164,6 +169,17 @@ class ScanResult(db.Model):
     result: Mapped[dict] = mapped_column(JSON, nullable=False)
 
 
+class ScanJob(db.Model):
+    """Persistent queue state; each scan has at most one execution attempt."""
+
+    scan_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued", index=True)
+    owner: Mapped[str] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -200,9 +216,7 @@ def get_token():
 @app.route("/api/scans", methods=["POST"])
 @require_auth
 def start_scan():
-    """Start a new AI agent discovery and security scan."""
-    admitted = False
-    scan_session = None
+    """Persist a scan and queue entry in one transaction."""
     try:
         scan_name, scan_type, target_scope, scan_config = validate_request(
             request.get_json(silent=True), app.config,
@@ -225,10 +239,6 @@ def start_scan():
                 return jsonify({"success": False, "error": "Source scan has no assets"}), 400
             validate_agent_endpoints([{"endpoint": agent.endpoint_url} for agent in source_agents], app.config)
 
-        admitted = _scan_slots.acquire(blocking=False)
-        if not admitted:
-            return jsonify({"success": False, "error": "Concurrent scan limit reached"}), 429
-
         scan_id = generate_scan_id()
         scan_session = ScanSession(
             id=scan_id,
@@ -239,20 +249,17 @@ def start_scan():
             scan_config=scan_config,
             created_by=g.user.get("user_id"),
             user_ip=request.remote_addr,
+            status="queued",
         )
-
-        db.session.add(scan_session)
-        db.session.commit()
-
-        thread = threading.Thread(
-            target=_run_admitted_scan,
-            args=(scan_id, scan_type, target_scope, scan_config),
-            daemon=True,
-        )
-        thread.start()
-        admitted = False  # The worker owns the slot after successful startup.
-
-        return jsonify({"success": True, "scan_id": scan_id, "message": "Scan started"})
+        with _admission_lock:
+            if ScanJob.query.filter_by(status="queued").count() >= app.config["SCAN_MAX_QUEUED"]:
+                return jsonify({"success": False, "error": "Scan queue is full"}), 429
+            db.session.add(scan_session)
+            db.session.add(ScanJob(scan_id=scan_id))
+            db.session.commit()
+        if _job_dispatcher:
+            _job_dispatcher.wake()
+        return jsonify({"success": True, "scan_id": scan_id, "message": "Scan queued"}), 202
 
     except ScopeValidationError as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -260,16 +267,24 @@ def start_scan():
         return jsonify({"success": False, "error": e.description}), e.code
     except Exception as e:
         db.session.rollback()
-        if scan_session is not None:
-            failed_scan = db.session.get(ScanSession, scan_session.id)
-            if failed_scan is not None:
-                failed_scan.status = "failed"
-                db.session.commit()
         app.logger.error(f"Error starting scan: {e}", exc_info=True)
         return jsonify({"success": False, "error": "Failed to start scan"}), 500
-    finally:
-        if admitted:
-            _scan_slots.release()
+
+
+@app.route("/api/scans/<scan_id>/cancel", methods=["POST"])
+@require_auth
+def cancel_scan(scan_id):
+    scan = ScanSession.query.filter_by(id=scan_id, organization_id=g.user["organization_id"]).first()
+    if scan is None:
+        return jsonify({"success": False, "error": "Scan not found"}), 404
+    if scan.status in TERMINAL_STATES:
+        return jsonify({"success": False, "error": "Scan is already terminal"}), 409
+    status = _get_job_store().cancel(scan_id)
+    if status is None:
+        return jsonify({"success": False, "error": "Scan is not cancellable"}), 409
+    if _job_dispatcher:
+        _job_dispatcher.wake()
+    return jsonify({"success": True, "scan_id": scan_id, "status": status}), 202
 
 
 @app.route("/api/scans/<scan_id>/status")
@@ -417,6 +432,7 @@ def list_agents():
 
 
 @app.route("/health")
+@app.route("/health/live")
 def health_check():
     return jsonify({
         "status": "healthy",
@@ -425,18 +441,101 @@ def health_check():
     })
 
 
+@app.route("/health/ready")
+def readiness_check():
+    try:
+        db.session.execute(select(1))
+        db.session.execute(select(ScanJob.scan_id).limit(1))
+        ready = bool(_job_dispatcher and _job_dispatcher.ready)
+    except Exception:
+        db.session.rollback()
+        ready = False
+    return jsonify({"status": "ready" if ready else "not_ready"}), 200 if ready else 503
+
+
 # ---------------------------------------------------------------------------
 # Background scan execution
 # ---------------------------------------------------------------------------
 
-def _run_admitted_scan(*args):
+def _get_job_store():
+    return JobStore(db.engine, ScanJob.__table__, ScanSession.__table__, ScanResult.__table__)
+
+
+def start_job_dispatcher():
+    global _job_dispatcher
+    with _dispatcher_lock:
+        if _job_dispatcher is not None:
+            return _job_dispatcher
+        with app.app_context():
+            db.create_all()
+            dispatcher = JobDispatcher(_get_job_store(), _execute_job,
+                                       workers=app.config["MAX_CONCURRENT_SCANS"])
+            dispatcher.start()
+        _job_dispatcher = dispatcher
+        return dispatcher
+
+
+def stop_job_dispatcher():
+    if _job_dispatcher:
+        _job_dispatcher.stop()
+
+
+def _execute_job(scan_id, cancelled):
+    with app.app_context():
+        scan = db.session.get(ScanSession, scan_id)
+        if not scan:
+            raise ValueError("Job has no scan")
+        # Queued jobs must obey the current server policy, not an earlier allowlist.
+        _, scan_type, scope, options = validate_request({
+            "scan_type": scan.scan_type, "scan_name": scan.scan_name,
+            "target_scope": scan.target_scope, "scan_config": scan.scan_config,
+        }, app.config)
+    _run_scan_in_thread(scan_id, scan_type, scope, options, cancelled)
+
+
+def _record_terminal(scan_id, status, error):
+    with app.app_context():
+        scan = db.session.get(ScanSession, scan_id)
+        if not scan:
+            return
+        scan.status, scan.completed_at = status, datetime.now(timezone.utc)
+        stored = db.session.get(ScanResult, scan_id)
+        result = dict(stored.result) if stored else {
+            "schema_version": "1.0", "scan_id": scan_id, "scan_type": scan.scan_type,
+            "agents": [], "security_results": [], "risk_assessments": [], "summary": {},
+        }
+        result.update(status=status, error=error)
+        if stored:
+            stored.result = result
+        else:
+            db.session.add(ScanResult(scan_id=scan_id, result=result))
+        db.session.commit()
+
+
+async def _await_scan(scan_id, scan_type, target_scope, scan_config, cancelled):
+    if cancelled is not None and cancelled.is_set():
+        raise asyncio.CancelledError
+    task = asyncio.create_task(_execute_scan(scan_id, scan_type, target_scope, scan_config))
+    timeout = scan_config.get("timeout_seconds", app.config["SCAN_TIMEOUT_SECONDS"])
+    deadline = asyncio.get_running_loop().time() + timeout
     try:
-        _run_scan_in_thread(*args)
+        while not task.done():
+            if cancelled is not None and cancelled.is_set():
+                raise asyncio.CancelledError
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise TimeoutError("Scan deadline exceeded")
+            await asyncio.wait({task}, timeout=min(0.1, remaining))
+        return await task
     finally:
-        _scan_slots.release()
+        if not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 
-def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_config: dict):
+def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_config: dict,
+                        cancelled=None):
     """Run scan in a background thread with its own event loop."""
     loop = asyncio.new_event_loop()
     try:
@@ -449,10 +548,7 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
         )
         with scan_transport(budget):
             loop.run_until_complete(
-                asyncio.wait_for(
-                    _execute_scan(scan_id, scan_type, target_scope, scan_config),
-                    timeout=scan_config.get("timeout_seconds", app.config["SCAN_TIMEOUT_SECONDS"]),
-                )
+                _await_scan(scan_id, scan_type, target_scope, scan_config, cancelled)
             )
         if budget.rejections or budget.failures:
             with app.app_context():
@@ -464,13 +560,16 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
                     db.session.commit()
                 else:
                     raise TransportPolicyError("Scan encountered rejected or failed requests")
+    except asyncio.CancelledError:
+        with app.app_context():
+            requested = _get_job_store().cancellation_requested(scan_id)
+        status = "cancelled" if requested else "interrupted"
+        _record_terminal(scan_id, status, "Scan cancelled" if requested else "Server stopped during scan")
+    except TimeoutError:
+        _record_terminal(scan_id, "failed", "Scan deadline exceeded")
     except Exception as e:
         app.logger.error(f"Scan thread error: {e}", exc_info=True)
-        with app.app_context():
-            scan_session = db.session.get(ScanSession, scan_id)
-            if scan_session:
-                scan_session.status = "failed"
-                db.session.commit()
+        _record_terminal(scan_id, "failed", "Scan worker failed")
     finally:
         loop.close()
         with _scans_lock:
@@ -534,6 +633,9 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
         # Save results
         with app.app_context():
             scan_session = db.session.get(ScanSession, scan_id)
+            job = db.session.get(ScanJob, scan_id)
+            if job and job.status == "cancel_requested":
+                raise asyncio.CancelledError
             summary = result["summary"]
             scan_session.agents_discovered = summary["agents_discovered"]
             scan_session.vulnerabilities_found = summary["vulnerabilities_found"]
@@ -598,8 +700,9 @@ def _update_progress(scan_id: str, progress: float, phase: str):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-
+    start_job_dispatcher()
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=_debug)
+    try:
+        app.run(host="127.0.0.1", port=port, debug=_debug, use_reloader=False)
+    finally:
+        stop_job_dispatcher()
