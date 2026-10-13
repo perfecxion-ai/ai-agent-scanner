@@ -16,6 +16,7 @@ import os
 import threading
 import asyncio
 import hmac
+import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any
 
@@ -32,6 +33,7 @@ from src.compliance.compliance_engine import ComplianceEngine
 from src.reporting.report_generator import ReportGenerator
 from src.utils.auth import require_auth, create_jwt_token
 from src.utils.helpers import generate_scan_id, validate_scan_scope
+from src.core.pipeline import run_pipeline, to_sarif
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -131,6 +133,13 @@ class DiscoveredAgentModel(db.Model):
 
     metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
     discovered_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class ScanResult(db.Model):
+    """Complete versioned output; separate table preserves existing database schemas."""
+
+    scan_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    result: Mapped[dict] = mapped_column(JSON, nullable=False)
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +263,7 @@ def get_scan_results(scan_id):
             return jsonify({"success": False, "error": "Scan not found"}), 404
 
         agents = DiscoveredAgentModel.query.filter_by(scan_id=scan_id).all()
+        persisted = db.session.get(ScanResult, scan_id)
 
         results = {
             "scan_info": {
@@ -273,6 +283,8 @@ def get_scan_results(scan_id):
             "agents": [
                 {
                     "id": agent.id,
+                    "asset_id": agent.metadata_json.get("asset_id", agent.id),
+                    "security_status": agent.metadata_json.get("security_status", "unknown"),
                     "name": agent.agent_name,
                     "type": agent.agent_type,
                     "provider": agent.provider,
@@ -285,12 +297,30 @@ def get_scan_results(scan_id):
                 for agent in agents
             ],
         }
+        results["pipeline"] = persisted.result if persisted else None
 
         return jsonify({"success": True, "results": results})
 
     except Exception as e:
         app.logger.error(f"Error fetching results: {e}", exc_info=True)
         return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route("/api/scans/<scan_id>/report")
+@require_auth
+def export_scan_report(scan_id):
+    scan = ScanSession.query.filter_by(id=scan_id, organization_id=g.user["organization_id"]).first()
+    if not scan:
+        return jsonify({"success": False, "error": "Scan not found"}), 404
+    result = db.session.get(ScanResult, scan_id)
+    if not result:
+        return jsonify({"success": False, "error": "Report not available"}), 409
+    output_format = request.args.get("format", "json")
+    if output_format not in {"json", "sarif"}:
+        return jsonify({"success": False, "error": "Supported formats: json, sarif"}), 400
+    response = jsonify(to_sarif(result.result) if output_format == "sarif" else result.result)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/api/agents")
@@ -399,60 +429,54 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
             traffic_sources=target_scope.get("traffic_sources"),
         )
 
-        discovered_agents = []
-
-        # Phase 1: Discovery
-        if scan_type in ("full", "discovery_only"):
-            _update_progress(scan_id, 5, "Discovering AI agents...")
-            discovered_agents = await discovery_engine.discover_agents(scope)
-            _update_progress(scan_id, 40, "Discovery complete")
-
-        # Convert DiscoveredAgent dataclass objects to dicts for security engine
-        agent_dicts = [
-            {
-                "id": a.id,
-                "name": a.name,
-                "type": a.type,
-                "provider": a.provider,
-                "endpoint": a.endpoint,
-                "discovery_method": a.discovery_method,
-                "confidence": a.confidence,
-                "metadata": a.metadata,
-            }
-            for a in discovered_agents
-        ]
-
-        # Phase 2: Security Testing
-        security_results = []
-        if scan_type in ("full", "security_only") and agent_dicts:
-            _update_progress(scan_id, 45, "Testing agent security...")
-            security_results = await security_engine.test_agents(agent_dicts)
-            _update_progress(scan_id, 80, "Security testing complete")
-
-        # Phase 3: Risk Assessment
-        if scan_type == "full" and security_results:
-            _update_progress(scan_id, 82, "Calculating risk scores...")
-            await risk_assessor.assess_risks(security_results)
-            _update_progress(scan_id, 95, "Risk assessment complete")
+        source_agents = None
+        if scan_type == "security_only":
+            with app.app_context():
+                current = db.session.get(ScanSession, scan_id)
+                source = ScanSession.query.filter_by(
+                    id=scan_config.get("source_scan_id"), organization_id=current.organization_id,
+                    status="completed",
+                ).first()
+                if not source:
+                    raise ValueError("Completed source scan required")
+                previous = db.session.get(ScanResult, source.id)
+                if not previous:
+                    raise ValueError("Source scan has no versioned results")
+                source_agents = previous.result["agents"]
+        _update_progress(scan_id, 10, "Running scan pipeline")
+        result = await run_pipeline(discovery_engine, security_engine, risk_assessor,
+                                    scope, scan_type, agents=source_agents)
+        result["scan_id"] = scan_id
+        _update_progress(scan_id, 95, "Saving results")
 
         # Save results
         with app.app_context():
             scan_session = db.session.get(ScanSession, scan_id)
-            scan_session.agents_discovered = len(discovered_agents)
-            scan_session.status = "completed"
+            summary = result["summary"]
+            scan_session.agents_discovered = summary["agents_discovered"]
+            scan_session.vulnerabilities_found = summary["vulnerabilities_found"]
+            scan_session.critical_risks = summary["critical_risks"]
+            scan_session.overall_risk_score = summary["overall_risk_score"] or 0.0
+            scan_session.status = result["status"]
             scan_session.completed_at = datetime.now(timezone.utc)
             scan_session.progress = 100.0
 
-            for agent_data in agent_dicts:
+            db.session.add(ScanResult(scan_id=scan_id, result=result))
+            for agent_data in result["agents"]:
                 agent_record = DiscoveredAgentModel(
-                    id=agent_data["id"],
+                    id=uuid.uuid4().hex,
                     scan_id=scan_id,
                     agent_name=agent_data["name"],
                     agent_type=agent_data["type"],
                     provider=agent_data.get("provider"),
                     endpoint_url=agent_data.get("endpoint"),
                     discovery_method=agent_data["discovery_method"],
-                    metadata_json=agent_data.get("metadata", {}),
+                    security_tested=agent_data["security_status"] == "completed",
+                    vulnerabilities=agent_data["vulnerabilities"],
+                    risk_score=agent_data["risk_score"] or 0.0,
+                    risk_level=agent_data["risk_level"],
+                    metadata_json={**agent_data.get("metadata", {}), "asset_id": agent_data["id"],
+                                   "security_status": agent_data["security_status"]},
                 )
                 db.session.add(agent_record)
 
@@ -464,6 +488,12 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
             scan_session = db.session.get(ScanSession, scan_id)
             if scan_session:
                 scan_session.status = "failed"
+                scan_session.completed_at = datetime.now(timezone.utc)
+                db.session.add(ScanResult(scan_id=scan_id, result={
+                    "schema_version": "1.0", "scan_id": scan_id, "scan_type": scan_type,
+                    "status": "failed", "error": "Scan execution failed", "agents": [],
+                    "summary": {},
+                }))
                 db.session.commit()
 
 
