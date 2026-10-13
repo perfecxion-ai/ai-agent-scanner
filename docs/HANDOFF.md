@@ -1,6 +1,6 @@
 # Continuation handoff
 
-## Starting checkpoint
+## Original checkpoint
 
 Baseline: `b5efe3f`, main after PRs #1 through #14. The working tree was clean and
 all seven CI jobs passed. Local validation recorded 422 pytest cases, 11 Node
@@ -14,14 +14,21 @@ scope and transport enforcement, a durable SQLite queue, passive MCP assessment,
 offline replay, report comparison, and expiring suppression policies. The broader
 milestones in [the engineering plan](ENGINEERING_PLAN.md) remain partially complete.
 
-## Next delivery sequence
+## Completed continuation slices
+
+PRs #15 through #22 persist the delivery rules, pin CI actions, strengthen
+traffic/cloud discovery, add check contracts, version known SQLite upgrades,
+persist audit events, add queue-load acceptance, and expose evidence/audit
+history in the dashboard. The acceptance results below cover local fixtures,
+not a production release or all milestones. The updated measured checkpoint is
+in [validation](VALIDATION.md).
 
 ### 1. Make discovery failure and resource identity reliable
 
-Own cloud inventory and traffic parsing in separate scoped commits. Parse URLs
-and structured records, bound file and SDK pagination work, preserve stable
-resource identities, and expose unavailable or failed sources without losing
-successful observations. Cloud resources require resource-specific identity;
+Cloud inventory and traffic parsing now parse URLs and structured records,
+bound file and SDK pagination work, preserve stable resource identities, and
+expose unavailable or failed sources without losing successful observations.
+Cloud resources require resource-specific identity;
 a shared provider runtime URL cannot identify several deployed models.
 
 Acceptance: positive and negative HAR/JSON/text fixtures, spoofed-host rejection,
@@ -31,9 +38,9 @@ SDK fixtures run without real provider accounts.
 
 ### 2. Complete the scan and check contracts
 
-Introduce typed scan, asset, finding, and evidence records and versioned check
-records while preserving existing JSON/SARIF consumers. Record execution and
-oracle outcomes explicitly. A missing finding can be resolved only when the same
+Typed scan, asset, finding, and evidence records and versioned check records
+preserve existing JSON/SARIF consumers and record execution and oracle outcomes
+explicitly. A missing finding can be resolved only when the same
 versioned check actually passed for the same unambiguous asset.
 
 Acceptance: skipped prerequisites, rejected requests, failures, and heuristic
@@ -43,16 +50,44 @@ existing version 1.0 reports remain readable.
 
 ### 3. Version SQLite upgrades and persist audit history
 
-Add transactional schema versioning for known existing layouts and safe fresh
-initialization. Acquire exclusive dispatcher ownership before migration/recovery.
-Persist admission, claim, cancellation, and terminal audit events in the same
-transaction as each state transition. Expose bounded tenant-owned audit history.
+Transactional schema versioning supports known existing layouts and safe fresh
+initialization. Exclusive dispatcher ownership precedes migration/recovery.
+Admission, claim, cancellation, and terminal audit events persist in the same
+transaction as each state transition. Audit history is bounded and tenant-owned.
 
 Acceptance: fresh and known legacy upgrades preserve rows; unknown/future schemas
 fail before writes; interrupted upgrades roll back; repeated calls do not duplicate
 transitions; cancellation cannot leave inconsistent terminal job/session/report
 states. Audit records contain only operational identifiers, states, and timestamps.
 This history is not a tamper-resistant audit system.
+
+### Additional acceptance
+
+The local synthetic queue benchmark checks deterministic terminal counts,
+unique claims, bounded workers, and matching job/session/report/audit states.
+The dashboard displays per-asset check execution and outcome, unassessed risk,
+cloud resource IDs, and authenticated audit pagination. Node regressions cover
+stale requests, logout, bounded display, and text rendering. Chromium fixtures
+cover the corresponding authenticated desktop/mobile workflows.
+
+## Next delivery sequence
+
+1. Expand representative local service-signature fixtures, starting with network
+   discovery's negative cases and bounded incomplete responses. Separate real
+   provider compatibility from mocked SDK acceptance; do not require paid calls.
+2. Add one explicitly supported live lab protocol at a time for the M4 surfaces.
+   Start with a constrained local MCP fixture and public tool schemas. Specify
+   authorization, scope, transport, canary provenance, and request limits before
+   enabling live probes. Keep offline replay available and do not execute arbitrary
+   imported tool commands as a convenience.
+3. Add saved templates and scheduling only through the existing tenant-owned
+   admission/policy path. Review schema changes, bounded recurrence, restart
+   behavior, cancellation, and server policy revalidation before implementation.
+   External integrations need an explicit supported destination and secret contract.
+
+Each slice needs positive/negative fixtures, a concise independent review, all
+required CI checks, and truthful operator documentation before merge. These are
+implementation priorities, not additional deployment or publication authority.
 
 ## Verification and review
 

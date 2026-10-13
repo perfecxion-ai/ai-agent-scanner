@@ -76,20 +76,30 @@ These are source-review findings, not evidence of exploitation in a deployment.
   persisted results, conservative evidence checks, and initial discovery fixes.
   Integration review and release validation continue; this is not a production
   readiness declaration.
-- M2 has a shared CLI/API pipeline, versioned result snapshots, bounded transport,
-  and server scope enforcement. Uniform typed domain contracts and full probe
-  coverage accounting remain incomplete.
+- M2 has a shared CLI/API pipeline, typed scan/asset/finding/evidence contracts,
+  versioned result snapshots and check records, bounded transport, and server
+  scope enforcement. Eighteen existing probe groups record execution and evidence
+  outcomes. New risk assessment requires conclusive completed check evidence;
+  exact versioned evidence is required for verified finding resolution. This
+  accounts for implemented sampled groups, not every possible attack surface.
 - M3 has a durable SQLite queue, exclusive startup recovery, bounded workers,
   cooperative cancellation, deadlines, and readiness checks. Race and restart
   tests pass. Known SQLite schema upgrades and transactional tenant audit history
-  have acceptance tests. PostgreSQL/distributed coordination and a general
+  have acceptance tests. A bounded local synthetic load workload verifies unique
+  claims, worker limits, terminal consistency, and audit records. PostgreSQL/distributed coordination and a general
   migration framework remain outside the supported deployment boundary.
 - M4 has passive MCP configuration/schema checks and offline replay for indirect
   markers, RAG tenant canaries, and tool authorization requests. These fixtures
   do not establish live attack coverage. Broader live integrations, output sinks,
   supply-chain checks, and representative accuracy benchmarks remain pending.
 - M5 has scoped history and exports, a redesigned dashboard, source model
-  selection, inventory/finding comparison, and expiring suppressions. Scheduling,
+  selection, inventory/finding comparison, expiring suppressions, check evidence,
+  and paginated operational audit history. Scheduling,
   external integrations, and comprehensive accessibility acceptance remain pending.
 - M6 remains pending. Package and container CI are foundations, not completion of
   performance testing, deployment review, migration validation, or release sign-off.
+
+Discovery now has bounded traffic-format and mocked cloud SDK acceptance,
+resource-specific cloud identity, and explicit incomplete-source status. Real
+provider accounts and representative capture corpora still need validation.
+CI actions are pinned and uploaded distributions are downloaded and compared.
