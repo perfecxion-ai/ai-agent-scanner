@@ -1,6 +1,6 @@
 """Transport tests run against a synthetic loopback server."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import aiohttp
 from aiohttp import web
@@ -97,3 +97,25 @@ async def test_dns_answer_validated_at_connection_time():
 def test_non_http_and_embedded_credentials_rejected(url):
     with pytest.raises(TransportPolicyError):
         ScanBudget().reserve(url)
+
+
+@pytest.mark.asyncio
+async def test_tcp_discovery_checks_scope_before_opening_socket():
+    from src.discovery.network_scanner import NetworkScanner
+    budget = ScanBudget(allowed_networks=('192.0.2.0/24',))
+    with scan_transport(budget), patch('asyncio.open_connection', AsyncMock()) as connect:
+        assert not await NetworkScanner()._is_port_open('169.254.169.254', 80)
+        assert not await NetworkScanner()._is_port_open('198.51.100.1', 80)
+        connect.assert_not_called()
+    assert budget.rejections == 2
+
+
+@pytest.mark.asyncio
+async def test_tcp_discovery_consumes_shared_budget():
+    from src.discovery.network_scanner import NetworkScanner
+    budget = ScanBudget(allowed_networks=('192.0.2.0/24',), max_requests=1)
+    with scan_transport(budget), patch('asyncio.open_connection', AsyncMock(side_effect=OSError)) as connect:
+        assert not await NetworkScanner()._is_port_open('192.0.2.1', 80)
+        assert not await NetworkScanner()._is_port_open('192.0.2.1', 443)
+        assert connect.call_count == 1
+    assert budget.rejections == 1

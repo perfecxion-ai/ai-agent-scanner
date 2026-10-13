@@ -1,6 +1,6 @@
 import asyncio
 import aiohttp
-from src.core.transport import SafeSession
+from src.core.transport import SafeSession, current_budget, TransportPolicyError
 from typing import List, Dict, Any
 import ipaddress
 import dns.resolver
@@ -105,6 +105,16 @@ class NetworkScanner:
     
     async def _is_port_open(self, host: str, port: int) -> bool:
         """Check if a port is open on the host"""
+        budget = current_budget()
+        if budget:
+            try:
+                address = ipaddress.ip_address(host)
+                budget.check_address(address)
+                authority = f'[{host}]' if address.version == 6 else host
+                budget.reserve(f'http://{authority}:{port}')
+            except (ValueError, TransportPolicyError):
+                budget.rejections += 1
+                return False
         try:
             # Use asyncio to create connection with timeout
             future = asyncio.open_connection(host, port)
