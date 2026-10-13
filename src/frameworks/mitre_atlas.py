@@ -34,7 +34,7 @@ ATLAS_TECHNIQUES: Dict[str, ATLASTechnique] = {
             "prompt_injection", "instruction_bypass", "role_manipulation",
             "dan_jailbreak", "context_manipulation", "payload_injection",
         ],
-        test_coverage="full",
+        test_coverage="partial",
         references=["https://atlas.mitre.org/techniques/AML.T0051"],
     ),
 
@@ -46,7 +46,7 @@ ATLAS_TECHNIQUES: Dict[str, ATLASTechnique] = {
         vulnerability_types=[
             "dan_jailbreak", "role_manipulation", "injection_via_encoding",
         ],
-        test_coverage="full",
+        test_coverage="partial",
         references=["https://atlas.mitre.org/techniques/AML.T0054"],
     ),
 
@@ -58,7 +58,7 @@ ATLAS_TECHNIQUES: Dict[str, ATLASTechnique] = {
         vulnerability_types=[
             "system_prompt_extraction", "instruction_leakage", "configuration_exposure",
         ],
-        test_coverage="full",
+        test_coverage="partial",
         references=["https://atlas.mitre.org/techniques/AML.T0056"],
     ),
 
@@ -82,7 +82,7 @@ ATLAS_TECHNIQUES: Dict[str, ATLASTechnique] = {
         vulnerability_types=[
             "authentication_bypass", "authorization_bypass", "information_disclosure_in_errors",
         ],
-        test_coverage="full",
+        test_coverage="partial",
         references=["https://atlas.mitre.org/techniques/AML.T0024"],
     ),
 
@@ -118,7 +118,7 @@ ATLAS_TECHNIQUES: Dict[str, ATLASTechnique] = {
         vulnerability_types=[
             "weak_credentials", "weak_api_key", "no_rate_limiting",
         ],
-        test_coverage="full",
+        test_coverage="partial",
         references=["https://atlas.mitre.org/techniques/AML.T0040"],
     ),
 
@@ -162,14 +162,15 @@ def map_vulnerability_to_atlas(vulnerability: Dict[str, Any]) -> List[str]:
 
 
 def generate_atlas_coverage_report(vulnerabilities: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Generate a MITRE ATLAS coverage and findings report."""
+    """Report declared mapping scope and findings, not executed test coverage."""
     report = {
         'framework': 'MITRE ATLAS',
+        'coverage_basis': 'static_mapping_not_execution',
         'techniques': {},
         'summary': {
             'total_techniques': len(ATLAS_TECHNIQUES),
             'techniques_with_findings': 0,
-            'techniques_tested': 0,
+            'techniques_with_declared_checks': 0,
         }
     }
 
@@ -187,7 +188,7 @@ def generate_atlas_coverage_report(vulnerabilities: List[Dict[str, Any]]) -> Dic
         }
 
         if technique.test_coverage in ('full', 'partial'):
-            report['summary']['techniques_tested'] += 1
+            report['summary']['techniques_with_declared_checks'] += 1
         if tech_vulns:
             report['summary']['techniques_with_findings'] += 1
 

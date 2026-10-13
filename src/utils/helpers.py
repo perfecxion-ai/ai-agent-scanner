@@ -20,12 +20,12 @@ _HOSTNAME_RE = re.compile(
 )
 
 
-def validate_scan_scope(scope: Dict[str, Any]) -> Tuple[bool, str]:
+def validate_scan_scope(scope: Dict[str, Any], *, allow_loopback: bool = False) -> Tuple[bool, str]:
     """
     Validate scan scope configuration.
 
     Returns:
-        (is_valid, error_message) — error_message is empty string when valid.
+        (is_valid, error_message); error_message is empty when valid.
     """
     if not isinstance(scope, dict):
         return False, "Scope must be a JSON object"
@@ -50,8 +50,8 @@ def validate_scan_scope(scope: Dict[str, Any]) -> Tuple[bool, str]:
         if network.num_addresses > MAX_HOSTS_PER_RANGE:
             return False, f"Network range {cidr} exceeds maximum of {MAX_HOSTS_PER_RANGE} hosts"
 
-        # Block scanning common dangerous ranges
-        if network.is_loopback:
+        # Server callers must opt in; the local CLI explicitly selects its targets.
+        if network.is_loopback and not allow_loopback:
             return False, f"Cannot scan loopback range: {cidr}"
 
     # Validate domains

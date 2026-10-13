@@ -52,13 +52,17 @@ python scanner_cli.py scan --domain api.company.com --output report.json
 
 70+ prompt injection payloads. 15+ auth bypass techniques. PII disclosure detection across seven data types. Rate limiting. Session management. Cross-tenant leakage.
 
-Every test is non-destructive. Built-in rate limiting and request caps ensure the scanner doesn't knock over what it's trying to protect.
+Active probes can consume resources and trigger target-agent side effects.
+Request budgets and delays limit scanner activity but cannot guarantee target
+safety. Use authorized lab targets, synthetic data, and appropriate isolation.
 
 **3. Score** — Tell the business what it means.
 
 The output isn't "you have 47 vulnerabilities." It's:
 
-> Your customer-facing chatbot on api.company.com has a risk score of 78/100, it's non-compliant with GDPR Article 32, and the highest priority fix is implementing authentication.
+> This chatbot has an authentication finding requiring review. Its risk estimate
+> helps prioritize investigation; framework references do not establish legal
+> noncompliance or certification.
 
 Findings are mapped to OWASP LLM Top 10, MITRE ATLAS, and six compliance frameworks (GDPR, SOC 2, HIPAA, PCI DSS, NIST AI RMF, EU AI Act).
 
