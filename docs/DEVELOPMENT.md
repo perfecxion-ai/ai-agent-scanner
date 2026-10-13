@@ -32,11 +32,17 @@ docker run --rm -p 127.0.0.1:5000:5000 \
 ```
 
 The container initializes missing database tables and starts Gunicorn as an
-unprivileged user. Keep one worker: scans currently depend on process-local
-threads and state. A restart can interrupt an active scan. Table creation does
-not migrate an existing database schema. The default SQLite database lives in
+unprivileged user. Keep one worker and one server instance per database. Queued
+jobs survive restarts; active jobs are marked interrupted and are not replayed.
+Table creation adds the job and result tables but does not alter existing table
+schemas. The default SQLite database lives in
 `/app/instance`; use a volume to retain it between containers. TLS belongs at the
 deployment proxy. Review authentication configuration before exposing the server.
+The persistent dispatcher currently requires file-backed SQLite on a POSIX
+server; PostgreSQL and distributed execution are not implemented. Start Gunicorn
+with `--config gunicorn.conf.py` so its lifecycle hooks start and stop the queue.
+The development server (`python app.py`) binds only to `127.0.0.1` and disables
+the reloader to avoid duplicate dispatchers. See [job operations](jobs.md).
 
 ## CI and publication
 

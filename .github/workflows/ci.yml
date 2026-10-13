@@ -72,3 +72,6 @@ jobs:
           docker run -d --name scanner -p 127.0.0.1:5000:5000 -e SECRET_KEY="$(openssl rand -hex 32)" ai-agent-scanner:ci
           trap 'docker logs scanner; docker rm -f scanner' EXIT
           curl --fail --retry 15 --retry-all-errors --retry-delay 2 http://127.0.0.1:5000/
+          curl --fail --retry 15 --retry-all-errors --retry-delay 2 http://127.0.0.1:5000/health/ready
+          docker restart scanner
+          curl --fail --retry 15 --retry-all-errors --retry-delay 2 http://127.0.0.1:5000/health/ready

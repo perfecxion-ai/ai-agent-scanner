@@ -2,7 +2,6 @@
 
 import importlib
 import sys
-import threading
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -23,7 +22,7 @@ def api(monkeypatch):
                              OPERATOR_ORGANIZATION_ID="tenant-a",
                              SCAN_ALLOWED_NETWORKS=("192.0.2.0/24",),
                              SCAN_ALLOWED_PATH_ROOTS=(), SCAN_ALLOW_LOOPBACK=False)
-    monkeypatch.setattr(module, "_scan_slots", threading.BoundedSemaphore(2), raising=False)
+    monkeypatch.setattr(module, "_job_dispatcher", None)
     with module.app.app_context():
         assert module.db.engine.url.database == ":memory:"
         module.db.create_all()
@@ -132,8 +131,8 @@ def test_scan_created_in_authenticated_organization(api):
         response = client.post("/api/scans", headers=headers(module), json={
             "organization_id": "tenant-b", "scan_type": "discovery_only",
             "target_scope": {"include_network": True, "network_ranges": ["192.0.2.1/32"]}})
-        assert response.status_code == 200
-        thread.return_value.start.assert_called_once()
+        assert response.status_code == 202
+        thread.assert_not_called()
     scan = module.db.session.get(module.ScanSession, response.json["scan_id"])
     assert scan.organization_id == "tenant-a"
     assert scan.created_by == "operator"
