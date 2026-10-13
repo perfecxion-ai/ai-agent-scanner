@@ -117,6 +117,16 @@ async def test_endpoint_redaction_is_marked():
     assert result['agents'][0]['endpoint_redacted'] is True
 
 
+@pytest.mark.asyncio
+async def test_discovery_redaction_provenance_survives_public_snapshot():
+    original = asset('https://api.openai.com/v1/chat/completions')
+    original['metadata']['endpoint_redacted'] = True
+    discovery, security, risk = engines([original])
+    result = await run_pipeline(discovery, security, risk, None, 'discovery_only')
+    assert result['agents'][0]['endpoint_redacted'] is True
+    assert result['agents'][0]['endpoint'] == original['endpoint']
+
+
 def add_scan(module, scan_id, organization="tenant-a", mode="full"):
     module.db.session.add(module.ScanSession(id=scan_id, organization_id=organization,
                           scan_name=scan_id, scan_type=mode, target_scope={}, scan_config={}))

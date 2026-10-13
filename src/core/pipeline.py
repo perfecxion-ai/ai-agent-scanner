@@ -78,7 +78,11 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         agent["metadata"] = public_metadata(original.get("metadata", {}))
         if agent.get("endpoint"):
             endpoint = urlsplit(agent["endpoint"])
-            agent["endpoint_redacted"] = bool(endpoint.query or endpoint.username or endpoint.password)
+            agent["endpoint_redacted"] = bool(
+                original.get("endpoint_redacted") is True or
+                original.get("metadata", {}).get("endpoint_redacted") is True or
+                endpoint.query or endpoint.username or endpoint.password
+            )
             agent["endpoint"] = urlunsplit((endpoint.scheme, endpoint.netloc.rsplit('@', 1)[-1], endpoint.path, '', ''))
         test = tests_by_id.get(agent["id"], {})
         assessment = risks_by_id.get(agent["id"], {})
