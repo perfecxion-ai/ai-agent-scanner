@@ -92,6 +92,9 @@ class TrafficAnalyzer:
                                  'evidence_status': 'observed_request'},
                 })
                 item['metadata']['total_api_calls'] += 1
+                parsed = urlsplit(url)
+                if parsed.username is not None or parsed.password is not None or parsed.query:
+                    item['metadata']['endpoint_redacted'] = True
                 if method:
                     item['metadata']['methods'].add(method.upper())
                 item['metadata']['source_files'].add(str(file_path))

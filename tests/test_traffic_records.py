@@ -50,6 +50,7 @@ async def test_one_request_count_and_safe_stable_identity(tmp_path, suffix):
     assert result[0]['metadata']['total_api_calls'] == 2
     assert result[0]['metadata']['methods'] == ['POST']
     assert result[0]['endpoint'] == 'https://api.openai.com/v1/chat/completions'
+    assert result[0]['metadata']['endpoint_redacted'] is True
     assert 'synthetic-' not in json.dumps(result)
     assert 'internet_facing' not in result[0]['metadata']
     assert await scanner.analyze_traffic(str(path)) == result
