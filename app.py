@@ -13,7 +13,6 @@ Environment variables:
 """
 
 import os
-import logging
 import threading
 import asyncio
 from datetime import datetime, timezone

@@ -5,37 +5,38 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio pytest-cov
-
+        run: python -m pip install ".[dev]"
       - name: Run tests
+        run: python -m pytest tests/ -v --cov=src --cov=app --cov=scanner_cli --cov-report=xml
+      - name: Build and check distributions
         run: |
-          python -m pytest tests/ -v --cov=src --cov-report=xml
-
-      - name: Upload coverage
+          python -m build
+          python -m twine check dist/*
+      - name: Smoke test installed CLI outside repository
+        run: sh scripts/package-smoke.sh dist/*.whl
+      - uses: actions/upload-artifact@v4
         if: matrix.python-version == '3.12'
-        uses: codecov/codecov-action@v4
         with:
-          file: coverage.xml
+          name: distributions
+          path: dist/*
 
   lint:
     runs-on: ubuntu-latest
@@ -44,8 +45,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff
-      - run: ruff check src/ tests/
+      - run: python -m pip install ".[dev]"
+      - run: ruff check .
 
   security:
     runs-on: ubuntu-latest
@@ -54,6 +55,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install bandit safety
-      - run: bandit -r src/ -ll
-      - run: safety check -r requirements.txt || true
+      - run: python -m pip install ".[dev,server,cloud]"
+      - name: Check source security issues
+        run: bandit -r src scanner_cli.py cli.py -ll
+      - name: Audit installed dependencies
+        run: pip-audit
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build container
+        run: docker build -t ai-agent-scanner:ci .
+      - name: Smoke test HTTP server
+        run: |
+          docker run -d --name scanner -p 127.0.0.1:5000:5000 -e SECRET_KEY="$(openssl rand -hex 32)" ai-agent-scanner:ci
+          trap 'docker logs scanner; docker rm -f scanner' EXIT
+          curl --fail --retry 15 --retry-all-errors --retry-delay 2 http://127.0.0.1:5000/
