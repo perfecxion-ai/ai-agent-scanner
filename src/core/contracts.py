@@ -248,6 +248,17 @@ def proves_absence(check, finding):
             and record.probe_version == finding.get("probe_version"))
 
 
+def risk_assessment_eligible(result):
+    """Legacy adapters retain compatibility; modern evidence must be conclusive."""
+    if result.get("status") != "completed":
+        return False
+    if "check_schema_version" not in result:
+        return True
+    return result["check_schema_version"] == CHECK_SCHEMA_VERSION and any(
+        check.get("status") == "completed" and check.get("outcome") in {"passed", "confirmed"}
+        for check in result.get("checks", []))
+
+
 def validate_scan_result(result):
     if not isinstance(result, dict) or result.get("schema_version") != "1.0":
         raise ValueError("Expected a version 1.0 scan report")

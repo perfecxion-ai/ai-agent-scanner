@@ -62,6 +62,16 @@ completed risk assessment for that asset. Optional checks without prerequisites
 remain skipped. Completion describes executed coverage; it is not a claim that
 every rule passed or that the asset has no vulnerabilities.
 
+Modern completed results also require at least one completed `passed` or
+`confirmed` check before risk assessment. An execution containing only
+heuristic/inconclusive responses and skipped oracles remains completed, but
+its risk is unknown, score is null, and `risk_assessment_status` is
+`not_assessed` when no asset qualifies. Summary fields
+`agents_risk_assessed` and `agents_risk_not_assessed` expose this distinction.
+Older engine adapters without `check_schema_version` retain their previous
+risk eligibility for compatibility; missing legacy check evidence still
+cannot prove finding resolution.
+
 Report comparison resolves an absent finding only when the same unambiguous,
 unredacted endpoint has explicit completed, passed evidence for every earlier
 occurrence's exact rule, probe ID, and probe version. Changed versions,

@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional, Callable
 import logging
 from src.core.transport import current_budget
 from src.utils.request_builder import construct_agent_request
-from src.core.contracts import CHECK_SCHEMA_VERSION, collect_checks, missing_checks
+from src.core.contracts import CHECK_SCHEMA_VERSION, collect_checks, missing_checks, risk_assessment_eligible
 
 # Import test modules from guardrail tester
 from .prompt_injection_tests import PromptInjectionTester
@@ -114,6 +114,8 @@ class SecurityTestEngine:
                 test_results['status'] = 'partial'
                 test_results['overall_risk_score'] = None
                 test_results['limitations'].append('Some requests failed or were refused by transport policy.')
+            if not risk_assessment_eligible(test_results):
+                test_results['overall_risk_score'] = None
             
         except Exception:
             self.logger.error("Security testing failed")

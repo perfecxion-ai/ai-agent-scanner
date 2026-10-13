@@ -8,7 +8,7 @@ from src.core.transport import current_budget, scan_transport, ScanBudget
 from src.core.redaction import collect_secrets, redact_secrets
 from src.reporting.sarif_output import generate_sarif
 from src.utils.request_builder import resolve_api_key
-from src.core.contracts import CHECK_SCHEMA_VERSION, missing_checks, validate_checks, validate_scan_result
+from src.core.contracts import CHECK_SCHEMA_VERSION, missing_checks, validate_checks, validate_scan_result, risk_assessment_eligible
 
 
 SCHEMA_VERSION = "1.0"
@@ -77,11 +77,12 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
             secrets.update(collect_secrets(result))
             security_results.append(result)
     completed = [result for result in security_results if result["status"] == "completed"]
-    risk_status = "not_run"
+    eligible = [result for result in completed if risk_assessment_eligible(result)]
+    risk_status = "not_assessed" if completed and not eligible else "not_run"
     risks = []
-    if completed:
+    if eligible:
         try:
-            risks = await risk.assess_risks(completed)
+            risks = await risk.assess_risks(eligible)
             risk_status = "completed"
         except Exception:
             risk_status = "failed"
@@ -132,6 +133,8 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
             "agents_tested": len(completed), "agents_failed": failed, "agents_skipped": skipped,
             "agents_partial": partial,
             "agents_not_tested": len(observations) - len(security_results),
+            "agents_risk_assessed": len(risks),
+            "agents_risk_not_assessed": len(observations) - len(risks),
             "checks_completed": sum(check["status"] == "completed" for agent in observations for check in agent["checks"]),
             "checks_skipped": sum(check["status"] == "skipped" for agent in observations for check in agent["checks"]),
             "checks_failed": sum(check["status"] == "failed" for agent in observations for check in agent["checks"]),
