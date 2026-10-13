@@ -438,6 +438,7 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
         asyncio.set_event_loop(loop)
         budget = ScanBudget(
             allowed_networks=app.config["SCAN_ALLOWED_NETWORKS"],
+            allow_loopback=app.config["SCAN_ALLOW_LOOPBACK"],
             max_requests=app.config["SCAN_MAX_REQUESTS"],
             max_response_bytes=app.config["SCAN_MAX_RESPONSE_BYTES"],
         )

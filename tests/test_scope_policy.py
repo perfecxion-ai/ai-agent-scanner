@@ -199,6 +199,7 @@ def test_transport_failures_cannot_produce_clean_scan(api, monkeypatch, counter)
     async def blocked(*args):
         budget = current_budget()
         assert budget.allowed_networks == ("192.0.2.0/24",)
+        assert budget.allow_loopback is False
         setattr(budget, counter, 1)
         with module.app.app_context():
             scan = module.db.session.get(module.ScanSession, "transport")
@@ -209,3 +210,19 @@ def test_transport_failures_cannot_produce_clean_scan(api, monkeypatch, counter)
     module._run_scan_in_thread("transport", "discovery_only", {}, {})
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, "transport").status == "failed"
+
+
+def test_loopback_opt_in_reaches_worker_transport(api, monkeypatch):
+    module, _ = api
+    monkeypatch.setitem(module.app.config, "SCAN_ALLOWED_NETWORKS", ("127.0.0.1/32",))
+    monkeypatch.setitem(module.app.config, "SCAN_ALLOW_LOOPBACK", True)
+    seen = []
+
+    async def local_fixture(*args):
+        budget = current_budget()
+        budget.check_address("127.0.0.1")
+        seen.append(budget.allow_loopback)
+
+    monkeypatch.setattr(module, "_execute_scan", local_fixture)
+    module._run_scan_in_thread("local", "discovery_only", {}, {})
+    assert seen == [True]
