@@ -55,5 +55,8 @@ audit failures fail CI. The dependency audit needs access to the advisory servic
 A published GitHub release reruns CI and publishes the distribution artifacts
 produced by that successful run through the `pypi` environment. Configure its
 protection rules and PyPI trusted publisher before releasing. Merging a PR does
-not publish a package. Dependency ranges are currently resolved during each
+not publish a package. Workflow actions use pinned commit IDs and an explicit
+Ubuntu runner version. CI downloads its uploaded distributions and verifies their
+contents; artifact digest mismatches fail download. Review upstream changes before
+updating pins. Dependency ranges are currently resolved during each
 build; a fully reproducible deployment lock remains future work.
