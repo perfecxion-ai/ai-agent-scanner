@@ -36,6 +36,7 @@ from src.utils.auth import require_auth, create_jwt_token
 from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
+from src.core.transport import ScanBudget, scan_transport, TransportPolicyError
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -435,12 +436,20 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
     loop = asyncio.new_event_loop()
     try:
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(
-            asyncio.wait_for(
-                _execute_scan(scan_id, scan_type, target_scope, scan_config),
-                timeout=scan_config.get("timeout_seconds", app.config["SCAN_TIMEOUT_SECONDS"]),
-            )
+        budget = ScanBudget(
+            allowed_networks=app.config["SCAN_ALLOWED_NETWORKS"],
+            max_requests=app.config["SCAN_MAX_REQUESTS"],
+            max_response_bytes=app.config["SCAN_MAX_RESPONSE_BYTES"],
         )
+        with scan_transport(budget):
+            loop.run_until_complete(
+                asyncio.wait_for(
+                    _execute_scan(scan_id, scan_type, target_scope, scan_config),
+                    timeout=scan_config.get("timeout_seconds", app.config["SCAN_TIMEOUT_SECONDS"]),
+                )
+            )
+        if budget.rejections or budget.failures:
+            raise TransportPolicyError("Scan encountered rejected or failed requests")
     except Exception as e:
         app.logger.error(f"Scan thread error: {e}", exc_info=True)
         with app.app_context():

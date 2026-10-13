@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from src.core.scope import ScopePolicy, ScopeValidationError, validate_agent_endpoints, validate_request
+from src.core.transport import current_budget
 from tests.test_api_auth import api as api, headers
 
 
@@ -186,3 +187,25 @@ def test_deadline_marks_failed_and_worker_releases_capacity(api, monkeypatch):
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, "deadline").status == "failed"
     assert module._scan_slots.acquire(blocking=False)
+
+
+@pytest.mark.parametrize("counter", ["failures", "rejections"])
+def test_transport_failures_cannot_produce_clean_scan(api, monkeypatch, counter):
+    module, _ = api
+    module.db.session.add(module.ScanSession(id="transport", organization_id="tenant-a", scan_name="x",
+                          scan_type="discovery_only", target_scope={}, scan_config={}))
+    module.db.session.commit()
+
+    async def blocked(*args):
+        budget = current_budget()
+        assert budget.allowed_networks == ("192.0.2.0/24",)
+        setattr(budget, counter, 1)
+        with module.app.app_context():
+            scan = module.db.session.get(module.ScanSession, "transport")
+            scan.status = "completed"
+            module.db.session.commit()
+
+    monkeypatch.setattr(module, "_execute_scan", blocked)
+    module._run_scan_in_thread("transport", "discovery_only", {}, {})
+    module.db.session.expire_all()
+    assert module.db.session.get(module.ScanSession, "transport").status == "failed"
