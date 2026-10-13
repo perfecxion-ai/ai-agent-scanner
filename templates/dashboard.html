@@ -30,6 +30,13 @@
     </header>
 
     <main class="container mx-auto px-4 py-8">
+        <form id="loginForm" class="bg-white rounded-lg shadow p-6 mb-8">
+            <label for="operatorKey">Operator API key</label>
+            <input id="operatorKey" type="password" autocomplete="off" required class="border rounded p-2">
+            <button type="submit">Sign in</button>
+            <button id="logoutBtn" type="button">Sign out</button>
+            <p id="authStatus" role="status">Sign in to access scans.</p>
+        </form>
         <!-- Dashboard Overview -->
         <div class="mb-8">
             <h2 class="text-3xl font-bold text-gray-900 mb-6">Security Overview</h2>
