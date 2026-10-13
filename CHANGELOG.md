@@ -13,6 +13,8 @@ These changes are engineering work on the current branch, not a published releas
   Separate heuristic observations from confirmed findings and preserve incomplete status.
 - Remove retention claims based solely on conversational recall.
 - Redact recognized credentials in nested reports and omit issued cookie values.
+- Persist a bounded SQLite job queue with exclusive recovery, cooperative cancellation,
+  current-policy revalidation, and readiness checks.
 
 ### Results and interfaces
 
@@ -23,6 +25,9 @@ These changes are engineering work on the current branch, not a published releas
 - Add passive local MCP configuration and tool-schema assessment with versioned rules.
 - Add offline replay fixtures for indirect markers, foreign-tenant document
   canaries, and tool-request policies, with labeled confusion and accuracy metrics.
+- Add explicit model/protocol adapters, tenant-owned scan history, and source model selection.
+- Redesign the operator dashboard with local assets, cancellation, and authenticated exports.
+- Compare saved reports and apply exact-match expiring suppressions without changing evidence.
 
 ### Delivery and documentation
 
@@ -35,8 +40,8 @@ These changes are engineering work on the current branch, not a published releas
 
 ### Still incomplete
 
-- Durable execution, restart recovery, comprehensive migrations, and distributed workers.
-- Enterprise identity, complete finding lifecycle workflows, and audit guarantees.
+- Comprehensive migrations, PostgreSQL coordination, and distributed workers.
+- Enterprise identity, scheduling, external integrations, and audit guarantees.
 - Live coverage of all MCP, indirect injection, RAG, multimodal, and supply-chain scenarios.
 - Representative accuracy and performance benchmarks and release-candidate acceptance.
 

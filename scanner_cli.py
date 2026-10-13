@@ -109,7 +109,7 @@ def load_targets(network, domain, repository=(), traffic=(), config=None):
             agent.setdefault('discovery_method', 'explicit')
             agent.setdefault('metadata', {})
     else:
-        valid, error = validate_scan_scope(scope)
+        valid, error = validate_scan_scope(scope, allow_loopback=True)
         if not valid:
             raise click.ClickException(error)
     return DiscoveryScope(**scope), agents

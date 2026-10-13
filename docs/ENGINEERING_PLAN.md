@@ -79,13 +79,16 @@ These are source-review findings, not evidence of exploitation in a deployment.
 - M2 has a shared CLI/API pipeline, versioned result snapshots, bounded transport,
   and server scope enforcement. Uniform typed domain contracts and full probe
   coverage accounting remain incomplete.
-- M3 has bounded admission and deadlines, but durable jobs, restart recovery,
-  migrations, cancellation workflows, and audit acceptance remain pending.
+- M3 has a durable SQLite queue, exclusive startup recovery, bounded workers,
+  cooperative cancellation, deadlines, and readiness checks. Race and restart
+  tests pass. PostgreSQL/distributed coordination, comprehensive migrations,
+  and audit acceptance remain pending.
 - M4 has passive MCP configuration/schema checks and offline replay for indirect
   markers, RAG tenant canaries, and tool authorization requests. These fixtures
   do not establish live attack coverage. Broader live integrations, output sinks,
   supply-chain checks, and representative accuracy benchmarks remain pending.
-- M5 has scoped report exports. Inventory/finding lifecycle, suppressions,
-  scheduling, integrations, and full operator-flow acceptance remain pending.
+- M5 has scoped history and exports, a redesigned dashboard, source model
+  selection, inventory/finding comparison, and expiring suppressions. Scheduling,
+  external integrations, and comprehensive accessibility acceptance remain pending.
 - M6 remains pending. Package and container CI are foundations, not completion of
   performance testing, deployment review, migration validation, or release sign-off.

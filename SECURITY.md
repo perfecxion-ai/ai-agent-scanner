@@ -26,10 +26,12 @@ addresses, redirects are disabled, and requests and response bodies are bounded.
 Filesystem preflight is not a sandbox: allowed roots must not be concurrently
 modified by untrusted users. See [scan policy and limits](docs/scan-policy.md).
 
-Keep one server worker. Admission control and active jobs are process-local;
-restart can interrupt work. Deadlines cancel asynchronous work, but synchronous
-operations must return before cancellation takes effect. The project does not
-yet provide durable job recovery or database migrations.
+Keep one server process using file-backed SQLite on a local POSIX filesystem.
+Exclusive dispatcher ownership protects startup recovery; overlapping reloads
+are unsupported. Queued jobs resume after restart, but active jobs become
+interrupted without replaying probes. Cancellation and deadlines are cooperative:
+synchronous operations must return before they take effect. General database
+migrations and distributed execution are not implemented. See [job lifecycle](docs/jobs.md).
 
 ## Data handling and evidence
 

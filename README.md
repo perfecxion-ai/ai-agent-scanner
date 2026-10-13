@@ -94,8 +94,7 @@ export OPERATOR_API_KEY="$(openssl rand -hex 32)"
 export OPERATOR_ORGANIZATION_ID=local-lab
 export SCAN_ALLOWED_NETWORKS=127.0.0.1/32
 export SCAN_ALLOW_LOOPBACK=true
-python -c 'from app import app, db; ctx = app.app_context(); ctx.push(); db.create_all(); ctx.pop()'
-gunicorn --bind 127.0.0.1:5000 --workers 1 --threads 4 app:app
+gunicorn -c gunicorn.conf.py --bind 127.0.0.1:5000 --workers 1 --threads 4 app:app
 ```
 
 Enter the generated operator key in the dashboard at `http://127.0.0.1:5000`.
@@ -103,10 +102,14 @@ The browser keeps its bearer token in memory. Store deployment secrets outside
 version control. `.env.example` lists supported server settings; the application
 does not automatically load a `.env` file.
 
-Use one server worker while job coordination remains process-local. Active scans
-can be interrupted by restart. Database table creation does not migrate an older
-schema. Review [authentication](docs/authentication.md), [server scan policy](docs/scan-policy.md),
-and [development/container instructions](docs/DEVELOPMENT.md) before deployment.
+The dispatcher requires one server process, file-backed SQLite, and a local POSIX
+filesystem. Queued scans survive restart; interrupted active probes are not replayed.
+Stop the server before replacing it; overlapping reloads are unsupported. The
+dashboard supports scan history, cancellation, and authenticated exports. For
+security-only runs, select a completed source scan and [models for its assets](docs/source-model-selection.md).
+Review [persistent jobs](docs/jobs.md), [authentication](docs/authentication.md),
+[server scan policy](docs/scan-policy.md), and [development/container instructions](docs/DEVELOPMENT.md)
+before deployment. Table initialization is not a general schema migration system.
 
 ## Interpreting results
 
@@ -123,8 +126,8 @@ Review retained evidence before acting on any finding.
 
 ## Limits and roadmap
 
-- Durable job recovery, distributed execution, full cancellation, and schema
-  migrations remain unfinished.
+- Distributed execution, PostgreSQL job coordination, comprehensive schema
+  migrations, and hard cancellation of synchronous libraries remain unfinished.
 - Enterprise identity, granular roles, production tenant provisioning, and
   immutable audit trails are not implemented.
 - Passive MCP analysis and offline RAG/injection/tool replay do not replace
@@ -133,7 +136,7 @@ Review retained evidence before acting on any finding.
   unsupported responses limit coverage; request budgets can truncate a scan.
 - Secret redaction reduces exposure but is not a general data-loss prevention
   guarantee. Reports may contain sensitive target responses or source evidence.
-- Broader lifecycle workflows, integrations, performance evaluation, and release
+- Scheduling, external integrations, representative performance evaluation, and release
   hardening remain part of the [engineering plan](docs/ENGINEERING_PLAN.md).
 
 See [passive MCP scope](docs/mcp-assessment.md), [replay schema and metrics](docs/replay-evaluations.md),

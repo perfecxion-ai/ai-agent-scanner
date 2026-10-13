@@ -19,7 +19,8 @@ SDKs or `[server]` for Gunicorn. The wheel provides the CLI; the web application
 templates, and static files are delivered from the checkout or container.
 
 The smoke script installs a wheel into a temporary virtual environment, changes
-out of the checkout, and runs version, help, and framework coverage commands.
+out of the checkout, and runs version, command help, static framework mapping,
+and offline evaluation checks.
 It requires package index access to install dependencies.
 
 ## Container

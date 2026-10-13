@@ -57,7 +57,7 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install ".[dev,server,cloud]"
       - name: Check source security issues
-        run: bandit -r src scanner_cli.py cli.py -ll
+        run: bandit -r src app.py scanner_cli.py cli.py -ll
       - name: Audit installed dependencies
         run: pip-audit
 
