@@ -193,5 +193,37 @@ def coverage():
 
 
 
+@cli.command('mcp')
+@click.option('--config', type=click.Path(exists=True, dir_okay=False), help='Local MCP client configuration JSON')
+@click.option('--tools', 'tools_path', type=click.Path(exists=True, dir_okay=False), help='Saved tools/list inventory JSON')
+@click.option('--format', '-f', 'fmt', type=click.Choice(['json', 'sarif']), default='json')
+@click.option('--output', '-o', type=click.Path(dir_okay=False), help='Report destination; default stdout')
+def mcp_command(config, tools_path, fmt, output):
+    """Passively assess MCP configuration and saved tool schemas without execution."""
+    from src.mcp import assess, load_json, to_sarif
+
+    if not config and not tools_path:
+        raise click.UsageError('Provide --config or --tools')
+    try:
+        report = assess(load_json(config) if config else None,
+                        load_json(tools_path) if tools_path else None)
+        document = to_sarif(report) if fmt == 'sarif' else report
+        rendered = json.dumps(document, indent=2)
+        if output:
+            # Refuse to overwrite either input, including symlink aliases.
+            from pathlib import Path
+            destination = Path(output)
+            if any(destination.resolve() == Path(path).resolve() or
+                   destination.exists() and destination.samefile(path)
+                   for path in (config, tools_path) if path):
+                raise ValueError('Output must differ from input files')
+            with open(output, 'w', encoding='utf-8') as stream:
+                stream.write(rendered + '\n')
+        else:
+            click.echo(rendered)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 if __name__ == '__main__':
     cli()
