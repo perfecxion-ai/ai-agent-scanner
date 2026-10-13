@@ -79,6 +79,24 @@ async def test_risk_failure_retains_findings():
     assert result["agents"][0]["risk_score"] is None
 
 
+@pytest.mark.asyncio
+async def test_partial_findings_and_secret_redaction():
+    agent = asset()
+    agent['system_prompt_canary'] = 'private-canary-value'
+    agent['metadata'] = {'api_key': 'private-key-value', 'internet_facing': True}
+    discovery, security, risk = engines([agent])
+    security.test_agents.return_value[0]['status'] = 'partial'
+    security.test_agents.return_value[0]['vulnerabilities'][0]['description'] = 'private-canary-value'
+    result = await run_pipeline(discovery, security, risk, None)
+    assert result['summary']['vulnerabilities_found'] == 1
+    assert result['summary']['agents_partial'] == 1
+    assert result['status'] == 'partial'
+    assert 'private-canary-value' not in str(result)
+    assert 'private-key-value' not in str(result)
+    assert result['agents'][0]['metadata'] == {'internet_facing': True}
+    assert not to_sarif(result)['runs'][0]['invocations'][0]['executionSuccessful']
+
+
 def add_scan(module, scan_id, organization="tenant-a", mode="full"):
     module.db.session.add(module.ScanSession(id=scan_id, organization_id=organization,
                           scan_name=scan_id, scan_type=mode, target_scope={}, scan_config={}))

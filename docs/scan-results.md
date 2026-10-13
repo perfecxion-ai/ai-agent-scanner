@@ -23,3 +23,26 @@ skipped, failed, and discovery-only runs are not represented as clean security e
 
 Execution remains in process: restarting the server interrupts running work. This release does
 not introduce a durable worker queue, retry recovery, or historical result backfill.
+
+## CLI
+
+`ai-agent-scanner scan` uses the same versioned pipeline and JSON/SARIF exporter as the API.
+Empty discovery still writes a report. Partial scans write available results and exit nonzero.
+Targets support repeated `--network`, `--domain`, `--repository`, and `--traffic` options.
+`--config local.json` accepts a `target_scope` object, including `cloud_accounts` for cloud
+discovery. CLI targets are explicitly authorized local inputs; API server allowlists do not apply.
+
+To test known agents without discovery, provide an `agents` array in the configuration:
+
+```json
+{"agents":[{"id":"lab-agent","name":"Lab agent","provider":"openai",
+"endpoint":"https://lab.example.test/v1/chat/completions",
+"system_prompt_canary":"unique-operator-seeded-canary"}]}
+```
+
+Seed canaries in the lab target before scanning; do not include them in submitted user prompts.
+Supported evidence configuration includes `system_prompt_canary`, `cross_tenant_canary`,
+`authentication_required`, `protected_response_marker`, and `protected_path_markers`.
+Markers must have at least 16 characters. These values are inputs for evidence checks,
+not provider credentials. Reports omit agent credentials, canaries, endpoint query strings,
+and arbitrary metadata; supported exposure metadata remains available for risk assessment.
