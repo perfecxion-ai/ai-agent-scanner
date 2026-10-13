@@ -79,7 +79,9 @@ Protected canaries and response markers are optional evidence configuration;
 the scanner cannot infer their provenance. See [scan configuration](docs/scan-results.md)
 and [detection evidence](docs/detection-evidence.md) before active testing.
 Cloud discovery requires `python -m pip install '.[cloud]'` and provider-specific
-configuration. The web API does not accept caller-supplied cloud credentials.
+configuration. Use Python 3.11 or newer for the cloud SDKs. See
+[discovery inputs and bounds](docs/discovery-inputs.md). The web API does not
+accept caller-supplied cloud credentials.
 
 ## Web application
 
@@ -105,11 +107,13 @@ does not automatically load a `.env` file.
 The dispatcher requires one server process, file-backed SQLite, and a local POSIX
 filesystem. Queued scans survive restart; interrupted active probes are not replayed.
 Stop the server before replacing it; overlapping reloads are unsupported. The
-dashboard supports scan history, cancellation, and authenticated exports. For
+dashboard supports scan history, cancellation, authenticated exports, and
+[check evidence and audit history](docs/dashboard-evidence.md). For
 security-only runs, select a completed source scan and [models for its assets](docs/source-model-selection.md).
 Review [persistent jobs](docs/jobs.md), [authentication](docs/authentication.md),
 [server scan policy](docs/scan-policy.md), and [development/container instructions](docs/DEVELOPMENT.md)
-before deployment. Table initialization is not a general schema migration system.
+before deployment. Startup upgrades only [known SQLite layouts](docs/jobs.md#schema-upgrades);
+it is not a general schema migration system.
 
 ## Interpreting results
 
@@ -119,7 +123,9 @@ bypass. Confirmed disclosure checks need a seeded protected canary; authenticati
 checks need protected response evidence and a denied control.
 
 Failed, skipped, and partial tests remain distinguishable from completed checks.
-Risk estimates apply only where sufficient testing completed; an empty finding
+[Versioned check records](docs/result-contracts.md) separate execution from
+passed, confirmed, heuristic, and inconclusive evidence. New risk estimates
+require conclusive completed check evidence; an empty finding
 list does not mean a target is secure. Framework references and the `coverage`
 command describe mappings and implementation scope, not verified compliance.
 Review retained evidence before acting on any finding.
@@ -141,6 +147,7 @@ Review retained evidence before acting on any finding.
 
 See [passive MCP scope](docs/mcp-assessment.md), [replay schema and metrics](docs/replay-evaluations.md),
 [report comparison and suppression policy](docs/report-workflows.md),
+[local queue acceptance](docs/performance.md),
 [security policy](SECURITY.md), and [changelog](CHANGELOG.md).
 
 ## Development

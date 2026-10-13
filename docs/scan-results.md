@@ -12,8 +12,13 @@ Use `format=sarif` for SARIF 2.1.0 findings. All routes require the scan's organ
 
 Each scan stores a separate agent snapshot ID. Its `asset_id` identifies the original discovered
 asset, so repeated scans no longer collide on database primary keys. Security states are
-`not_tested`, `skipped`, `completed`, or `failed`. Failed testing makes the scan `partial`.
+`not_tested`, `skipped`, `completed`, `partial`, or `failed`. Failed required
+checks retain available evidence and make the scan `partial`.
 Missing endpoints are skipped. Risk is unknown (`null` in versioned JSON) unless assessment ran.
+New assessment requires known, validated check records with at least one completed
+passed or confirmed check. `risk_assessment_status` and the risk-assessed summary
+counts distinguish completed execution from an actual assessment. See
+[versioned check contracts](result-contracts.md).
 Legacy numeric columns retain zero for compatibility; use the versioned result's state and risk.
 The scanner's existing detection heuristics are not evidence that an endpoint is safe.
 
@@ -39,9 +44,9 @@ discovery. CLI targets are explicitly authorized local inputs; API server allowl
 To test known agents without discovery, provide an `agents` array in the configuration:
 
 ```json
-{"agents":[{"id":"lab-agent","name":"Lab agent","provider":"openai",
+{"agents":[{"id":"lab-agent","name":"Lab agent","provider":"openai","model":"YOUR_LAB_MODEL",
 "endpoint":"https://lab.example.test/v1/chat/completions",
-"system_prompt_canary":"unique-operator-seeded-canary"}]}
+"system_prompt_canary":"unique-operator-seeded-canary","evidence_context_id":"lab-seed-v1"}]}
 ```
 
 Seed canaries in the lab target before scanning; do not include them in submitted user prompts.

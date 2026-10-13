@@ -8,7 +8,8 @@ ai-agent-scanner diff --before previous.json --after current.json --output diffe
 ai-agent-scanner triage --report current.json --policy suppressions.json --output triaged.json
 ```
 
-Diff identifies assets by normalized endpoint. Endpointless assets use source path plus
+Diff identifies cloud assets by cloud, provider, and resource ID before considering
+their endpoint. Other assets use a normalized endpoint. Endpointless assets use source path plus
 provider/name/type when available, otherwise a labeled provider/name fallback. Random snapshot
 IDs, finding IDs, and timestamps do not determine identity. Findings are grouped by asset,
 rule, category, test name, and path. Repeated observations count once but every occurrence
@@ -17,10 +18,14 @@ Identity collisions are labeled ambiguous and cannot support automatic suppressi
 
 `newly_observed` means absent from the prior report, not necessarily newly introduced.
 `resolved` requires a complete current security run of the same unambiguous endpoint asset
-and an explicit `checks` entry with matching `rule_id` and `status: passed`.
-Current scanner reports do not yet supply per-rule pass manifests, so disappearance alone
-always remains unverified; it cannot establish that the original check passed.
-Missing assets, incomplete runs, redacted endpoints, and endpointless identities leave disappeared
+and explicit versioned `checks` with `status: completed`, `outcome: passed`, and
+evaluated responses. Every earlier occurrence must match the current rule, probe
+ID, probe version, and nonempty, nonredacted `evidence_context_id`; the asset's
+provider and model must also match. See [check contracts](result-contracts.md).
+Missing or changed contexts, changed probe versions, and legacy findings without
+check provenance remain unverified. Disappearance alone cannot establish a pass.
+Missing assets, incomplete runs, redacted endpoints, cloud resource identities,
+and endpointless identities leave disappeared
 findings in `resolution_unverified`. `inventory_not_observed` does not assert asset deletion.
 Completeness is based on the report's recorded status; it does not establish coverage of every
 possible attack or prove that a service is secure.

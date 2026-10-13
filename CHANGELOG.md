@@ -15,6 +15,10 @@ These changes are engineering work on the current branch, not a published releas
 - Redact recognized credentials in nested reports and omit issued cookie values.
 - Persist a bounded SQLite job queue with exclusive recovery, cooperative cancellation,
   current-policy revalidation, and readiness checks.
+- Upgrade recognized SQLite layouts transactionally and reject unknown schemas
+  before writes; persist tenant-owned state-transition audit history.
+- Bound traffic and cloud inventory work, preserve resource identities, and keep
+  source failures distinct from successful empty discovery.
 
 ### Results and interfaces
 
@@ -28,6 +32,10 @@ These changes are engineering work on the current branch, not a published releas
 - Add explicit model/protocol adapters, tenant-owned scan history, and source model selection.
 - Redesign the operator dashboard with local assets, cancellation, and authenticated exports.
 - Compare saved reports and apply exact-match expiring suppressions without changing evidence.
+- Record versioned execution and evidence outcomes for existing probe groups;
+  require conclusive check evidence for new risk assessments and exact passed
+  provenance for verified resolution.
+- Show check evidence, cloud resource IDs, and bounded audit history in the dashboard.
 
 ### Delivery and documentation
 
@@ -37,6 +45,8 @@ These changes are engineering work on the current branch, not a published releas
   and container smoke checks.
 - Document current boundaries and remove unsupported claims of complete framework
   coverage, enterprise controls, and production security guarantees.
+- Pin CI actions and verify uploaded distribution contents after downloading them.
+- Add disposable SQLite queue-load acceptance with deterministic state and audit invariants.
 
 ### Still incomplete
 
