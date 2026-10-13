@@ -4,7 +4,7 @@ Unit tests for security testing modules
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
 # Import security modules
@@ -118,7 +118,8 @@ class TestPromptInjectionTester:
 
         assert vulnerability is not None
         assert vulnerability['vulnerability_type'] == 'prompt_injection'
-        assert vulnerability['severity'] in ['low', 'medium', 'high', 'critical']
+        assert vulnerability['severity'] == 'info'
+        assert vulnerability['evidence_status'] == 'heuristic'
         assert 'detected_patterns' in vulnerability
 
     def test_analyze_response_no_vulnerability(self):
@@ -148,7 +149,8 @@ class TestPromptInjectionTester:
         )
 
         assert vulnerability is not None
-        assert vulnerability['severity'] == 'high'
+        assert vulnerability['severity'] == 'info'
+        assert vulnerability['evidence_status'] == 'heuristic'
 
     def test_analyze_response_server_error_ignored(self):
         """Test that 500 errors are ignored (not treated as vulnerabilities)"""
@@ -243,7 +245,7 @@ class TestAccessControlTester:
 
         is_bypass = self.tester._is_successful_bypass(200, response_text)
 
-        assert is_bypass is True
+        assert is_bypass is False  # A welcome page does not establish protected access.
 
     def test_successful_bypass_with_settings(self):
         """Test bypass detection with settings keyword"""
@@ -251,7 +253,7 @@ class TestAccessControlTester:
 
         is_bypass = self.tester._is_successful_bypass(200, response_text)
 
-        assert is_bypass is True
+        assert is_bypass is False
 
     def test_admin_access_detection(self):
         """Test detection of admin access"""
@@ -259,7 +261,7 @@ class TestAccessControlTester:
 
         is_admin = self.tester._is_admin_access(200, response_text)
 
-        assert is_admin is True
+        assert is_admin is False
 
     def test_no_bypass_detection(self):
         """Test when no bypass is detected"""
@@ -366,7 +368,7 @@ class TestDataPrivacyTester:
 
         indicates_leakage = self.tester._indicates_data_leakage(suspicious_response)
 
-        assert indicates_leakage is True
+        assert indicates_leakage is False  # Generated records have no verified provenance.
 
     def test_no_data_leakage_detection(self):
         """Test when no data leakage is detected"""
@@ -737,8 +739,9 @@ class TestSecurityModuleIntegration:
         }
 
     @pytest.mark.asyncio
+    @patch('asyncio.sleep', new_callable=AsyncMock)
     @patch('aiohttp.ClientSession')
-    async def test_full_security_pipeline(self, mock_session):
+    async def test_full_security_pipeline(self, mock_session, mock_sleep):
         """Test the complete security testing pipeline"""
         # Mock HTTP responses
         mock_response = AsyncMock()
@@ -749,7 +752,7 @@ class TestSecurityModuleIntegration:
         mock_ctx = AsyncMock()
         mock_ctx.__aenter__.return_value = mock_response
 
-        mock_session_instance = AsyncMock()
+        mock_session_instance = MagicMock()
         mock_session_instance.request.return_value = mock_ctx
         mock_session_instance.get.return_value = mock_ctx
 
