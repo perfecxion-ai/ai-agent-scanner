@@ -17,9 +17,14 @@ def _validate(report):
 
 
 def asset_identity(agent):
-    """Prefer normalized endpoints, then source identity, then a labeled fallback."""
+    """Prefer cloud resource identity, then endpoint, source, or labeled fallback."""
     endpoint = agent.get("endpoint")
-    if endpoint:
+    metadata = agent.get("metadata", {})
+    resource = metadata.get("resource_id")
+    if isinstance(resource, str) and resource.strip() and len(resource) <= 2048 and metadata.get("cloud") in {"aws", "azure", "gcp"}:
+        basis = ["cloud_resource", metadata["cloud"], agent.get("provider"), resource]
+        quality = "cloud_resource"
+    elif endpoint:
         parsed = urlsplit(endpoint)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise ValueError("Invalid report endpoint")
@@ -31,16 +36,10 @@ def asset_identity(agent):
         basis = ["endpoint", canonical]
         quality = "redacted_endpoint" if agent.get("endpoint_redacted") else "endpoint"
     else:
-        metadata = agent.get("metadata", {})
         source = metadata.get("source_path") or metadata.get("file_path") or metadata.get("repository")
-        resource = metadata.get("resource_id")
-        if isinstance(resource, str) and resource.strip() and len(resource) <= 2048 and metadata.get("cloud") in {"aws", "azure", "gcp"}:
-            basis = ["cloud_resource", metadata["cloud"], agent.get("provider"), resource]
-            quality = "cloud_resource"
-        else:
-            basis = ["source" if source else "fallback", source, agent.get("provider"),
-                     agent.get("name"), agent.get("type"), agent.get("discovery_method")]
-            quality = "source" if source else "provider_name_fallback"
+        basis = ["source" if source else "fallback", source, agent.get("provider"),
+                 agent.get("name"), agent.get("type"), agent.get("discovery_method")]
+        quality = "source" if source else "provider_name_fallback"
     return {"asset_key": _digest(basis), "identity_basis": quality,
             "name": agent.get("name"), "endpoint": endpoint, "provider": agent.get("provider"),
             "model": agent.get("model")}

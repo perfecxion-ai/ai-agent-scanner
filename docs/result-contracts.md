@@ -81,8 +81,12 @@ changed models or providers, unknown/changed evidence contexts, inconclusive
 responses, failed or skipped checks, and legacy versionless
 findings remain `resolution_unverified`.
 
-Endpointless cloud assets preserve bounded `metadata.resource_id` and a cloud
+Cloud assets preserve bounded `metadata.resource_id` and a cloud
 identifier (`aws`, `azure`, or `gcp`). Inventory identity uses cloud, provider,
-and resource ID so identical display names across accounts remain distinct.
-Repeated resource identities are marked ambiguous. Endpointless identity still
-cannot establish verified finding resolution.
+and resource ID before considering an HTTP endpoint, so identical display names
+and shared regional endpoints across accounts remain distinct. Repeated
+observations of the same cloud resource merge during discovery. Observations
+without valid cloud resource metadata continue to use endpoint identity.
+Repeated resource identities in imported reports are marked ambiguous.
+Cloud resource identity still cannot establish verified finding resolution,
+even when the resource has an HTTP endpoint.

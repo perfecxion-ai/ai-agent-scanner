@@ -7,6 +7,8 @@ import pytest
 
 from src.discovery.discovery_engine import DiscoveryEngine, DiscoveryScope
 from src.discovery.network_scanner import NetworkScanner
+from src.core.pipeline import run_pipeline
+from src.reporting.workflows import inventory
 
 
 def observation(asset_id, endpoint=None, **metadata):
@@ -40,6 +42,41 @@ def test_deduplication_preserves_provenance_without_mutating_input():
     assert len(merged) == 1
     assert len(merged[0]['metadata']['observations']) == 2
     assert agents == original
+
+
+@pytest.mark.asyncio
+async def test_shared_cloud_endpoint_does_not_collapse_distinct_subscription_resources():
+    endpoint = 'https://eastus.api.cognitive.microsoft.com'
+    resource_a = '/subscriptions/111/resourceGroups/lab/providers/Microsoft.CognitiveServices/accounts/shared-name'
+    resource_b = '/subscriptions/222/resourceGroups/lab/providers/Microsoft.CognitiveServices/accounts/shared-name'
+    first = observation('azure-a', endpoint, cloud='azure', resource_id=resource_a)
+    second = observation('azure-b', endpoint, cloud='azure', resource_id=resource_b)
+    duplicate = {**deepcopy(first), 'id': 'azure-a-repeat', 'confidence': 0.95}
+    network = observation('network-observation', endpoint)
+    for agent in (first, second, duplicate, network):
+        agent.update(name='Shared AI', provider='azure-cognitive')
+    original = deepcopy([first, second, duplicate, network])
+    engine = DiscoveryEngine()
+    engine.cloud_scanner.scan_azure = AsyncMock(return_value=[first, second, duplicate])
+    engine.network_scanner.scan_domain = AsyncMock(return_value=[network])
+    scope = DiscoveryScope(
+        include_network=True, domains=['cloud-fixture.invalid'],
+        include_cloud=True, cloud_accounts={'azure': {'subscription_id': 'fixture'}})
+    report = await run_pipeline(engine, None, None, scope, 'discovery_only')
+    assert [first, second, duplicate, network] == original
+    assert len(report['agents']) == 3
+    resources = [agent for agent in report['agents'] if agent['metadata'].get('resource_id')]
+    assert {agent['metadata']['resource_id'] for agent in resources} == {resource_a, resource_b}
+    assert {agent['endpoint'] for agent in report['agents']} == {endpoint}
+    merged = engine._deduplicate_agents([first, duplicate])
+    assert len(merged) == 1
+    assert len(merged[0]['metadata']['observations']) == 2
+    assert merged[0]['confidence'] == 0.95
+    assets, _ = inventory(report)
+    assert len(assets) == 3
+    assert sum(asset['identity_basis'] == 'cloud_resource' for asset in assets.values()) == 2
+    assert sum(asset['identity_basis'] == 'endpoint' for asset in assets.values()) == 1
+    assert not any(asset['ambiguous'] for asset in assets.values())
 
 
 @pytest.mark.asyncio
