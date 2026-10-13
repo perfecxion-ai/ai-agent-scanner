@@ -26,6 +26,10 @@ CANARY = "random-fixture-canary-95fb63569eaf"
 @pytest.fixture
 async def target():
     async def handler(request):
+        if request.path == "/admin":
+            return web.Response(text=CANARY)
+        if request.path == "/api/admin":
+            return web.Response(status=403, text="Denied")
         behavior = request.match_info["behavior"]
         if request.method == "GET":
             if behavior == "denied-leak":
@@ -43,6 +47,7 @@ async def target():
         return web.json_response({"choices": [{"message": {"content": text}}]})
 
     app = web.Application()
+    app.router.add_get("/api/admin", handler)
     app.router.add_route("*", "/{behavior}", handler)
     app.router.add_post("/{behavior}/v1/chat/completions", handler)
     runner = web.AppRunner(app)
@@ -144,6 +149,38 @@ async def test_error_status_with_protected_body_cannot_prove_denial(target):
         assert await tester._test_weak_credentials(target) == []
     assert checks[0]["status"] == "failed"
     assert checks[0]["outcome"] == "inconclusive"
+
+
+@pytest.mark.asyncio
+async def test_changed_protected_path_coverage_cannot_resolve_earlier_path(target):
+    tester = AccessControlTester()
+    before_agent = {**target, "evidence_context_id": "lab-policy-v1",
+                    "protected_path_markers": {"/admin": CANARY}}
+    after_agent = {**target, "evidence_context_id": "lab-policy-v1",
+                   "protected_path_markers": {"/api/admin": CANARY}}
+    with scan_transport(ScanBudget()), patch("asyncio.sleep", AsyncMock()):
+        with collect_checks() as before_checks:
+            before_findings = await tester._test_authorization_bypass(before_agent)
+        with collect_checks() as after_checks:
+            after_findings = await tester._test_authorization_bypass(after_agent)
+        tester.sensitive_paths = ["/api/admin", "/admin"]
+        with collect_checks() as changed_sample_checks:
+            await tester._test_authorization_bypass(after_agent)
+    assert before_findings[0]["path"] == "/admin"
+    assert before_checks[0]["outcome"] == "confirmed"
+    assert after_findings == []
+    assert after_checks[0]["outcome"] == "passed"
+    assert before_checks[0]["probe_version"] != after_checks[0]["probe_version"]
+    assert changed_sample_checks[0]["probe_version"] != after_checks[0]["probe_version"]
+
+    def report(checks, findings):
+        return {"schema_version": "1.0", "check_schema_version": "1.0",
+                "status": "completed", "scan_type": "full", "summary": {},
+                "agents": [{**target, "security_status": "completed",
+                            "checks": checks, "vulnerabilities": findings}]}
+    diff = compare_reports(report(before_checks, before_findings), report(after_checks, after_findings))
+    assert diff["resolved"] == []
+    assert len(diff["resolution_unverified"]) == 1
 
 
 @pytest.mark.asyncio

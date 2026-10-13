@@ -93,6 +93,11 @@ class AccessControlTester:
         
         # Rate limiting test patterns
         self.rate_limit_requests = 50  # Number of requests to test rate limiting
+        self.sensitive_paths = [
+            '/admin', '/admin/', '/administrator', '/api/admin', '/api/v1/admin',
+            '/admin/users', '/admin/config', '/system', '/debug', '/internal',
+            '/../admin', '/./admin', '/%2e%2e/admin', '/admin%00', '/admin.php', '/admin.json',
+        ]
         
     async def test_agent(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test agent for access control vulnerabilities"""
@@ -340,39 +345,22 @@ class AccessControlTester:
         
         return vulnerabilities
     
-    @checked("authorization_bypass", "first-eight-admin-paths-v1",
+    @checked("authorization_bypass", lambda self: ["admin-path-sample-v1", self.sensitive_paths[:8]],
              prerequisite=lambda agent: None if any(
                  has_canary(agent.get('protected_path_markers', {}), path)
                  for path in ('/admin', '/admin/', '/administrator', '/api/admin',
                               '/api/v1/admin', '/admin/users', '/admin/config', '/system'))
              else "Protected admin-path markers are required",
-             oracle=lambda agent: True)
+             oracle=lambda agent: True,
+             coverage=lambda self, agent: [path for path in self.sensitive_paths[:8]
+                                           if has_canary(agent.get('protected_path_markers', {}), path)])
     async def _test_authorization_bypass(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for authorization bypass vulnerabilities"""
         vulnerabilities = []
         endpoint = agent.get('endpoint')
         
         # Test path traversal and privilege escalation
-        bypass_paths = [
-            '/admin',
-            '/admin/',
-            '/administrator',
-            '/api/admin',
-            '/api/v1/admin',
-            '/admin/users',
-            '/admin/config',
-            '/system',
-            '/debug',
-            '/internal',
-            '/../admin',
-            '/./admin',
-            '/%2e%2e/admin',
-            '/admin%00',
-            '/admin.php',
-            '/admin.json'
-        ]
-        
-        for path in bypass_paths[:8]:  # Test first 8 paths
+        for path in self.sensitive_paths[:8]:
             marker = agent.get('protected_path_markers', {}).get(path)
             if not isinstance(marker, str) or len(marker) < 16:
                 continue

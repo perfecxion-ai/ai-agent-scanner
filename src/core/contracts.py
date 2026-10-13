@@ -153,7 +153,7 @@ def usable_model_response(text):
     return isinstance(body, dict) and bool(extract_response_text(text).strip())
 
 
-def checked(rule, spec, prerequisite=None, oracle=None):
+def checked(rule, spec, prerequisite=None, oracle=None, coverage=None):
     """Track a probe group without storing prompts, credentials, or response bodies."""
     def decorate(method):
         @wraps(method)
@@ -163,6 +163,8 @@ def checked(rule, spec, prerequisite=None, oracle=None):
             # Bind the selected protocol/model and public probe definition.
             # Protected canaries and actual credentials are excluded.
             identity = [definition, agent.get("provider"), agent.get("model")]
+            if coverage:
+                identity.append(coverage(self, agent, *args, **kwargs))
             version = "1:" + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
             probe_id = rule_id + ".sample"
             reason = prerequisite(agent) if prerequisite else None

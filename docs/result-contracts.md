@@ -40,6 +40,8 @@ denied control leaking the marker invalidates the negative oracle.
 Probe versions contain a SHA-256 digest of the selected public samples,
 provider, and model. Actual credentials and protected canaries are excluded.
 Changing the selected model, provider, or samples changes the probe version.
+Authorization versions also bind the actual public path keys with configured
+protected markers, so a passed different path cannot resolve an earlier finding.
 Static built-in sample definitions must increment their named version
 when their contents or evaluation semantics change.
 
