@@ -4,6 +4,10 @@
 supports MCP protocol `2026-07-28` over Streamable HTTP only. The existing `mcp`
 command remains passive: it does not connect to servers or launch processes.
 
+For an explicitly declared protected lab fixture, the separate
+[`mcp-check` command](mcp-policy.md) samples read-only inventory authorization and
+Origin controls. It does not change `mcp-live` behavior or invoke tools.
+
 ```bash
 ai-agent-scanner mcp-live \
   --endpoint http://127.0.0.1:8000/mcp \
