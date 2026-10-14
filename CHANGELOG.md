@@ -53,6 +53,9 @@ These changes are engineering work on the current branch, not a published releas
 - Add disabled-by-default finite API schedules with pinned template revisions,
   atomic occurrence admission, quotas, restart review, and one-slot read-only
   preflight. Late/timed-out validation cannot admit scans after shutdown.
+- Add dashboard schedule creation, explicit pin review and enable/pause,
+  bounded occurrence history, admitted-scan navigation, and constrained deletion.
+  Preserve logout/race guards and restore keyboard focus after deletion.
 
 ### Delivery and documentation
 
@@ -69,7 +72,7 @@ These changes are engineering work on the current branch, not a published releas
 ### Still incomplete
 
 - Comprehensive migrations, PostgreSQL coordination, and distributed workers.
-- Enterprise identity, schedule dashboard controls, external integrations, and audit guarantees.
+- Enterprise identity, external integrations, comprehensive accessibility acceptance, and audit guarantees.
 - Live coverage of all MCP, indirect injection, RAG, multimodal, and supply-chain scenarios.
 - Representative accuracy and performance benchmarks and release-candidate acceptance.
 

@@ -51,7 +51,7 @@ are operator-selected. Server scans additionally require explicit allowlists.
 | Offline replay | Compares recorded outputs and tool requests against explicit policies and labels | Production accuracy, a live injection campaign, or proof of tool execution |
 | Reporting | Preserves findings, observations, phase status, and risk estimates; exports JSON/SARIF | Compliance certification or a standardized CVSS score |
 | Saved scan templates | Stores tenant-owned recipes with manual dashboard/API runs under current server policy | Scheduled runs or credential storage |
-| Finite scheduling (API) | Admits a bounded number of runs from an explicitly enabled, pinned template revision | Automatic enablement, calendar/cron scheduling, or distributed coordination |
+| Finite scheduling | Dashboard/API controls admit a bounded number of runs from an explicitly enabled, pinned template revision | Automatic enablement, calendar/cron scheduling, or distributed coordination |
 
 ```bash
 ai-agent-scanner discover --repository ./src --output code-inventory.json
@@ -135,11 +135,14 @@ editing or deletion does not change an already admitted job. Dashboard template
 controls support manual save, full-definition editing, pinned-revision runs, and
 deletion. Dirty editor changes require explicit discard before replacement.
 Scheduling remains separate from these manual controls.
-The [finite scheduling API](docs/scan-schedules.md) creates disabled schedules
+The [finite schedule controls and API](docs/scan-schedules.md) create disabled schedules
 with explicit enable/pause, pinned revisions, bounded admission counts, and one
 outstanding scan each. Restart pauses enabled schedules for operator review.
-It never retries an admitted scan or backfills missed intervals. Schedule
-dashboard controls are not implemented yet.
+It never retries an admitted scan or backfills missed intervals. The dashboard
+requires explicit review of the displayed saved template pin before creation
+and enablement. It supports pause, bounded occurrence history, opening admitted
+scans, and deletion of inactive schedules without outstanding scans. Creating,
+loading, or refreshing a schedule never enables it.
 Review [persistent jobs](docs/jobs.md), [authentication](docs/authentication.md),
 [server scan policy](docs/scan-policy.md), and [development/container instructions](docs/DEVELOPMENT.md)
 before deployment. Startup upgrades only [known SQLite layouts](docs/jobs.md#schema-upgrades);
@@ -172,7 +175,7 @@ Review retained evidence before acting on any finding.
   unsupported responses limit coverage; request budgets can truncate a scan.
 - Secret redaction reduces exposure but is not a general data-loss prevention
   guarantee. Reports may contain sensitive target responses or source evidence.
-- Schedule dashboard controls, external integrations, representative performance evaluation, and release
+- External integrations, comprehensive accessibility acceptance, representative performance evaluation, and release
   hardening remain part of the [engineering plan](docs/ENGINEERING_PLAN.md).
 
 See [passive MCP scope](docs/mcp-assessment.md), [replay schema and metrics](docs/replay-evaluations.md),

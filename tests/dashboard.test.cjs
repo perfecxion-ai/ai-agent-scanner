@@ -9,6 +9,7 @@ class Element {
     appendChild(child) { this.children.push(child); return child; }
     replaceChildren(...children) { this.children = children; }
     click() { this.clicked = true; if (this.handlers.click) this.handlers.click(); }
+    focus() { if (!this.disabled) this.focused = true; }
     set innerHTML(value) { throw new Error('Unsafe HTML rendering'); }
 }
 
@@ -29,6 +30,17 @@ const checkedReport = (checks, score = null) => ({status: 'completed', check_sch
 const auditEvent = id => ({id, event: 'claim', previous_status: 'queued', status: 'running', created_at: '2026-10-13T10:00:00'});
 const savedTemplate = (changes = {}) => ({id: 'recipe', revision: 3, scan_name: 'Lab recipe', scan_type: 'discovery_only',
     target_scope: {network_ranges: ['192.0.2.0/28'], active_probe: false}, scan_config: {timeout_seconds: 120}, ...changes});
+const savedSchedule = (changes = {}) => ({id: 'schedule', template_id: 'recipe', template_revision: 3, interval_seconds: 60,
+    total_runs: 4, admitted_runs: 0, revision: 2, state: 'disabled', pause_reason: null, outstanding_scan_id: null,
+    next_due_at: null, ...changes});
+const occurrence = (ordinal = 1, changes = {}) => ({ordinal, scan_id: `scan-${ordinal}`, created_at: '2026-10-13T10:00:00+00:00', ...changes});
+function reviewPin(app) {
+    app.showTemplate(savedTemplate());
+    app.el('reviewScheduleTemplate').checked = true;
+    app.el('scheduleInterval').value = '60';
+    app.el('scheduleRuns').value = '4';
+    app.scheduleButtons();
+}
 
 test('sign in clears credential input and authenticated calls use bearer token', async () => {
     const calls = [];
@@ -436,6 +448,7 @@ test('failed initial template list leaves authenticated refresh and form save us
         if (path === '/api/auth/token') return response({token: 'fixture-token'});
         if (path.startsWith('/api/templates?')) return fail ? response({error: 'Template service unavailable'}, 503) :
             response({templates: [savedTemplate()], total: 1});
+        if (path.startsWith('/api/schedules?')) return response({schedules: [], total: 0});
         return response({scans: [], total: 0});
     });
     app.el('operatorKey').value = 'fixture-key';
@@ -450,6 +463,362 @@ test('failed initial template list leaves authenticated refresh and form save us
     app.logout();
     assert.equal(app.el('refreshTemplatesBtn').disabled, true);
     assert.equal(app.el('saveTemplateBtn').disabled, true);
+});
+
+test('schedule creation requires explicit clean saved-template review and stays disabled', async () => {
+    const calls = [];
+    const {app} = fixture(async (path, options) => {
+        calls.push({path, options});
+        return response(path.includes('?') ? {schedules: [savedSchedule()], total: 1} : {schedule: savedSchedule({revision: 1})}, 201);
+    });
+    app.token = 'fixture-token';
+    await app.createSchedule();
+    assert.equal(calls.length, 0);
+    app.showTemplate(savedTemplate());
+    await app.createSchedule();
+    assert.equal(calls.length, 0);
+    reviewPin(app);
+    app.el('templateEditor').value = '{unsaved';
+    await app.createSchedule();
+    assert.equal(calls.length, 0);
+    reviewPin(app);
+    await app.createSchedule();
+    assert.equal(calls[0].path, '/api/schedules');
+    assert.equal(calls[0].options.method, 'POST');
+    assert.equal(calls[0].options.headers.Authorization, 'Bearer fixture-token');
+    assert.deepEqual(JSON.parse(calls[0].options.body), {template_id: 'recipe', template_revision: 3, interval_seconds: 60, total_runs: 4});
+    assert.equal(app.schedule.state, 'disabled');
+    assert.equal(app.el('reviewScheduleTemplate').checked, false);
+    assert.equal(app.el('enableScheduleBtn').disabled, true);
+    assert.equal(app.scanId, null);
+    assert.equal(app.timer, null);
+    assert.equal(calls.length, 2);
+});
+
+test('schedule intervals and finite counts reject empty fractional or out-of-bound values', async () => {
+    const {app} = fixture(async () => { throw new Error('Unexpected network call'); });
+    app.token = 'fixture-token';
+    for (const [interval, runs] of [['', '4'], ['59', '4'], ['2592001', '4'], ['60.5', '4'], ['60', ''],
+        ['60', '0'], ['60', '101'], ['60', '1.5'], ['Infinity', '4']]) {
+        reviewPin(app);
+        app.el('scheduleInterval').value = interval; app.el('scheduleRuns').value = runs;
+        await app.createSchedule();
+        assert.match(app.el('notice').textContent, /integer interval/);
+        assert.equal(app.scheduleBusy, false);
+    }
+});
+
+test('loading refreshing and template editing cannot enable or silently rebind schedules', async () => {
+    const calls = [];
+    const {app} = fixture(async (path, options) => {
+        calls.push({path, options});
+        return response(path.includes('occurrences?') ? {occurrences: [], total: 0} :
+            path.includes('?') ? {schedules: [savedSchedule()], total: 1} : {schedule: savedSchedule({state: 'paused', pause_reason: 'restart_review'})});
+    });
+    app.token = 'fixture-token'; reviewPin(app);
+    await app.openSchedule('schedule');
+    assert.equal(app.el('reviewScheduleTemplate').checked, false);
+    assert.match(app.el('scheduleStatus').textContent, /restart_review/);
+    await app.loadSchedules();
+    await app.changeSchedule('enable');
+    assert.ok(calls.every(call => !call.options.method));
+    app.showTemplate(savedTemplate({revision: 4})); app.el('reviewScheduleTemplate').checked = true;
+    await app.changeSchedule('enable');
+    assert.equal(app.schedule.template_revision, 3);
+    assert.match(app.el('notice').textContent, /exact pinned/);
+    assert.equal(app.el('enableScheduleBtn').disabled, true);
+});
+
+test('enable and pause use displayed schedule revision and do not cancel admitted scans', async () => {
+    const calls = [];
+    const {app} = fixture(async (path, options) => {
+        calls.push({path, options});
+        return response(path.includes('?') ? {schedules: [], total: 0} : {schedule: savedSchedule({revision: JSON.parse(options.body).revision + 1,
+            state: path.endsWith('/enable') ? 'enabled' : 'paused', pause_reason: path.endsWith('/pause') ? 'operator_paused' : null,
+            outstanding_scan_id: 'admitted', admitted_runs: 1, next_due_at: path.endsWith('/enable') ? '2026-10-13T10:00:00+00:00' : null})});
+    });
+    app.token = 'fixture-token'; app.showSchedule(savedSchedule({id: 'schedule/id'})); reviewPin(app);
+    // Return the exact requested ID in the controlled response.
+    const fetcher = app.fetcher;
+    app.fetcher = async (...args) => { const reply = await fetcher(...args); const json = await reply.json();
+        if (json.schedule) json.schedule.id = 'schedule/id'; return response(json); };
+    await app.changeSchedule('enable');
+    assert.equal(calls[0].path, '/api/schedules/schedule%2Fid/enable');
+    assert.deepEqual(JSON.parse(calls[0].options.body), {revision: 2});
+    assert.equal(app.schedule.state, 'enabled');
+    assert.equal(app.el('scheduleIdentity').focused, true);
+    assert.match(app.el('scheduleTiming').textContent, /Next due \(UTC\): 2026/);
+    assert.match(app.el('scheduleStatus').textContent, /1 of 4 admitted; 3 remaining.*admitted/);
+    app.el('scheduleIdentity').focused = false;
+    await app.changeSchedule('pause');
+    assert.deepEqual(JSON.parse(calls[2].options.body), {revision: 3});
+    assert.equal(app.schedule.state, 'paused');
+    assert.equal(app.el('scheduleIdentity').focused, true);
+    assert.equal(app.schedule.outstanding_scan_id, 'admitted');
+    assert.ok(calls.every(call => !call.path.includes('/cancel')));
+});
+
+test('schedule conflicts retain displayed pin and recipe without retries', async () => {
+    for (const action of ['create', 'enable', 'pause', 'delete']) {
+        let calls = 0;
+        const {app} = fixture(async () => { calls += 1; return response({error: 'stale'}, 409); });
+        app.token = 'fixture-token'; reviewPin(app); app.showSchedule(savedSchedule());
+        const editor = app.el('templateEditor').value;
+        if (action === 'create') await app.createSchedule();
+        else if (action === 'delete') await app.deleteSchedule();
+        else await app.changeSchedule(action);
+        assert.equal(calls, 1);
+        assert.equal(app.schedule.revision, 2);
+        assert.equal(app.schedule.template_revision, 3);
+        assert.equal(app.el('templateEditor').value, editor);
+        assert.match(app.el('notice').textContent, /Refresh detail.*no automatic retry/);
+        assert.equal(app.scheduleBusy, false);
+    }
+});
+
+test('missing foreign and policy schedule failures remain recoverable safe text', async () => {
+    for (const status of [400, 403, 404, 429, 500, 503]) {
+        const {app} = fixture(async () => response({error: '<script>policy</script>'}, status));
+        app.token = 'fixture-token'; reviewPin(app); app.showSchedule(savedSchedule());
+        await app.changeSchedule('enable');
+        assert.equal(app.schedule.state, 'disabled');
+        assert.equal(app.scheduleBusy, false);
+        assert.equal(app.el('enableScheduleBtn').disabled, false);
+        assert.match(app.el('notice').textContent, status === 404 ? /missing or unavailable/ : /<script>policy<\/script>/);
+    }
+});
+
+test('schedule deletion is inactive-only and preserves independently admitted scans', async () => {
+    const calls = [];
+    const {app} = fixture(async (path, options) => { calls.push({path, options}); return response({schedules: [], total: 0}); });
+    app.token = 'fixture-token'; app.scanId = 'existing';
+    for (const changes of [{state: 'enabled'}, {outstanding_scan_id: 'outstanding'}]) {
+        app.showSchedule(savedSchedule(changes)); await app.deleteSchedule();
+        assert.equal(calls.length, 0);
+        assert.equal(app.el('deleteScheduleBtn').disabled, true);
+    }
+    app.showSchedule(savedSchedule({state: 'completed', admitted_runs: 4}));
+    assert.equal(app.el('enableScheduleBtn').disabled, true);
+    await app.deleteSchedule();
+    assert.equal(calls[0].options.method, 'DELETE');
+    assert.equal(calls[0].path, '/api/schedules/schedule');
+    assert.equal(app.scanId, 'existing');
+    assert.equal(app.schedule, null);
+    assert.equal(app.el('scheduleDetail').hidden, true);
+    assert.equal(app.el('scheduleOccurrences').children.length, 0);
+});
+
+test('schedule and occurrence lists use bounded authenticated pages and literal text', async () => {
+    const calls = [];
+    const {app} = fixture(async (path, options) => { calls.push({path, options}); return response(path.includes('occurrences?') ?
+        {occurrences: [occurrence(26, {scan_id: '<img>'})], total: 70} : {schedules: [savedSchedule({id: '<script>'})], total: 60}); });
+    app.token = 'fixture-token'; app.scheduleOffset = 25;
+    await app.loadSchedules();
+    assert.equal(calls[0].path, '/api/schedules?limit=25&offset=25');
+    assert.equal(calls[0].options.headers.Authorization, 'Bearer fixture-token');
+    assert.match(app.el('scheduleList').children[0].textContent, /<script>/);
+    app.showSchedule(savedSchedule()); app.occurrenceOffset = 25;
+    await app.loadOccurrences();
+    assert.equal(calls[1].path, '/api/schedules/schedule/occurrences?limit=25&offset=25');
+    assert.match(app.el('scheduleOccurrences').children[0].textContent, /#26.*UTC.*<img>/);
+    assert.equal(app.el('nextOccurrencesBtn').disabled, false);
+    app.el('scheduleOccurrences').value = '<img>';
+    app.selectScan = async id => { app.scanId = id; };
+    await app.openOccurrence();
+    assert.equal(app.scanId, '<img>');
+    app.scheduleOffset = 100000; await app.loadSchedules();
+    assert.equal(app.el('nextSchedulesBtn').disabled, true);
+    app.el('nextSchedulesBtn').handlers.click(); assert.equal(app.scheduleOffset, 100000);
+    app.occurrenceOffset = 75; app.el('nextOccurrencesBtn').handlers.click(); assert.equal(app.occurrenceOffset, 75);
+});
+
+test('schedule pages reject malformed rows and oversized lists before replacing valid display', async () => {
+    for (const data of [{schedules: Array.from({length: 26}, () => savedSchedule()), total: 26},
+        {schedules: [savedSchedule()], total: -1}, {schedules: [savedSchedule({admitted_runs: 5})], total: 1},
+        {schedules: [savedSchedule({template_revision: 0})], total: 1}, {schedules: [savedSchedule({state: 'unknown'})], total: 1},
+        {schedules: [savedSchedule({next_due_at: '2026-10-13T10:00:00'})], total: 1}]) {
+        const {app} = fixture(async () => response(data)); app.token = 'fixture-token';
+        app.append(app.el('scheduleList'), 'option', 'Previous valid page').value = 'previous';
+        await app.loadSchedules();
+        assert.equal(app.el('scheduleList').children[0].value, 'previous');
+        assert.match(app.el('notice').textContent, /invalid schedule/);
+    }
+});
+
+test('occurrence pages reject invalid totals ordinals UTC and oversized records without replacement', async () => {
+    for (const data of [{occurrences: Array.from({length: 26}, (_, index) => occurrence(index + 1)), total: 26},
+        {occurrences: [], total: 101}, {occurrences: [occurrence(0)], total: 1},
+        {occurrences: [occurrence(2), occurrence(1)], total: 2}, {occurrences: [occurrence(1, {scan_id: ''})], total: 1},
+        {occurrences: [occurrence(1, {created_at: 'invalid'})], total: 1},
+        {occurrences: [occurrence(1, {created_at: '2026-10-13T10:00:00'})], total: 1}]) {
+        const {app} = fixture(async () => response(data)); app.token = 'fixture-token'; app.showSchedule(savedSchedule());
+        app.append(app.el('scheduleOccurrences'), 'option', 'Previous valid page').value = 'previous';
+        await app.loadOccurrences();
+        assert.equal(app.el('scheduleOccurrences').children[0].value, 'previous');
+        assert.match(app.el('notice').textContent, /invalid.*occurrence/);
+        assert.equal(app.el('refreshOccurrencesBtn').disabled, false);
+    }
+});
+
+test('new schedule and occurrence page requests supersede stale success and failure responses', async () => {
+    for (const target of ['schedule', 'occurrence']) for (const failure of [false, true]) {
+        const replies = [];
+        const {app} = fixture(() => new Promise(done => replies.push(done)));
+        app.token = 'fixture-token'; app.showSchedule(savedSchedule());
+        const load = () => target === 'schedule' ? app.loadSchedules() : app.loadOccurrences();
+        const old = load();
+        if (target === 'schedule') app.scheduleOffset = 25; else app.occurrenceOffset = 25;
+        const recent = load();
+        replies[1](response(target === 'schedule' ? {schedules: [savedSchedule({id: 'new'})], total: 26} : {occurrences: [occurrence(26)], total: 26}));
+        await recent;
+        replies[0](response(failure ? {error: 'Old failure'} : target === 'schedule' ? {schedules: [savedSchedule({id: 'old'})], total: 1} : {occurrences: [occurrence()], total: 1}, failure ? 500 : 200));
+        await old;
+        assert.equal(app.el(target === 'schedule' ? 'scheduleList' : 'scheduleOccurrences').children[0].value, target === 'schedule' ? 'new' : 'scan-26');
+        assert.doesNotMatch(app.el('notice').textContent, /Old failure/);
+    }
+});
+
+test('all schedule requests and late errors are suppressed after logout', async () => {
+    for (const action of ['loadSchedules', 'openSchedule', 'createSchedule', 'changeSchedule', 'deleteSchedule', 'loadOccurrences']) {
+        for (const failure of [false, true]) {
+            let resolve;
+            const {app} = fixture(() => new Promise(done => { resolve = done; }));
+            app.token = 'fixture-token'; app.showSchedule(savedSchedule()); reviewPin(app);
+            const pending = app[action](action === 'changeSchedule' ? 'enable' : 'schedule');
+            app.logout();
+            resolve(response(failure ? {error: 'Old failure'} : {schedule: savedSchedule(), schedules: [savedSchedule()], occurrences: [occurrence()], total: 1}, failure ? 500 : 200));
+            await pending;
+            assert.equal(app.el('notice').textContent, 'Signed out.');
+            assert.equal(app.schedule, null);
+            assert.equal(app.scheduleBusy, false);
+            assert.equal(app.el('scheduleList').children.length, 0);
+            assert.equal(app.el('scheduleOccurrences').children.length, 0);
+            assert.equal(app.el('scheduleDetail').hidden, true);
+            assert.equal(app.el('scheduleControls').disabled, true);
+            assert.equal(app.el('reviewScheduleTemplate').checked, false);
+        }
+    }
+});
+
+test('pending schedule mutation blocks duplicates without locking template or scan namespace', async () => {
+    let resolve; let calls = 0;
+    const {app} = fixture(() => { calls += 1; return new Promise(done => { resolve = done; }); });
+    app.token = 'fixture-token'; app.showSchedule(savedSchedule()); reviewPin(app);
+    const pending = app.changeSchedule('enable');
+    await app.changeSchedule('enable'); await app.deleteSchedule(); await app.openSchedule('another');
+    assert.equal(calls, 1);
+    assert.equal(app.templateBusy, false);
+    assert.equal(app.el('updateTemplateBtn').disabled, false);
+    app.selection += 1; app.scanId = 'newer';
+    resolve(response({error: 'rejected'}, 403)); await pending;
+    assert.equal(app.scanId, 'newer');
+    assert.equal(app.scheduleBusy, false);
+    assert.equal(app.el('enableScheduleBtn').disabled, false);
+});
+
+test('occurrence requests cannot populate or emit errors for a newly opened schedule', async () => {
+    for (const failure of [false, true]) {
+        let resolve;
+        const {app} = fixture((path) => path.includes('/new') ? response(path.includes('occurrences') ? {occurrences: [], total: 0} :
+            {schedule: savedSchedule({id: 'new'})}) : new Promise(done => { resolve = done; }));
+        app.token = 'fixture-token'; app.showSchedule(savedSchedule());
+        const old = app.loadOccurrences();
+        await app.openSchedule('new');
+        resolve(response(failure ? {error: 'Old occurrence failure'} : {occurrences: [occurrence()], total: 1}, failure ? 500 : 200));
+        await old;
+        assert.equal(app.schedule.id, 'new');
+        assert.equal(app.el('scheduleOccurrences').children[0].value, '');
+        assert.doesNotMatch(app.el('notice').textContent, /Old occurrence/);
+        assert.equal(app.occurrenceBusy, false);
+    }
+});
+
+test('review confirmation resets on editor input template changes deletion and discard', async () => {
+    const {app} = fixture(async () => response({templates: [], total: 0}));
+    app.token = 'fixture-token'; reviewPin(app);
+    app.el('templateEditor').handlers.input(); assert.equal(app.el('reviewScheduleTemplate').checked, false);
+    reviewPin(app); app.showTemplate(savedTemplate({revision: 4})); assert.equal(app.el('reviewScheduleTemplate').checked, false);
+    reviewPin(app); app.el('discardTemplateBtn').handlers.click(); assert.equal(app.el('reviewScheduleTemplate').checked, false);
+    reviewPin(app); await app.deleteTemplate(); assert.equal(app.el('reviewScheduleTemplate').checked, false);
+    assert.equal(app.el('createScheduleBtn').disabled, true);
+});
+
+test('initial schedule list failure leaves authenticated refresh and manual flows usable', async () => {
+    let fail = true;
+    const {app} = fixture(async path => path === '/api/auth/token' ? response({token: 'fixture-token'}) :
+        path.startsWith('/api/schedules?') ? fail ? response({error: 'Schedule service unavailable'}, 503) : response({schedules: [savedSchedule()], total: 1}) :
+        path.startsWith('/api/templates?') ? response({templates: [], total: 0}) : response({scans: [], total: 0}));
+    app.el('operatorKey').value = 'secret'; await app.login(event);
+    assert.match(app.el('notice').textContent, /Schedule service unavailable/);
+    assert.equal(app.el('refreshSchedulesBtn').disabled, false);
+    assert.equal(app.el('saveTemplateBtn').disabled, false);
+    fail = false; await app.loadSchedules();
+    assert.equal(app.el('scheduleList').children[0].value, 'schedule');
+});
+
+test('401 schedule response clears all protected workflow state', async () => {
+    const {app} = fixture(async () => response({error: 'expired'}, 401));
+    app.token = 'fixture-token'; app.showSchedule(savedSchedule()); reviewPin(app);
+    await app.changeSchedule('enable');
+    assert.equal(app.token, null);
+    assert.equal(app.schedule, null);
+    assert.equal(app.template, null);
+    assert.equal(app.el('scheduleDetail').hidden, true);
+    assert.equal(app.el('scheduleControls').disabled, true);
+});
+
+test('unexpected server schedule IDs pins and active creation never become actionable', async () => {
+    for (const changes of [{state: 'enabled'}, {template_revision: 4}, {template_id: 'different'}, {interval_seconds: 120},
+        {total_runs: 5}, {admitted_runs: 1}, {outstanding_scan_id: 'unexpected'}, {next_due_at: '2026-10-13T10:00:00+00:00'},
+        {revision: 2}, {pause_reason: 'policy_review'}]) {
+        const {app} = fixture(async () => response({schedule: savedSchedule({revision: 1, ...changes})}));
+        app.token = 'fixture-token'; reviewPin(app);
+        await app.createSchedule();
+        assert.equal(app.schedule, null);
+        assert.match(app.el('notice').textContent, /unexpected schedule/);
+    }
+    const {app} = fixture(async () => response({schedule: savedSchedule({id: 'different'})}));
+    app.token = 'fixture-token';
+    await app.openSchedule('schedule');
+    assert.equal(app.schedule, null);
+    assert.match(app.el('notice').textContent, /different schedule/);
+});
+
+test('schedule transition responses cannot falsely claim enable pause or changed recurrence', async () => {
+    for (const action of ['enable', 'pause']) for (const changes of [{state: 'disabled'}, {state: 'enabled'}, {state: 'paused'},
+        {interval_seconds: 120}, {total_runs: 5}, {revision: 2}, {template_id: 'different'}, {template_revision: 4}, {id: 'different'}]) {
+        if ((action === 'enable' && changes.state === 'enabled') || (action === 'pause' && changes.state === 'paused')) continue;
+        const {app} = fixture(async () => response({schedule: savedSchedule({revision: 3, state: action === 'enable' ? 'enabled' : 'paused', ...changes})}));
+        app.token = 'fixture-token'; app.showSchedule(savedSchedule()); reviewPin(app);
+        await app.changeSchedule(action);
+        assert.equal(app.schedule.state, 'disabled');
+        assert.equal(app.schedule.revision, 2);
+        assert.match(app.el('notice').textContent, /different schedule or pin|requested schedule transition/);
+    }
+});
+
+test('schedule and template deletion move focus only after restoring enabled controls', async () => {
+    for (const kind of ['Schedule', 'Template']) {
+        const {app} = fixture(async () => response({templates: [], schedules: [], total: 0}));
+        app.token = 'fixture-token'; app.showTemplate(savedTemplate()); app.showSchedule(savedSchedule());
+        await app[`delete${kind}`]();
+        const id = kind === 'Schedule' ? 'refreshSchedulesBtn' : 'refreshTemplatesBtn';
+        assert.equal(app.el(id).disabled, false);
+        assert.equal(app.el(id).focused, true);
+    }
+});
+
+test('opening schedule detail focuses identity but background list or occurrences do not steal focus', async () => {
+    const {app} = fixture(async path => response(path.includes('occurrences') ? {occurrences: [], total: 0} :
+        path.includes('?') ? {schedules: [savedSchedule()], total: 1} : {schedule: savedSchedule()}));
+    app.token = 'fixture-token';
+    await app.openSchedule('schedule');
+    assert.equal(app.el('scheduleIdentity').focused, true);
+    app.el('scheduleIdentity').focused = false;
+    await app.loadSchedules(); await app.loadOccurrences();
+    assert.equal(app.el('scheduleIdentity').focused, false);
+    app.logout();
+    assert.equal(app.el('operatorKey').focused, true);
 });
 
 test('check execution and outcome remain distinct, with safe reasons and cloud identity', () => {

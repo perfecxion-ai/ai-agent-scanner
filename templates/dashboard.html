@@ -72,6 +72,33 @@
             </div>
           </fieldset>
         </section>
+        <section class="schedules" aria-labelledby="schedulesTitle"><h3 id="schedulesTitle">Finite schedules</h3>
+          <p id="scheduleHelp" class="hint">Create disabled first. Review the complete saved template above, then explicitly enable. Loading or refreshing never enables a schedule.</p>
+          <fieldset id="scheduleControls" disabled>
+            <p id="scheduleTemplatePin" class="hint schedule-identity">Load a saved template above to review its ID and revision.</p>
+            <label class="review-pin" for="reviewScheduleTemplate"><input id="reviewScheduleTemplate" type="checkbox" aria-describedby="scheduleTemplatePin scheduleHelp"> I reviewed the displayed saved template revision</label>
+            <label for="scheduleInterval">Interval (seconds)</label><input id="scheduleInterval" type="number" min="60" max="2592000" step="1" value="3600" aria-describedby="scheduleBounds">
+            <label for="scheduleRuns">Total admitted scans</label><input id="scheduleRuns" type="number" min="1" max="100" step="1" value="4" aria-describedby="scheduleBounds">
+            <p id="scheduleBounds" class="hint">60 to 2592000 seconds; 1 to 100 scans. Every admitted job consumes a run, including failed or cancelled jobs. Unsaved editor text is never scheduled.</p>
+            <button id="createScheduleBtn" type="button">Create disabled schedule</button>
+            <label for="scheduleList">Saved schedules</label><select id="scheduleList"><option value="">Sign in to load schedules</option></select>
+            <div class="actions"><button id="openScheduleBtn" class="secondary" type="button" disabled>Open schedule</button><button id="refreshSchedulesBtn" class="secondary" type="button">Refresh list</button></div>
+            <div class="actions"><button id="previousSchedulesBtn" class="secondary" type="button" disabled>Previous schedules</button><button id="nextSchedulesBtn" class="secondary" type="button" disabled>Next schedules</button></div>
+            <p id="scheduleCount" class="hint"></p>
+            <div id="scheduleDetail" hidden>
+              <p id="scheduleIdentity" class="hint schedule-identity" tabindex="-1"></p>
+              <p id="scheduleStatus" class="hint" role="status" aria-live="polite"></p>
+              <p id="scheduleTiming" class="hint"></p>
+              <p id="scheduleReviewHelp" class="hint">To enable, load and review the exact pinned template above. Restart, policy, or template changes require review. Changed/deleted pins need a replacement schedule. Pause does not cancel admitted scans.</p>
+              <div class="actions"><button id="enableScheduleBtn" type="button" disabled aria-describedby="scheduleReviewHelp">Enable reviewed schedule</button><button id="pauseScheduleBtn" class="secondary" type="button" disabled>Pause schedule</button><button id="refreshScheduleBtn" class="secondary" type="button">Refresh detail</button><button id="deleteScheduleBtn" class="secondary" type="button" disabled>Delete schedule</button></div>
+              <p class="hint">Delete requires inactive state and no outstanding scan. Admitted scans and their reports remain available.</p>
+              <label for="scheduleOccurrences">Admitted occurrences (oldest first)</label><select id="scheduleOccurrences" disabled><option value="">Open a schedule to load occurrences</option></select>
+              <div class="actions"><button id="openOccurrenceBtn" class="secondary" type="button" disabled>Open admitted scan</button><button id="refreshOccurrencesBtn" class="secondary" type="button">Refresh occurrences</button></div>
+              <div class="actions"><button id="previousOccurrencesBtn" class="secondary" type="button" disabled>Previous occurrences</button><button id="nextOccurrencesBtn" class="secondary" type="button" disabled>Next occurrences</button></div>
+              <p id="occurrenceCount" class="hint" role="status" aria-live="polite"></p>
+            </div>
+          </fieldset>
+        </section>
       </section>
       <section class="panel results" aria-labelledby="resultsTitle"><p class="eyebrow">02 / Inspect</p><h2 id="resultsTitle">Scan results</h2>
         <div class="history"><label for="scanHistory">Saved scans</label><div class="inline">
