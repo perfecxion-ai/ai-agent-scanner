@@ -144,12 +144,12 @@ class NetworkScanner:
             return True
         except ConnectionRefusedError:
             return False
+        except (TimeoutError, asyncio.TimeoutError):
+            self._failure('TCP timeout')
+            return False
         except OSError as error:
             if error.errno not in {errno.ECONNREFUSED}:
                 self._failure('TCP probe')
-            return False
-        except (TimeoutError, asyncio.TimeoutError):
-            self._failure('TCP timeout')
             return False
         except Exception:
             self._failure('TCP probe')
