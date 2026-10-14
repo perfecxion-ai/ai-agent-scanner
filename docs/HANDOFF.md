@@ -122,16 +122,28 @@ Restart and template changes require operator review. Read-only preflight runs i
 one off-thread slot; only the dispatcher admits scans after final guards. Soft
 timeout retains occupied work, rejects late results, and fails readiness without
 blocking cancellation. Schema version 3 upgrades exact version 1/2 layouts.
-No schedule was enabled against a real target. Schedule dashboard controls are
-pending; see [schedule contract and limits](scan-schedules.md).
+No schedule was enabled against a real target; see
+[schedule contract and limits](scan-schedules.md).
+
+PR #35 adds reviewed-pin dashboard creation, explicit enable/pause, bounded
+schedule/occurrence pages, admitted-scan navigation, and constrained deletion.
+Creation starts disabled; unsaved editor changes cannot be scheduled. Responses
+must match expected IDs, pins, recurrence, and transitions before becoming
+actionable. Independent real desktop/mobile browser acceptance covers policy,
+quota, revision, restart, admission, deletion, session, and late-response paths.
+Targeted real keyboard acceptance covers focus after explicit transitions,
+deletion, logout, and 401. All browser fixture servers were stopped; artifact
+scripts, screenshots, and disposable databases are preserved in
+`/tmp/ai-scanner-schedule-browser-rDbOYW`. This is not comprehensive accessibility
+acceptance or real-target schedule validation.
 
 ## Next delivery sequence
 
-1. Add schedule dashboard controls using the implemented API: reviewed template
-   pins, interval/count bounds, explicit enable/pause, occurrences, and restart
-   review. Preserve authentication/epoch guards and test revision/policy errors,
-   deletion constraints, safe text, and desktop/mobile flows. Never enable a
-   schedule merely by creating, loading, or opening it.
+1. Complete the next focused dashboard accessibility slice: stronger enabled
+   control borders, linked scope/model hints, named check/audit scroll regions,
+   focus restoration when the final Show more control disappears, and concise
+   completion announcements. Add reproducible keyboard regressions without
+   moving focus on background polling or weakening authentication/epoch guards.
 2. Expand workflow acceptance and selected integrations without bypassing shared
    admission, cancellation, or current-policy checks. Do not enable schedules or
    scan real targets automatically as part of engineering work.
@@ -173,7 +185,7 @@ are supporting evidence, not required repository dependencies.
 ## Later milestones
 
 After these slices, continue scoped live lab adapters and stronger discovery
-fixtures, scheduling/templates and selected integrations, then representative
+fixtures, workflow acceptance and selected integrations, then representative
 accuracy, load/soak, accessibility, and upgrade acceptance. Enterprise identity,
 PostgreSQL/distributed execution, and external deployments need explicit supported
 contracts and their own validation. Keep unimplemented capabilities visible in

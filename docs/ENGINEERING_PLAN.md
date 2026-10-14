@@ -107,8 +107,9 @@ These are source-review findings, not evidence of exploitation in a deployment.
   review, and atomically admit bounded occurrences through the shared queue.
   One-slot read-only preflight preserves cancellation and rejects late results.
   Exact version 1/2 SQLite upgrades initialize schema version 3. Schedule
-  dashboard controls,
-  external integrations, and comprehensive accessibility acceptance remain pending.
+  dashboard controls have independent controller, browser, and targeted keyboard
+  acceptance. Explicit review gates creation and enablement; loading never enables.
+  External integrations and comprehensive accessibility acceptance remain pending.
 - M6 remains pending. Package and container CI are foundations, not completion of
   performance testing, deployment review, migration validation, or release sign-off.
 

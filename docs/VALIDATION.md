@@ -11,10 +11,11 @@ PRs #29 and #30 add controlled protected MCP inventory checks and tenant-owned
 API templates with an exact SQLite version 1 to 2 upgrade.
 PRs #32 and #33 add manual dashboard template controls and finite API schedules
 with exact SQLite upgrades to schema version 3.
+PR #35 adds reviewed-pin dashboard schedules and targeted keyboard acceptance.
 
 ## Automated checks
 
-- Local Linux/Python 3.10.20: 1026 pytest cases passed. The suite invokes 43 Node
+- Local Linux/Python 3.10.20: 1026 pytest cases passed. The suite invokes 64 Node
   controller tests, which also passed independently.
 - Line coverage across `src`, `app`, and `scanner_cli`: 90%. The shared pipeline
   is 95%, transport 99%, durable jobs 92%, schema acceptance 94%, and API 94%.
@@ -69,7 +70,7 @@ with exact SQLite upgrades to schema version 3.
   Fake-clock and real dispatcher tests cover soft timeout, readiness, cancellation,
   blocked preflight shutdown, and late-result rejection. Exact version 1/2 layouts
   upgrade to schema 3; unknown/future layouts fail before writes. Scheduling is
-  API-only, and no real target schedule was enabled.
+  available through dashboard and API, and no real target schedule was enabled.
 - Explicit JSON nesting limits were checked on Python 3.10 and an isolated Python
   3.12 environment. Network exponent overflow is rejected. Request and streamed
   body timeouts each record one failure, including Python 3.10's distinct exception.
@@ -105,7 +106,28 @@ discard, literal HTML names, denied targets, initial list 503 recovery, and 401
 clearing. Fresh desktop 1440/mobile 390 screenshots were inspected with no
 horizontal overflow, external requests, page errors, CSP violations, or browser
 storage. Authentication, database, dispatcher, and API are real; scanning remains
-synthetic. Schedule controls are not yet part of the browser workflow.
+synthetic.
+
+The schedule continuation verifies reviewed saved pins, disabled creation with
+no job, explicit enable/pause, real CAS and pin conflicts, policy/quota errors,
+restart review, controlled due admission, outstanding-scan deletion rejection,
+completed occurrence navigation, 25+2 schedule/occurrence paging, and deletion
+preserving reports. It also covers initial list 503 recovery, logout, late
+responses, 401 clearing, and literal HTML fields. Real desktop 1440/mobile 390
+Chromium acceptance passed with no horizontal overflow, page errors, external
+requests, CSP violations, or browser storage. Independent source review and 92
+focused pytest cases passed on integrated head `9811587`.
+
+Targeted real keyboard/API checks cover sign-in, create/open, enable/pause,
+schedule/template deletion, logout, and 401. Focus moves to schedule identity
+after explicit successful transitions, nearby Refresh after deletion, and the
+operator key after sign-out. Background list/occurrence refresh does not move
+focus. Labels, linked pin/bounds hints, polite notices, and 320/390/1440 layouts
+were inspected. Stronger baseline control borders, linked scope/model hints,
+named check/audit regions, final Show more focus, and completion announcements
+remain the next focused acceptance slice. Screen-reader workflows and comprehensive
+accessibility conformance were not evaluated. All fixture servers stopped;
+the browser artifacts remain in `/tmp/ai-scanner-schedule-browser-rDbOYW`.
 
 ## Local queue acceptance
 
