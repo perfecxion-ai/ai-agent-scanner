@@ -1,12 +1,14 @@
 """Explicit additive SQLite upgrades for the supported single-process server."""
 
-from sqlalchemy import inspect, insert, select
+from sqlalchemy import inspect, insert, select, update
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 BASE_TABLES = frozenset({"scan_session", "discovered_agent"})
 LEGACY_LAYOUTS = (BASE_TABLES, BASE_TABLES | {"scan_result"},
                   BASE_TABLES | {"scan_result", "scan_job"})
+VERSION_ONE_TABLES = BASE_TABLES | {"scan_result", "scan_job", "schema_version", "audit_event"}
+VERSION_TWO_TABLES = VERSION_ONE_TABLES | {"scan_template"}
 
 
 class SchemaError(RuntimeError):
@@ -43,6 +45,8 @@ def initialize_schema(engine, metadata):
     if engine.dialect.name != "sqlite":
         raise SchemaError("Schema initialization currently supports SQLite only")
     expected = set(metadata.tables)
+    if expected != VERSION_TWO_TABLES:
+        raise SchemaError("Unsupported application metadata")
     with engine.connect() as connection:
         # SQLite otherwise may autocommit DDL before a transaction has begun.
         connection.exec_driver_sql("BEGIN IMMEDIATE")
@@ -54,12 +58,18 @@ def initialize_schema(engine, metadata):
             if names - expected:
                 raise SchemaError("Unknown database tables; no automatic changes were made")
             if "schema_version" in names:
-                if names != expected:
-                    raise SchemaError("Versioned database has missing tables")
-                _validate_tables(connection, metadata, names)
+                _validate_tables(connection, metadata, {"schema_version"})
                 rows = connection.execute(select(metadata.tables["schema_version"])).all()
-                if len(rows) != 1 or rows[0] != (1, SCHEMA_VERSION):
+                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, SCHEMA_VERSION):
                     raise SchemaError("Unsupported database schema version")
+                version = rows[0][1]
+                if names != (VERSION_ONE_TABLES if version == 1 else VERSION_TWO_TABLES):
+                    raise SchemaError("Versioned database has missing or unexpected tables")
+                _validate_tables(connection, metadata, names)
+                if version == 1:
+                    metadata.tables["scan_template"].create(connection)
+                    connection.execute(update(metadata.tables["schema_version"]).where(
+                        metadata.tables["schema_version"].c.id == 1).values(version=SCHEMA_VERSION))
             else:
                 if names and names not in LEGACY_LAYOUTS:
                     raise SchemaError("Unrecognized legacy database layout")
