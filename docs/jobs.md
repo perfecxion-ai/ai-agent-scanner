@@ -39,6 +39,12 @@ Ownership remains held if workers do not stop within the grace period. Process
 termination may still be needed for blocked external libraries; the next startup
 records interrupted jobs without replaying them.
 
+Finite schedules use one separate read-only preflight slot. Their final admission
+runs in the dispatcher, without DNS/filesystem work in its cancellation loop.
+Shutdown invalidates pending results so a late preflight cannot enqueue after
+ownership release. Enabled schedules pause for explicit review on startup.
+See [schedule scope and soft-deadline limits](scan-schedules.md).
+
 ## Cancellation and status
 
 `POST /api/scans/<id>/cancel` requires the same authenticated organization as the
@@ -69,7 +75,7 @@ database URLs, or queue contents.
 ## Schema upgrades
 
 Stop the server and back up the SQLite database with a consistent SQLite backup
-operation before upgrading. Startup validates schema version 2 while holding the
+operation before upgrading. Startup validates schema version 3 while holding the
 dispatcher lock. An empty database is initialized automatically. Recognized
 unversioned layouts are the original `scan_session` and `discovered_agent` tables,
 those tables plus `scan_result`, or those tables plus `scan_result` and `scan_job`.
@@ -78,12 +84,14 @@ Extra non-unique indexes are accepted. Existing records are preserved; missing a
 tables and the version stamp are committed in one SQLite transaction.
 
 The exact version 1 layout contains `scan_session`, `discovered_agent`,
-`scan_result`, `scan_job`, `audit_event`, and `schema_version`. It upgrades to
-version 2 by adding only `scan_template` and updating the version stamp in the
-same transaction. Existing rows remain unchanged. Fresh and recognized
-unversioned layouts initialize directly to version 2. An unstamped extra template
-table or a partial versioned layout is not a recognized upgrade path. See
-[saved template boundaries](scan-templates.md).
+`scan_result`, `scan_job`, `audit_event`, and `schema_version`. Exact version 1
+upgrades add `scan_template`, `scan_schedule`, and `scan_occurrence`. Exact version
+2 already contains `scan_template` and adds only the two schedule tables. All
+additions and the version stamp commit in the same transaction. Existing rows
+remain unchanged. Fresh and recognized unversioned layouts initialize directly
+to version 3. An unstamped extra template/schedule table or a partial versioned
+layout is not a recognized upgrade path. See [saved template boundaries](scan-templates.md)
+and [finite schedule boundaries](scan-schedules.md).
 
 Unknown tables, views, triggers, additional constraints or unique indexes,
 database column defaults, changed columns,

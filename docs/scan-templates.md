@@ -1,8 +1,9 @@
 # Saved scan templates
 
 Templates save the existing API scan configuration for manual reuse. They do not
-start scans when created or edited, run on a timer, or configure external delivery.
-Scheduling is not implemented. Every route requires the operator's authenticated
+start scans when created or edited or configure external delivery. Separately,
+[finite API schedules](scan-schedules.md) pin a reviewed template revision and
+require explicit enabling. Every route requires the operator's authenticated
 organization; foreign and missing template IDs both return 404.
 
 ## Dashboard
@@ -57,7 +58,8 @@ exactly like direct scan creation. A full shared queue returns 429.
 `DELETE /api/templates/<id>` deletes only the saved recipe. Existing queued or
 running scans retain their independent configuration snapshot. Use the scan
 cancellation endpoint to cancel a job; deleting or editing its template does not
-cancel it. Names need not be unique.
+cancel it. Names need not be unique. Edits/deletion pause referencing schedules
+transactionally, without changing their pinned revision or cancelling admitted jobs.
 
 ## Limits and credentials
 
@@ -107,11 +109,13 @@ This history is operational and is not tamper-resistant.
 
 ## Database upgrade
 
-Templates add `scan_template` in schema version 2. Startup accepts the exact
-version 1 layout and creates only this additive table while updating the version
-stamp in one SQLite transaction. Existing scan, job, result, asset, and audit rows
-are preserved. Fresh databases and previously supported unversioned layouts
-initialize directly to version 2. See [job and upgrade constraints](jobs.md).
+Templates introduced `scan_template` in schema version 2. Current startup uses
+version 3 for finite scheduling. Exact version 1 layouts add the template and
+two schedule tables; exact version 2 layouts add only the schedule tables.
+Each upgrade updates the version stamp in one SQLite transaction. Existing scan,
+job, result, asset, audit, and template rows are preserved. Fresh databases and
+previously supported unversioned layouts initialize directly to version 3. See
+[job and upgrade constraints](jobs.md).
 
 No template feature changes the single-process, file-backed SQLite, POSIX, local
 filesystem deployment boundary. Stop the server and take a consistent database
