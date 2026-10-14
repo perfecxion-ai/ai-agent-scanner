@@ -6,10 +6,11 @@ discovery, check contracts, SQLite upgrades/audit history, local queue acceptanc
 and dashboard evidence views. None of these merges publishes a package.
 PRs #24 through #26 add cross-version timeout accounting, conservative network
 inventories, and scoped read-only live MCP collection.
+PR #28 updates current TGI recognition and its conservative historical boundary.
 
 ## Automated checks
 
-- Local Linux/Python 3.10.20: 722 pytest cases passed. The suite invokes 25 Node
+- Local Linux/Python 3.10.20: 744 pytest cases passed. The suite invokes 25 Node
   controller tests, which also passed independently.
 - Line coverage across `src`, `app`, and `scanner_cli`: 89%. The shared pipeline
   is 95%, transport 99%, durable jobs 91%, schema acceptance 94%, and API 91%.
@@ -36,6 +37,9 @@ inventories, and scoped read-only live MCP collection.
   real connection-time policy. They distinguish protocol observations from vendor
   identity and incomplete sources from expected negatives. Native CI localhost
   address differences are controlled without relaxing scope.
+  TGI fixtures require the router discriminator, version, model identity, and a
+  positive input limit; current `max_input_tokens` takes precedence over the
+  legacy field. Router-less historical responses stay unsupported and unidentified.
 - Live MCP fixtures exercise JSON/request-scoped SSE, version/capability handling,
   strict envelopes, partial pages, cookies/redirect rejection, scope changes,
   escaped credentials, schema/pointer limits, and immutable timed-out validation.

@@ -77,6 +77,8 @@ network discovery, and add scoped read-only live MCP inventory. Network fixtures
 cover typed protocol evidence, false attribution, canonical authority, expected
 negative services, incomplete responses, DNS/TCP limits, cancellation, and
 deterministic JSON depth/finiteness. Unknown hostname exposure is omitted.
+PR #28 adds current TGI input-limit recognition with explicit router identity;
+historical router-less responses remain unsupported rather than misattributed.
 
 The live MCP CLI supports the documented 2026-07-28 inventory subset only.
 JSON/SSE, pagination, schemas, and report pointers are bounded; credentials and
