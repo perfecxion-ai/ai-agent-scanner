@@ -205,7 +205,7 @@ def _bounded_schema(schema, state):
 
 
 def _schema(schema, state, input_schema=True):
-    if not isinstance(schema, dict) or (input_schema and schema.get("type") != "object"):
+    if not isinstance(schema, dict):
         raise LiveError("Invalid MCP tool schema")
     _bounded_schema(schema, state)
     # Validate the syntax, not tool instances. check_schema uses bundled metaschemas.
@@ -217,6 +217,8 @@ def _schema(schema, state, input_schema=True):
         Draft202012Validator.check_schema(schema)
     except (SchemaError, ValueError, RecursionError, TypeError, OverflowError):
         raise LiveError("Invalid MCP tool schema") from None
+    if input_schema and schema.get("type") != "object":
+        raise LiveError("Unsupported MCP input schema root; explicit object type required")
     headers = set()
     pending = [(schema, True)]
     while pending:

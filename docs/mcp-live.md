@@ -50,6 +50,13 @@ schemas are not used to invoke tools or evaluate arguments. Header annotations
 receive conservative syntax/reachability checks. This does not establish full
 MCP interoperability or safe tool behavior.
 
+Input analysis currently requires an explicit `type: object` root, matching the
+passive analyzer. Otherwise-valid missing-type, union-type or composition-only
+input schemas are outside this supported subset and produce an explicit
+unsupported-root reason and incomplete inventory, not a security pass or an
+invalid-schema claim. Output schemas support any valid object-form 2020-12
+schema, including array and primitive output types.
+
 ## Limits and result meaning
 
 Hard work caps are 32 requests, 1 MiB per response, 4 MiB total response data,

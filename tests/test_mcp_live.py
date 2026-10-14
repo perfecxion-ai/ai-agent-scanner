@@ -286,6 +286,17 @@ def test_output_schemas_accept_arbitrary_structured_json_types(server, schema):
     assert report["checks"][0]["outcome"] == "inconclusive"
 
 
+@pytest.mark.parametrize("schema", [{}, {"properties": {"path": {"type": "string"}}},
+    {"allOf": [{"type": "object"}]}, {"type": ["object", "null"]}, {"type": "array"}])
+def test_valid_input_schema_roots_outside_passive_analysis_subset_are_explicit(server, schema):
+    server[1]["dispatch"] = lambda request, headers: result(request, discovery() if request["method"] == "server/discover" else {
+        "tools": [{"name": "unsupported_root", "inputSchema": schema}]})
+    report = collect(server)
+    assert report["status"] == "partial" and report["tools_assessed"] == 0
+    assert report["reason"] == "Unsupported MCP input schema root; explicit object type required"
+    assert "Invalid" not in report["reason"]
+
+
 @pytest.mark.parametrize("secret", ["fixture-live-bearer-never-export", "fixture/live/token", "fixture~live~token", "fixture~/live/~token"])
 def test_credential_echo_in_schema_pointer_and_cookie_never_persist(server, monkeypatch, secret):
     monkeypatch.setenv("MCP_FIXTURE_TOKEN", secret)
