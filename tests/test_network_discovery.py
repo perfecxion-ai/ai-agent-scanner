@@ -109,11 +109,13 @@ async def test_valid_empty_or_unrelated_inventory_is_clean_negative(document):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('document', [{'models': None}, {'models': [{'name': 'model', 'modified_at': 'not-date'}]},
-                                    {'object': 'list', 'data': [None]}, {'model_id': 'model', 'max_input_length': None}])
-async def test_invalid_claimed_inventory_marks_incomplete(document):
+@pytest.mark.parametrize('provider,document', [('ollama', {'models': None}),
+                                    ('ollama', {'models': [{'name': 'model', 'modified_at': 'not-date'}]}),
+                                    ('openai', {'object': 'list', 'data': [None]}),
+                                    ('tgi', {'model_id': 'model', 'max_input_length': None})])
+async def test_invalid_claimed_inventory_marks_incomplete(provider, document):
     with scan_transport(budget()) as limits:
-        assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures['openai'])
+        assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures[provider])
     assert limits.failures == 1
 
 
@@ -412,16 +414,20 @@ async def test_connection_time_dns_rebinding_rejected(service, monkeypatch):
 @pytest.mark.asyncio
 async def test_http_timeout_marks_incomplete(service):
     responses, _, port = service
+    release = asyncio.Event()
 
     async def slow(request):
-        await asyncio.sleep(0.03)
+        await release.wait()
         return web.json_response(OLLAMA)
 
     responses['/api/tags'] = slow
     scanner = NetworkScanner()
     scanner.timeout = 0.01
-    with scan_transport(budget()) as limits:
-        assert not await scanner._identify_ai_service('127.0.0.1', port, DiscoveryEngine().ai_signatures)
+    try:
+        with scan_transport(budget()) as limits:
+            assert not await scanner._identify_ai_service('127.0.0.1', port, DiscoveryEngine().ai_signatures)
+    finally:
+        release.set()
     assert limits.failures == 1
 
 
@@ -492,3 +498,20 @@ def test_scanner_reuse_across_event_loops_does_not_reuse_bound_semaphore(monkeyp
     monkeypatch.setattr(scanner, '_is_port_open', probe)
     for _ in range(2):
         assert not asyncio.run(scanner.scan_range('192.0.2.0/26', {}))
+
+
+@pytest.mark.asyncio
+async def test_unrelated_extension_fields_cannot_invalidate_expected_inventory():
+    with scan_transport(budget()) as limits:
+        assert await NetworkScanner()._is_ai_service(Response({**MODELS, 'models': 'unrelated metadata'}),
+                                                    DiscoveryEngine().ai_signatures['openai'])
+    assert limits.failures == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('timestamp', ['2026-01-01', '2026-01-01T00:00:00', '2026-02-31T00:00:00Z'])
+async def test_ollama_requires_valid_timezone_modification_timestamp(timestamp):
+    document = {'models': [{'name': 'fixture', 'modified_at': timestamp}]}
+    with scan_transport(budget()) as limits:
+        assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures['ollama'])
+    assert limits.failures == 1

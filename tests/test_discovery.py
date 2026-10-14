@@ -130,7 +130,7 @@ async def test_generic_bearer_and_html_are_not_ai_services():
 
 @pytest.mark.asyncio
 async def test_chunked_ollama_response_identifies_service():
-    response = Response(b'{"models":[{"name":"fixture","modified_at":"2026-01-01"}]}')
+    response = Response(b'{"models":[{"name":"fixture","modified_at":"2026-01-01T00:00:00Z"}]}')
     assert await NetworkScanner()._is_ai_service(response, DiscoveryEngine().ai_signatures['ollama'])
 
 

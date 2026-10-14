@@ -184,7 +184,7 @@ class NetworkScanner:
             for path, signatures in routes.items():
                 try:
                     async with session.get(base_url + path) as response:
-                        document = await self._read_document(response)
+                        document = await self._read_document(response, [signature for _, signature in signatures])
                         if document is None:
                             continue
                         for provider, signature in signatures:
@@ -210,7 +210,7 @@ class NetworkScanner:
                              'response_status': status, 'internet_facing': self._is_internet_facing(host),
                              'evidence_status': 'protocol_observation'}}
 
-    async def _read_document(self, response):
+    async def _read_document(self, response, signatures=()):
         if response.status != 200:
             if response.status >= 500 or response.status in (408, 429):
                 self._failure('HTTP service error')
@@ -231,13 +231,13 @@ class NetworkScanner:
         if isinstance(document, dict) and 'error' in document:
             self._failure('inventory error document')
             return None
-        if isinstance(document, dict) and self._invalid_inventory(document):
+        if isinstance(document, dict) and self._invalid_inventory(document, signatures):
             self._failure('invalid inventory schema')
             return None
         return document if isinstance(document, dict) else None
 
     async def _is_ai_service(self, response: aiohttp.ClientResponse, signature: Dict) -> bool:
-        document = await self._read_document(response)
+        document = await self._read_document(response, [signature])
         return document is not None and self._matches_document(document, signature)
 
     @staticmethod
@@ -265,7 +265,8 @@ class NetworkScanner:
 
     @staticmethod
     def _timestamp(value):
-        if not _text(value):
+        if not _text(value) or not re.fullmatch(
+                r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})', value):
             return False
         try:
             datetime.fromisoformat(value.replace('Z', '+00:00'))
@@ -274,18 +275,22 @@ class NetworkScanner:
         return True
 
     @staticmethod
-    def _invalid_inventory(document):
+    def _invalid_inventory(document, signatures):
         # Empty typed inventories are clean negatives, not identifying evidence.
-        if 'models' in document:
-            models = document['models']
-            return not isinstance(models, list) or bool(models) and not NetworkScanner._matches_document(
-                document, {'response_patterns': ['modified_at']})
-        if document.get('object') == 'list':
-            models = document.get('data')
-            return not isinstance(models, list) or bool(models) and not NetworkScanner._matches_document(
-                document, {'response_patterns': ['choices']})
-        if 'model_id' in document:
-            return not NetworkScanner._matches_document(document, {'response_patterns': ['model_id']})
+        if any(NetworkScanner._matches_document(document, signature) for signature in signatures):
+            return False
+        for signature in signatures:
+            patterns = set(signature.get('response_patterns', []))
+            if 'modified_at' in patterns and 'models' in document:
+                models = document['models']
+                if not isinstance(models, list) or models:
+                    return True
+            if 'choices' in patterns and document.get('object') == 'list':
+                models = document.get('data')
+                if not isinstance(models, list) or models:
+                    return True
+            if 'model_id' in patterns and 'model_id' in document:
+                return True
         return False
 
     async def _resolve_domain(self, domain: str) -> List[str]:
