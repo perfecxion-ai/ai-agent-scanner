@@ -50,6 +50,9 @@ These changes are engineering work on the current branch, not a published releas
   after recipe edits or deletion; upgrade exact SQLite version 1 layouts to 2.
 - Add manual dashboard template save/edit/run/delete with bounded paging,
   stale-revision errors, explicit dirty-editor discard, and logout/race guards.
+- Add disabled-by-default finite API schedules with pinned template revisions,
+  atomic occurrence admission, quotas, restart review, and one-slot read-only
+  preflight. Late/timed-out validation cannot admit scans after shutdown.
 
 ### Delivery and documentation
 
@@ -66,7 +69,7 @@ These changes are engineering work on the current branch, not a published releas
 ### Still incomplete
 
 - Comprehensive migrations, PostgreSQL coordination, and distributed workers.
-- Enterprise identity, scheduling, external integrations, and audit guarantees.
+- Enterprise identity, schedule dashboard controls, external integrations, and audit guarantees.
 - Live coverage of all MCP, indirect injection, RAG, multimodal, and supply-chain scenarios.
 - Representative accuracy and performance benchmarks and release-candidate acceptance.
 

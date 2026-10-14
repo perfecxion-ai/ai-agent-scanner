@@ -403,8 +403,8 @@ def _template_api(function):
             return jsonify({"success": False, "error": exc.description}), exc.code
         except Exception:
             db.session.rollback()
-            app.logger.error("Template operation failed")
-            return jsonify({"success": False, "error": "Template operation failed"}), 500
+            app.logger.error("Saved scan operation failed")
+            return jsonify({"success": False, "error": "Saved scan operation failed"}), 500
     return wrapped
 
 
