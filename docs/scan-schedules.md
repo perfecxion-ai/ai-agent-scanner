@@ -2,12 +2,42 @@
 
 Schedules admit a finite number of scans from one reviewed, tenant-owned template
 revision. Creation is disabled by default. Only an explicit authenticated enable
-action starts the timer. This is an API-only workflow; there is no schedule UI,
+action starts the timer. The dashboard and API share this contract; there is no
 cron expression, infinite recurrence, external delivery, or automatic enabling.
 
 Every route requires the operator's organization. Foreign and missing IDs both
 return 404. Schedule responses contain operational fields, not recipe contents,
 credentials, source results, or raw validation errors.
+
+## Dashboard
+
+Load a saved template in the complete-definition editor, review its displayed ID,
+revision, targets, and configuration, then check **I reviewed the displayed saved
+template revision**. Set an integer interval and finite count and choose
+**Create disabled schedule**. Unsaved editor text is never scheduled; discard or
+save edits and review the resulting saved revision first. Creation resets the
+review confirmation and does not admit a scan.
+
+The schedule list uses 25-item pages. **Open schedule** displays the pinned
+template and schedule revisions, state and pause reason, admitted/remaining count,
+outstanding scan, interval, and UTC due time. Opening or refreshing never enables
+or adopts a changed recipe. To choose **Enable reviewed schedule**, load and
+explicitly review the exact pinned saved template revision above. Template edits
+or deletion require a replacement schedule rather than a silent rebind. Explicit
+**Pause schedule** prevents future admission but does not cancel admitted scans.
+
+Refresh detail to observe dispatcher changes; schedules are not polled or enabled
+by this page. Occurrences use bounded 25-item pages, ordered oldest first, with UTC
+timestamps. **Open admitted scan** uses the existing results/status/audit view.
+**Delete schedule** is available only when inactive with no outstanding scan, and
+the server rechecks that constraint. Deletion preserves admitted scans and reports.
+
+Revision and current-policy conflicts retain the displayed details and recipe;
+refresh and review before retrying. Failed list/detail/occurrence requests leave
+authenticated refresh controls available. Logout and expired sessions clear all
+schedule details, recipe definitions, and pending-response state. Nothing is
+stored in browser storage. These operator controls do not authorize running real
+target schedules during engineering validation.
 
 ## API
 
