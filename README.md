@@ -32,8 +32,10 @@ ai-agent-scanner discover --network 127.0.0.1/32 --output local-inventory.json
 
 This runs network discovery, not model generation or a complete vulnerability
 assessment. Discovery checks service signatures on common ports, including
-Ollama's default port. A missing service can produce an empty inventory.
-The shared transport has a default budget of 500 TCP/HTTP probes and a 1 MiB
+Ollama's default port. It samples read-only model inventories and identifies
+protocol compatibility, not vendor ownership. See [network discovery boundaries](docs/network-discovery.md).
+A missing service can produce an empty inventory.
+The shared scan budget defaults to 500 DNS/TCP/HTTP attempts and a 1 MiB
 response limit; exhausted budgets produce incomplete results. Local CLI targets
 are operator-selected. Server scans additionally require explicit allowlists.
 
@@ -44,6 +46,7 @@ are operator-selected. Server scans additionally require explicit allowlists.
 | Discovery | Looks for service signatures, code integrations, supported traffic records, and optional cloud inventory | Complete asset inventory or exploitability |
 | Active security probes | Sends prompt, access-control, and privacy probes to configured endpoints | Successful testing when the provider rejects requests or the adapter is unsupported |
 | Passive MCP review | Inspects local configuration and saved tool schemas; emits JSON or SARIF | Live MCP authorization, sandbox enforcement, or tool exploitation |
+| Read-only live MCP inventory | Collects bounded public tool schemas from an explicitly scoped, already-running MCP endpoint | Authorization/Origin enforcement, tool execution, or complete MCP interoperability |
 | Offline replay | Compares recorded outputs and tool requests against explicit policies and labels | Production accuracy, a live injection campaign, or proof of tool execution |
 | Reporting | Preserves findings, observations, phase status, and risk estimates; exports JSON/SARIF | Compliance certification or a standardized CVSS score |
 
@@ -53,6 +56,7 @@ ai-agent-scanner scan --config lab-targets.json --output results.json
 ai-agent-scanner scan --config lab-targets.json --format sarif --output results.sarif
 ai-agent-scanner mcp --config mcp-client.json --output mcp-review.json
 ai-agent-scanner mcp --tools saved-tools.json --format sarif --output mcp.sarif
+ai-agent-scanner mcp-live --endpoint http://127.0.0.1:8000/mcp --allow-network 127.0.0.1/32 --allow-loopback --output mcp-inventory.json
 ai-agent-scanner evaluate --suite lab-transcripts.json --output metrics.json
 ai-agent-scanner diff --before baseline.json --after results.json --output changes.json
 ai-agent-scanner triage --report results.json --policy suppressions.json --output triaged.json
@@ -82,6 +86,11 @@ Cloud discovery requires `python -m pip install '.[cloud]'` and provider-specifi
 configuration. Use Python 3.11 or newer for the cloud SDKs. See
 [discovery inputs and bounds](docs/discovery-inputs.md). The web API does not
 accept caller-supplied cloud credentials.
+
+The `mcp-live` command supports only the documented MCP `2026-07-28` Streamable
+HTTP inventory subset. It never launches configured commands or invokes tools,
+and completed collection leaves runtime security unassessed. See
+[live MCP scope, credentials, and limits](docs/mcp-live.md).
 
 ## Web application
 
@@ -136,8 +145,8 @@ Review retained evidence before acting on any finding.
   migrations, and hard cancellation of synchronous libraries remain unfinished.
 - Enterprise identity, granular roles, production tenant provisioning, and
   immutable audit trails are not implemented.
-- Passive MCP analysis and offline RAG/injection/tool replay do not replace
-  live integration tests against those systems.
+- Passive MCP analysis, read-only live inventory, and offline RAG/injection/tool
+  replay do not replace runtime authorization, tool-behavior, or live attack tests.
 - Discovery and provider compatibility are incomplete. Transport errors and
   unsupported responses limit coverage; request budgets can truncate a scan.
 - Secret redaction reduces exposure but is not a general data-loss prevention

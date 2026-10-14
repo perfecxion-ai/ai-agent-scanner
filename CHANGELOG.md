@@ -19,6 +19,9 @@ These changes are engineering work on the current branch, not a published releas
   before writes; persist tenant-owned state-transition audit history.
 - Bound traffic and cloud inventory work, preserve resource identities, and keep
   source failures distinct from successful empty discovery.
+- Replace weak network signatures with typed read-only inventories, canonical
+  hostname identity, bounded DNS/TCP/JSON work, and unknown hostname exposure.
+- Count HTTP request/body timeouts consistently across supported Python versions.
 
 ### Results and interfaces
 
@@ -27,6 +30,9 @@ These changes are engineering work on the current branch, not a published releas
 - Share a scan pipeline between CLI and API; support explicit agent configuration
   and security-only runs from eligible source scans.
 - Add passive local MCP configuration and tool-schema assessment with versioned rules.
+- Add scoped read-only live MCP inventory with bounded JSON/SSE pagination and
+  schema analysis, secret-safe reports, explicit skipped runtime-security checks,
+  and accurate incomplete SARIF execution status.
 - Add offline replay fixtures for indirect markers, foreign-tenant document
   canaries, and tool-request policies, with labeled confusion and accuracy metrics.
 - Add explicit model/protocol adapters, tenant-owned scan history, and source model selection.
@@ -47,6 +53,7 @@ These changes are engineering work on the current branch, not a published releas
   coverage, enterprise controls, and production security guarantees.
 - Pin CI actions and verify uploaded distribution contents after downloading them.
 - Add disposable SQLite queue-load acceptance with deterministic state and audit invariants.
+- Verify the installed live MCP command and its lazily loaded implementation.
 
 ### Still incomplete
 
