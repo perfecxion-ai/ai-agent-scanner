@@ -14,6 +14,8 @@ unset PYTHONPATH
 "$smoke_dir/venv/bin/ai-agent-scanner" --help
 "$smoke_dir/venv/bin/ai-agent-scanner" coverage
 "$smoke_dir/venv/bin/ai-agent-scanner" mcp --help
+"$smoke_dir/venv/bin/ai-agent-scanner" mcp-live --help
+"$smoke_dir/venv/bin/python" -c 'from src.mcp.live import PROTOCOL_VERSION, inventory; assert PROTOCOL_VERSION == "2026-07-28"; assert callable(inventory)'
 "$smoke_dir/venv/bin/ai-agent-scanner" diff --help
 "$smoke_dir/venv/bin/ai-agent-scanner" triage --help
 "$smoke_dir/venv/bin/ai-agent-scanner" evaluate --output fixture-metrics.json
