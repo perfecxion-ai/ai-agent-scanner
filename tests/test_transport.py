@@ -1,5 +1,6 @@
 """Transport tests run against a synthetic loopback server."""
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import aiohttp
@@ -12,12 +13,24 @@ from src.core.transport import PolicyResolver, SafeSession, ScanBudget, Transpor
 @pytest.fixture
 async def target_server():
     visited = []
+    release = asyncio.Event()
     async def handler(request):
         visited.append(request.path)
         if request.path == '/redirect':
             raise web.HTTPFound('/secret')
         if request.path == '/large':
             return web.Response(body=b'x' * 2048)
+        if request.path == '/slow':
+            await release.wait()
+        if request.path == '/slow-body':
+            response = web.StreamResponse()
+            await response.prepare(request)
+            await release.wait()
+            try:
+                await response.write(b'fixture')
+            except ConnectionResetError:
+                pass
+            return response
         return web.json_response({'response': 'fixture'})
 
     app = web.Application()
@@ -30,6 +43,7 @@ async def target_server():
     try:
         yield f'http://127.0.0.1:{port}', visited
     finally:
+        release.set()
         await runner.cleanup()
 
 
@@ -69,6 +83,20 @@ async def test_response_limit_marks_rejection(target_server):
                 async with session.get(url + '/large') as response:
                     await response.text()
     assert budget.rejections == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('path', ['/slow', '/slow-body'])
+async def test_request_and_body_timeouts_record_one_failure(target_server, path):
+    url, _ = target_server
+    budget = ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True)
+    with scan_transport(budget):
+        async with SafeSession(timeout=aiohttp.ClientTimeout(total=0.02)) as session:
+            with pytest.raises(asyncio.TimeoutError):
+                async with session.get(url + path) as response:
+                    await response.read()
+    assert budget.requests == budget.failures == 1
+    assert budget.rejections == 0
 
 
 @pytest.mark.asyncio
