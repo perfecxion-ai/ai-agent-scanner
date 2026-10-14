@@ -87,6 +87,8 @@ addresses are revalidated. A baseline cursor containing the protected name,
 including a percent-encoded representation, is
 never sent back; collection stops without running controls. No retry, legacy
 negotiation, OAuth flow, alternate URL, resource read, or tool call is attempted.
+Cursor values remain opaque strings, not URLs; only bounded percent decoding
+checks marker overlap, with more than 16 changing rounds unsupported.
 
 A fully valid matching-ID inventory page returning the exact protected tool
 confirms a violation of the declared protected inventory policy. This remains

@@ -73,16 +73,19 @@ def _origin(value):
     return value
 
 
-def _endpoint_forms(endpoint):
-    forms = [endpoint, str(URL(endpoint))]
-    value = endpoint
+def _decoded_forms(value):
+    forms = [value]
     for _ in range(16):
         decoded = unquote(value)
         if decoded == value:
             return forms
         forms.append(decoded)
         value = decoded
-    raise ValueError("MCP policy endpoint has excessive percent encoding")
+    raise ValueError("MCP policy value has excessive percent encoding")
+
+
+def _endpoint_forms(endpoint):
+    return [str(URL(endpoint)), *_decoded_forms(endpoint)]
 
 
 def _validate(policy, endpoint, headers, api_key_env):
@@ -170,7 +173,7 @@ async def _baseline(session, endpoint, state, headers, marker):
         state.pages, state.schema_nodes = page.pages, page.schema_nodes
         if cursor is None:
             return
-        if any(marker in value for value in _endpoint_forms(cursor)):
+        if any(marker in value for value in _decoded_forms(cursor)):
             raise live.LiveError("Protected MCP tool name overlaps baseline cursor")
         if cursor in seen:
             raise live.LiveError("Repeated MCP baseline cursor")

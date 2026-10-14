@@ -478,3 +478,23 @@ def test_header_only_marker_denial_echo_is_not_passed_or_confirmed(server, heade
     assert report["findings"] == []
     assert record(report, "MCP.authorization")["outcome"] == record(report, "MCP.origin")["outcome"] == "inconclusive"
     assert MARKER not in json.dumps(report)
+
+
+@pytest.mark.parametrize("cursor", ["http://[", "", "not a URL ? #"])
+def test_baseline_cursor_is_opaque_not_a_url(server, cursor):
+    def dispatch(request, headers):
+        if request["method"] == "server/discover":
+            return result(request, discovery())
+        if headers.get("Authorization") is None:
+            return 401, {}, b""
+        if headers.get("Origin") == DENIED:
+            return 403, {}, b""
+        if "cursor" not in request["params"]:
+            return result(request, {"tools": [tool()], "nextCursor": cursor})
+        assert request["params"]["cursor"] == cursor
+        return result(request, {"tools": [tool(MARKER)]})
+    server[1]["dispatch"] = dispatch
+    report = collect(server)
+    assert report["status"] == "completed" and len(server[2]) == 5
+    assert record(report, "MCP.authorization")["outcome"] == record(report, "MCP.origin")["outcome"] == "passed"
+    assert server[2][2][0]["params"]["cursor"] == cursor
