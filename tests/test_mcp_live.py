@@ -391,6 +391,17 @@ def test_deep_schema_is_bounded(server):
     assert collect(server)["reason"] == "MCP schema complexity limit exceeded"
 
 
+def test_long_schema_key_cannot_amplify_repeated_report_pointers(server):
+    prefix = "x" * 100000
+    children = {str(index): {"type": "object", "properties": {"command": {"type": "string"}}} for index in range(100)}
+    server[1]["dispatch"] = lambda request, headers: result(request, discovery() if request["method"] == "server/discover" else {
+        "tools": [tool(properties={prefix: {"type": "object", "properties": children}})]})
+    report = collect(server)
+    assert report["status"] == "partial" and report["tools_assessed"] == 0
+    assert report["reason"] == "MCP schema complexity limit exceeded"
+    assert len(json.dumps(report)) < 10000 and report["observations"] == []
+
+
 @pytest.mark.parametrize("body", [b"data: {}\n\n", b": keepalive\n\n", b'data: {"jsonrpc":"2.0","id":"inventory-1","result":{}}',
     b'data: {"jsonrpc":"2.0","id":"server-call","method":"sampling/createMessage","params":{}}\n\n'])
 def test_incomplete_and_invalid_sse_never_passes(server, body):

@@ -61,7 +61,9 @@ schema, including array and primitive output types.
 
 Hard work caps are 32 requests, 1 MiB per response, 4 MiB total response data,
 10 inventory pages, 200 tools, 4 KiB per cursor, 256 data-bearing SSE events per
-response, schema depth 32 and 10,000 schema nodes across the collected inventory.
+response, schema depth 32, schema field names of at most 256 UTF-8 bytes, and
+10,000 schema nodes across the collected inventory. Field-name bounds also
+prevent long shared prefixes from amplifying report pointers.
 Cursors remain opaque; an empty string is valid. Repeated cursors stop collection.
 Responses and SSE notifications count toward byte budgets.
 

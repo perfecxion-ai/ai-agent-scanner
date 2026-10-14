@@ -29,6 +29,7 @@ MAX_TOOLS = 200
 MAX_CURSOR_BYTES = 4096
 MAX_SCHEMA_DEPTH = 32
 MAX_SCHEMA_NODES = 10000
+MAX_SCHEMA_KEY_BYTES = 256
 OVERALL_TIMEOUT = 20
 REQUEST_TIMEOUT = 5
 MAX_EVENTS = 256
@@ -199,6 +200,8 @@ def _bounded_schema(schema, state):
         if depth > MAX_SCHEMA_DEPTH or state.schema_nodes > MAX_SCHEMA_NODES:
             raise LiveError("MCP schema complexity limit exceeded")
         if isinstance(node, dict):
+            if any(len(key.encode("utf-8")) > MAX_SCHEMA_KEY_BYTES for key in node):
+                raise LiveError("MCP schema complexity limit exceeded")
             pending.extend((value, depth + 1) for value in node.values())
         elif isinstance(node, list):
             pending.extend((value, depth + 1) for value in node)
