@@ -187,7 +187,7 @@ def test_version_one_unknown_layout_rejected_without_writes(database, mutation):
         elif mutation == "missing_base":
             connection.exec_driver_sql("DROP TABLE scan_result")
         elif mutation == "future":
-            connection.exec_driver_sql("UPDATE schema_version SET version = 3")
+            connection.exec_driver_sql(f"UPDATE schema_version SET version = {SCHEMA_VERSION + 1}")
         elif mutation == "duplicate_stamp":
             connection.exec_driver_sql("INSERT INTO schema_version VALUES (2, 1)")
         elif mutation == "wrong_stamp_id":
