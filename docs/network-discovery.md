@@ -8,11 +8,20 @@ It sends GET requests only. Recognized model inventories are:
   The provider is `openai-compatible`, not OpenAI or vLLM ownership.
 - `/api/tags`: a nonempty Ollama-shaped model list with names and valid
   modification timestamps.
-- `/info`: TGI-shaped model identity and a positive integer input limit.
+- `/info`: TGI-shaped model identity, a `router: text-generation-router`
+  discriminator, nonempty version, and positive integer `max_input_tokens`.
+  Older `max_input_length` is accepted only when the current field is absent.
+  This field fallback still requires the router discriminator and version;
+  historical servers without that discriminator remain unsupported.
+  A current field takes precedence; unrelated legacy extension metadata cannot
+  invalidate an otherwise supported current response. Router identity is
+  self-reported protocol evidence, not ownership or live generation compatibility.
 
 These sampled schemas follow the [OpenAI model-list reference](https://developers.openai.com/api/reference/resources/models/methods/list),
 [Ollama model-list reference](https://docs.ollama.com/api/tags), and
-[TGI router source](https://github.com/huggingface/text-generation-inference/blob/main/router/src/server.rs).
+[TGI current Info schema](https://github.com/huggingface/text-generation-inference/blob/main/router/src/lib.rs),
+[historical input-limit field](https://github.com/huggingface/text-generation-inference/blob/v1.4.5/router/src/lib.rs),
+and [TGI read-only route](https://github.com/huggingface/text-generation-inference/blob/main/router/src/server.rs).
 Fixtures do not prove compatibility with every live server or future schema.
 Header names, authentication challenges, HTML, keywords, and generic JSON key
 pairs cannot identify a provider. Empty correctly typed inventories are clean
