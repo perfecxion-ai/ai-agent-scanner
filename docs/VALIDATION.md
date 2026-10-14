@@ -9,16 +9,18 @@ inventories, and scoped read-only live MCP collection.
 PR #28 updates current TGI recognition and its conservative historical boundary.
 PRs #29 and #30 add controlled protected MCP inventory checks and tenant-owned
 API templates with an exact SQLite version 1 to 2 upgrade.
+PRs #32 and #33 add manual dashboard template controls and finite API schedules
+with exact SQLite upgrades to schema version 3.
 
 ## Automated checks
 
-- Local Linux/Python 3.10.20: 935 pytest cases passed. The suite invokes 25 Node
+- Local Linux/Python 3.10.20: 1026 pytest cases passed. The suite invokes 43 Node
   controller tests, which also passed independently.
 - Line coverage across `src`, `app`, and `scanner_cli`: 90%. The shared pipeline
-  is 95%, transport 99%, durable jobs 91%, schema acceptance 94%, and API 94%.
+  is 95%, transport 99%, durable jobs 92%, schema acceptance 94%, and API 94%.
   Mocked cloud inventory is 92%, traffic parsing 89%, and network discovery 97%.
   The live MCP client and controlled policy module are each 96%; the small strict
-  template projection helper is 100%. This measures executed
+  template projection helper is 100%; the schedule service is 96%. This measures executed
   source lines, not attack coverage or security effectiveness.
 - Ruff and the configured medium/high-severity Bandit gate pass, including API
   source. Lower-severity static findings still require contextual review.
@@ -59,8 +61,15 @@ API templates with an exact SQLite version 1 to 2 upgrade.
   queued snapshot independence, DNS/symlink changes, and current-policy worker
   validation. Real SQLite tests cover exact version 1 upgrade, transaction rollback,
   repeated initialization, and malformed/future layout rejection before writes.
-  Templates are API-only; no timer, dashboard template workflow, or external delivery
-  is implemented. Existing dashboard Node tests remain unchanged.
+  Manual dashboard template flows now have Node and browser acceptance; saving
+  or editing a recipe never starts a scan.
+- Schedule fixtures cover tenant/global quotas, pinned revisions, explicit enable/
+  pause, finite terminal consumption, one outstanding scan, queue-full deferral,
+  no catch-up/replay, restart review, source/config races, and atomic rollback.
+  Fake-clock and real dispatcher tests cover soft timeout, readiness, cancellation,
+  blocked preflight shutdown, and late-result rejection. Exact version 1/2 layouts
+  upgrade to schema 3; unknown/future layouts fail before writes. Scheduling is
+  API-only, and no real target schedule was enabled.
 - Explicit JSON nesting limits were checked on Python 3.10 and an isolated Python
   3.12 environment. Network exponent overflow is rejected. Request and streamed
   body timeouts each record one failure, including Python 3.10's distinct exception.
@@ -90,12 +99,20 @@ unavailable audit route. It also verifies logout clearing and the absence of
 page errors, external requests, and CSP violations. Discovery/security functions
 remain synthetic; this does not validate a real model's behavior.
 
+The template continuation exercises authenticated save/edit/run/delete, 25+2
+paging, source/model/timeout preservation, stale revision conflicts, dirty-editor
+discard, literal HTML names, denied targets, initial list 503 recovery, and 401
+clearing. Fresh desktop 1440/mobile 390 screenshots were inspected with no
+horizontal overflow, external requests, page errors, CSP violations, or browser
+storage. Authentication, database, dispatcher, and API are real; scanning remains
+synthetic. Schedule controls are not yet part of the browser workflow.
+
 ## Local queue acceptance
 
 The default 200-job disposable SQLite workload passed with two workers:
 179 completed, 20 cancelled, one interrupted, 181 unique claims, 582 audit events,
 and consistent job/session/report states. A repeated integrated run took
-9.806661 seconds (18.253 completed jobs/second) on schema version 2; no throughput
+8.227119 seconds (21.757 completed jobs/second) on schema version 3; no throughput
 threshold is an acceptance criterion. Four-job acceptance passed and a deliberately insufficient
 deadline reported failure. See [performance scope and reproducible commands](performance.md).
 
