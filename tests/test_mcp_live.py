@@ -216,6 +216,47 @@ def test_invalid_json_and_duplicate_keys_fail(server, body):
     assert collect(server)["status"] == "failed"
 
 
+def test_json_container_nesting_has_deterministic_accepted_rejected_boundary():
+    accepted = b"[" * live.MAX_JSON_DEPTH + b"0" + b"]" * live.MAX_JSON_DEPTH
+    assert isinstance(live._decode(accepted), list)
+    for depth in (live.MAX_JSON_DEPTH + 1, 200, 2000):
+        rejected = b"[" * depth + b"0" + b"]" * depth
+        with pytest.raises(live.LiveError, match="^MCP JSON nesting limit exceeded$"):
+            live._decode(rejected)
+    assert live._decode(json.dumps({"text": "[" * 2000}).encode()) == {"text": "[" * 2000}
+
+
+@pytest.mark.parametrize("depth,completed", [(62, True), (63, False), (200, False)])
+def test_ignored_discovery_metadata_obeys_envelope_depth_bound(server, depth, completed):
+    metadata = 0
+    for _ in range(depth):
+        metadata = [metadata]
+    server[1]["dispatch"] = lambda request, headers: result(request, discovery(ignored=metadata) if request["method"] == "server/discover" else {"tools": []})
+    report = collect(server)
+    assert report["status"] == ("completed" if completed else "failed")
+    if not completed:
+        assert report["reason"] == "MCP JSON nesting limit exceeded"
+        assert report["responses_evaluated"] == 0
+
+
+@pytest.mark.parametrize("depth,completed", [(62, True), (63, False), (200, False)])
+def test_ignored_sse_notification_obeys_envelope_depth_bound(server, depth, completed):
+    metadata = 0
+    for _ in range(depth):
+        metadata = [metadata]
+    notification = {"jsonrpc": "2.0", "method": "notifications/message", "params": {"data": metadata}}
+    def dispatch(request, headers):
+        body = "data: " + json.dumps(notification) + "\n\n"
+        body += "data: " + json.dumps(result(request, discovery() if request["method"] == "server/discover" else {"tools": []})) + "\n\n"
+        return 200, {"Content-Type": "text/event-stream"}, body.encode()
+    server[1]["dispatch"] = dispatch
+    report = collect(server)
+    assert report["status"] == ("completed" if completed else "failed")
+    if not completed:
+        assert report["reason"] == "MCP JSON nesting limit exceeded"
+        assert report["responses_evaluated"] == 0
+
+
 @pytest.mark.parametrize("data", [discovery(supportedVersions=[]), discovery(supportedVersions=["2025-11-25"]),
     discovery(supportedVersions=[True]), discovery(capabilities=[]), discovery(capabilities={"tools": []}),
     discovery(capabilities={"tools": {"listChanged": 1}})])
@@ -385,7 +426,7 @@ def test_response_byte_limit_is_enforced(server):
 
 def test_deep_schema_is_bounded(server):
     schema = {"type": "string"}
-    for _ in range(33):
+    for _ in range(17):
         schema = {"type": "object", "properties": {"nested": schema}}
     server[1]["dispatch"] = lambda request, headers: result(request, discovery() if request["method"] == "server/discover" else {"tools": [{"name": "deep", "inputSchema": schema}]})
     assert collect(server)["reason"] == "MCP schema complexity limit exceeded"

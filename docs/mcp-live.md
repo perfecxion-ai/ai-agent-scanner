@@ -34,7 +34,9 @@ The scanner sends `server/discover`, validates advertised version/capabilities,
 then paginates `tools/list` only when the server advertises tools. Each POST has
 matching protocol metadata and HTTP headers. JSON and bounded request-scoped SSE
 responses are supported, including LF, CRLF and CR framing, UTF-8 BOM, comments,
-and discarded progress/log notifications. Each result must match its request ID.
+and discarded progress/log notifications. Every decoded JSON message has a
+64-container nesting limit, including ignored metadata and notifications. Each
+result must match its request ID.
 Duplicate keys, nonfinite numbers, batches, server requests, malformed envelopes,
 unknown result types, and input-required results are rejected. An absent
 `resultType` is interpreted as complete, as required for compatibility by the

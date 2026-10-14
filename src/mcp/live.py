@@ -33,6 +33,7 @@ MAX_SCHEMA_KEY_BYTES = 256
 OVERALL_TIMEOUT = 20
 REQUEST_TIMEOUT = 5
 MAX_EVENTS = 256
+MAX_JSON_DEPTH = 64
 SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _HEADER_TOKEN = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")
@@ -70,11 +71,24 @@ def _decode(data):
             raise ValueError()
         return number
     try:
-        return json.loads(data.decode("utf-8"), object_pairs_hook=_unique_object,
-                          parse_float=finite_float,
-                          parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-    except (ValueError, UnicodeError, RecursionError):
+        value = json.loads(data.decode("utf-8"), object_pairs_hook=_unique_object,
+                           parse_float=finite_float,
+                           parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+    except RecursionError:
+        raise LiveError("MCP JSON nesting limit exceeded") from None
+    except (ValueError, UnicodeError):
         raise LiveError("Invalid MCP JSON") from None
+    # The decoder's recursion limit differs across Python versions. Bound every
+    # container, including ignored metadata and notifications, before RPC use.
+    pending = [(value, 1)]
+    while pending:
+        node, depth = pending.pop()
+        if isinstance(node, (dict, list)):
+            if depth > MAX_JSON_DEPTH:
+                raise LiveError("MCP JSON nesting limit exceeded")
+            children = node.values() if isinstance(node, dict) else node
+            pending.extend((child, depth + 1) for child in children if isinstance(child, (dict, list)))
+    return value
 
 
 def _rpc(message, request_id):
