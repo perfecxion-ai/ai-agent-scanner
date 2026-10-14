@@ -5,6 +5,8 @@ const CHECK_PAGE_SIZE = 18;
 const CHECK_DISPLAY_LIMIT = 100;
 const AUDIT_PAGE_SIZE = 100;
 const AUDIT_DISPLAY_LIMIT = 500;
+const TEMPLATE_PAGE_SIZE = 25;
+const TEMPLATE_OFFSET_LIMIT = 100000;
 
 class AIAgentScanner {
     constructor(doc = document, fetcher = (...args) => fetch(...args)) {
@@ -21,6 +23,11 @@ class AIAgentScanner {
         this.auditRequest = 0;
         this.auditCursor = 0;
         this.auditCount = 0;
+        this.templateOffset = 0;
+        this.templateRequest = 0;
+        this.templateSelection = 0;
+        this.templateBusy = false;
+        this.template = null;
         this.on('loginForm', 'submit', event => this.login(event));
         this.on('logoutBtn', 'click', () => this.logout());
         this.on('scanForm', 'submit', event => this.startScan(event));
@@ -35,6 +42,21 @@ class AIAgentScanner {
         this.on('nextHistoryBtn', 'click', () => { this.historyOffset += 25; this.loadHistory(); });
         this.on('refreshAuditBtn', 'click', () => this.loadAudit(true));
         this.on('moreAuditBtn', 'click', () => this.loadAudit());
+        this.on('saveTemplateBtn', 'click', () => this.saveTemplate());
+        this.on('refreshTemplatesBtn', 'click', () => this.loadTemplates());
+        this.on('openTemplateBtn', 'click', () => this.openTemplate(this.el('templateList').value));
+        this.on('templateList', 'change', () => this.templateButtons());
+        this.on('previousTemplatesBtn', 'click', () => { this.templateOffset = Math.max(0, this.templateOffset - TEMPLATE_PAGE_SIZE); this.loadTemplates(); });
+        this.on('nextTemplatesBtn', 'click', () => { this.templateOffset = Math.min(TEMPLATE_OFFSET_LIMIT, this.templateOffset + TEMPLATE_PAGE_SIZE); this.loadTemplates(); });
+        this.on('updateTemplateBtn', 'click', () => this.updateTemplate());
+        this.on('runTemplateBtn', 'click', () => this.runTemplate());
+        this.on('deleteTemplateBtn', 'click', () => this.deleteTemplate());
+        this.on('discardTemplateBtn', 'click', () => {
+            if (this.template && !this.templateBusy) {
+                this.el('templateEditor').value = this.templateText;
+                this.notice('Editor reset to the displayed saved revision. No recipe or scan changed.');
+            }
+        });
     }
 
     el(id) { return this.doc.getElementById(id); }
@@ -84,6 +106,7 @@ class AIAgentScanner {
         this.el('emptyState').hidden = false;
         this.clearReport();
         this.clearAudit();
+        this.clearTemplates();
         this.historyOffset = 0;
         this.historyRequest += 1;
         this.el('scanHistory').replaceChildren();
@@ -109,7 +132,11 @@ class AIAgentScanner {
             let data;
             try { data = await response.json(); } catch { throw new Error('Server returned an unreadable response.'); }
             if (epoch !== this.epoch) throw new Error('Session changed');
-            if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
+            if (!response.ok) {
+                const error = new Error(data.error || `Request failed (${response.status}).`);
+                error.status = response.status;
+                throw error;
+            }
             return data;
         } finally { this.pending.delete(controller); }
     }
@@ -129,7 +156,9 @@ class AIAgentScanner {
             this.el('openScanBtn').disabled = this.el('logoutBtn').disabled = false;
             this.notice('Signed in. Your token stays in this page only.');
             this.el('refreshHistoryBtn').disabled = false;
-            await this.loadHistory();
+            this.el('templateControls').disabled = false;
+            this.templateButtons();
+            await Promise.all([this.loadHistory(), this.loadTemplates()]);
         } catch (error) { if (epoch === this.epoch) this.handleError(error); }
         finally { if (epoch === this.epoch) this.el('loginBtn').disabled = false; }
     }
@@ -140,14 +169,13 @@ class AIAgentScanner {
         this.el('sourceScanId').required = reuse;
     }
     lines(id) { return this.el(id).value.split('\n').map(value => value.trim()).filter(Boolean); }
-    async startScan(event) {
-        event.preventDefault();
+    formDefinition() {
         const mode = this.el('scanType').value;
         const config = {};
         let scope = {};
         if (mode === 'security_only') {
             config.source_scan_id = this.el('sourceScanId').value.trim();
-            if (!config.source_scan_id) return this.notice('Enter a completed source scan ID.', true);
+            if (!config.source_scan_id) throw new Error('Enter a completed source scan ID.');
             if (this.el('modelOverrides').value.trim()) {
                 try {
                     const models = JSON.parse(this.el('modelOverrides').value);
@@ -156,27 +184,188 @@ class AIAgentScanner {
                         throw new Error('Invalid model map');
                     }
                     config.model_overrides = models;
-                } catch { return this.notice('Model selections must be a JSON object mapping up to 100 asset IDs to model names.', true); }
+                } catch { throw new Error('Model selections must be a JSON object mapping up to 100 asset IDs to model names.'); }
             }
         } else {
             const targets = this.lines('networkRanges');
             const isNetwork = target => target.includes('/') || target.includes(':') || /^[0-9.]+$/.test(target);
             scope = {network_ranges: targets.filter(isNetwork), domains: targets.filter(target => !isNetwork(target)),
                      repositories: this.lines('repositories'), traffic_sources: this.lines('trafficSources')};
-            if (!Object.values(scope).some(values => values.length)) return this.notice('Enter at least one target.', true);
+            if (!Object.values(scope).some(values => values.length)) throw new Error('Enter at least one target.');
         }
+        return {scan_name: this.el('scanName').value, scan_type: mode, target_scope: scope, scan_config: config};
+    }
+    async startScan(event) {
+        event.preventDefault();
+        let definition;
+        try { definition = this.formDefinition(); } catch (error) { return this.handleError(error); }
         this.el('startScanBtn').disabled = true;
         const epoch = this.epoch;
         const selection = this.selection;
         try {
             const data = await this.request('/api/scans', {method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({scan_name: this.el('scanName').value, scan_type: mode, target_scope: scope, scan_config: config})});
+                body: JSON.stringify(definition)});
             if (epoch !== this.epoch || selection !== this.selection) return;
             this.notice('Scan accepted. Save its ID to reopen it later.');
             await this.selectScan(data.scan_id);
             await this.loadHistory();
         } catch (error) { if (epoch === this.epoch && selection === this.selection) this.handleError(error); }
         finally { if (epoch === this.epoch) this.el('startScanBtn').disabled = false; }
+    }
+    clearTemplates() {
+        this.templateRequest += 1;
+        this.templateSelection += 1;
+        this.templateOffset = 0;
+        this.template = null;
+        this.templateText = '';
+        this.templateBusy = false;
+        this.templateHasNext = false;
+        this.el('templateList').replaceChildren();
+        this.el('templateEditor').value = '';
+        this.el('templateEditorView').hidden = true;
+        this.el('templateIdentity').textContent = this.el('templateCount').textContent = '';
+        this.el('templateControls').disabled = true;
+        this.templateButtons();
+    }
+    templateButtons() {
+        for (const id of ['saveTemplateBtn', 'refreshTemplatesBtn', 'openTemplateBtn', 'previousTemplatesBtn', 'nextTemplatesBtn']) {
+            this.el(id).disabled = !this.token || this.templateBusy;
+        }
+        this.el('openTemplateBtn').disabled ||= !this.el('templateList').value;
+        this.el('previousTemplatesBtn').disabled ||= this.templateOffset === 0;
+        this.el('nextTemplatesBtn').disabled ||= !this.templateHasNext || this.templateOffset >= TEMPLATE_OFFSET_LIMIT;
+        for (const id of ['updateTemplateBtn', 'runTemplateBtn', 'deleteTemplateBtn', 'discardTemplateBtn', 'templateEditor']) {
+            this.el(id).disabled = !this.token || this.templateBusy || !this.template;
+        }
+    }
+    async loadTemplates() {
+        if (!this.token) return;
+        const offset = this.templateOffset;
+        const epoch = this.epoch;
+        const request = ++this.templateRequest;
+        try {
+            const data = await this.request(`/api/templates?limit=${TEMPLATE_PAGE_SIZE}&offset=${offset}`);
+            if (epoch !== this.epoch || request !== this.templateRequest || offset !== this.templateOffset) return;
+            if (!Array.isArray(data.templates) || data.templates.length > TEMPLATE_PAGE_SIZE ||
+                !Number.isSafeInteger(data.total) || data.total < 0) throw new Error('Server returned invalid template history.');
+            if (!data.templates.every(template => template && typeof template.id === 'string' &&
+                Number.isSafeInteger(template.revision) && template.revision > 0)) throw new Error('Server returned an invalid template.');
+            const list = this.el('templateList');
+            list.replaceChildren();
+            for (const template of data.templates) {
+                this.append(list, 'option', `${template.scan_name} / revision ${template.revision}`).value = template.id;
+            }
+            if (!data.templates.length) this.append(list, 'option', 'No saved templates on this page.').value = '';
+            this.templateHasNext = offset + data.templates.length < data.total && data.templates.length > 0;
+            this.el('templateCount').textContent = `${data.templates.length} shown / ${data.total} saved`;
+            this.templateButtons();
+        } catch (error) { if (epoch === this.epoch && request === this.templateRequest) this.handleError(error); }
+    }
+    showTemplate(template) {
+        if (!template || typeof template.id !== 'string' || !Number.isSafeInteger(template.revision) || template.revision < 1 ||
+            !['discovery_only', 'full', 'security_only'].includes(template.scan_type) || typeof template.scan_name !== 'string' ||
+            !template.target_scope || typeof template.target_scope !== 'object' || Array.isArray(template.target_scope) ||
+            !template.scan_config || typeof template.scan_config !== 'object' || Array.isArray(template.scan_config)) {
+            throw new Error('Server returned an invalid template definition.');
+        }
+        this.template = {id: template.id, revision: template.revision};
+        const definition = {scan_name: template.scan_name, scan_type: template.scan_type,
+            target_scope: template.target_scope, scan_config: template.scan_config};
+        this.el('templateEditor').value = JSON.stringify(definition, null, 2);
+        this.templateText = this.el('templateEditor').value;
+        this.el('templateIdentity').textContent = `${template.id} / revision ${template.revision}`;
+        this.el('templateEditorView').hidden = false;
+    }
+    async templateAction(action, scanSelection = null) {
+        if (!this.token || this.templateBusy) return;
+        const epoch = this.epoch;
+        const selection = ++this.templateSelection;
+        this.templateBusy = true;
+        this.templateButtons();
+        const current = () => epoch === this.epoch && selection === this.templateSelection;
+        try { await action(current); }
+        catch (error) {
+            if (current() && (scanSelection === null || scanSelection === this.selection)) {
+                if (error.status === 409) this.notice('Template changed. Reload it before updating or running; your editor text is unchanged.', true);
+                else if (error.status === 404) this.notice('Template is missing or unavailable to this organization. Refresh the list.', true);
+                else this.handleError(error);
+            }
+        } finally {
+            if (current()) { this.templateBusy = false; this.templateButtons(); }
+        }
+    }
+    async openTemplate(id) {
+        if (!id) return;
+        if (!this.allowTemplateReplacement()) return;
+        await this.templateAction(async current => {
+            const data = await this.request(`/api/templates/${encodeURIComponent(id)}`);
+            if (!current()) return;
+            this.showTemplate(data.template);
+            this.notice('Template loaded. Edit the complete definition below; no scan has started.');
+        });
+    }
+    async saveTemplate() {
+        if (!this.allowTemplateReplacement()) return;
+        await this.templateAction(async current => {
+            const definition = this.formDefinition();
+            const data = await this.request('/api/templates', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(definition)});
+            if (!current()) return;
+            this.showTemplate(data.template);
+            this.notice('Form saved as a new template. No scan has started.');
+            this.templateOffset = 0;
+            await this.loadTemplates();
+        });
+    }
+    allowTemplateReplacement() {
+        if (this.template && this.el('templateEditor').value !== this.templateText) {
+            this.notice('Unsaved editor changes. Update the template or discard editor changes before loading or saving another recipe.', true);
+            return false;
+        }
+        return true;
+    }
+    async updateTemplate() {
+        if (!this.template) return;
+        await this.templateAction(async current => {
+            let definition;
+            try { definition = JSON.parse(this.el('templateEditor').value); }
+            catch { throw new Error('Template definition must be valid JSON.'); }
+            if (!definition || Array.isArray(definition) || typeof definition !== 'object' ||
+                Object.keys(definition).some(key => !['scan_name', 'scan_type', 'target_scope', 'scan_config'].includes(key)) ||
+                Object.keys(definition).length !== 4) throw new Error('Template definition requires exactly the four displayed fields.');
+            const data = await this.request(`/api/templates/${encodeURIComponent(this.template.id)}`, {
+                method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...definition, revision: this.template.revision})});
+            if (!current()) return;
+            this.showTemplate(data.template);
+            this.notice('Template updated. No scan has started.');
+            await this.loadTemplates();
+        });
+    }
+    async runTemplate() {
+        if (!this.template) return;
+        const selection = this.selection;
+        await this.templateAction(async current => {
+            const data = await this.request(`/api/templates/${encodeURIComponent(this.template.id)}/run`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({revision: this.template.revision})});
+            if (!current() || selection !== this.selection) return;
+            this.notice('Saved template revision accepted. Unsaved editor changes were not used.');
+            await this.selectScan(data.scan_id);
+            await this.loadHistory();
+        }, selection);
+    }
+    async deleteTemplate() {
+        if (!this.template) return;
+        await this.templateAction(async current => {
+            await this.request(`/api/templates/${encodeURIComponent(this.template.id)}`, {method: 'DELETE'});
+            if (!current()) return;
+            this.template = null;
+            this.templateText = '';
+            this.el('templateEditor').value = '';
+            this.el('templateIdentity').textContent = '';
+            this.el('templateEditorView').hidden = true;
+            this.notice('Template deleted. Existing scans are unchanged.');
+            await this.loadTemplates();
+        });
     }
     async openScan(event) {
         event.preventDefault();
