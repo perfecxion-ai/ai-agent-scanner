@@ -48,6 +48,8 @@ These changes are engineering work on the current branch, not a published releas
 - Add tenant-owned API scan templates with revision checks, bounded quotas,
   shared admission, and current-policy revalidation. Preserve queued snapshots
   after recipe edits or deletion; upgrade exact SQLite version 1 layouts to 2.
+- Add manual dashboard template save/edit/run/delete with bounded paging,
+  stale-revision errors, explicit dirty-editor discard, and logout/race guards.
 
 ### Delivery and documentation
 
