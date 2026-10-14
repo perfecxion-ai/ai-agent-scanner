@@ -32,6 +32,7 @@ dependencies = [
     "aiohttp>=3.9.0",
     "click>=8.0.0",
     "dnspython>=2.4.0",
+    "jsonschema>=4.23.0",
     "flask>=3.0.0",
     "flask-cors>=4.0.0",
     "flask-sqlalchemy>=3.1.0",
