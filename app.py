@@ -17,6 +17,8 @@ import threading
 import asyncio
 import hmac
 import uuid
+from copy import deepcopy
+from functools import wraps
 from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Dict, Any
@@ -25,8 +27,8 @@ from flask import Flask, render_template, request, jsonify, g
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, DateTime, Integer, Float, Boolean, Text, JSON, select
-from werkzeug.exceptions import HTTPException
+from sqlalchemy import String, DateTime, Integer, Float, Boolean, Text, JSON, select, update
+from werkzeug.exceptions import HTTPException, BadRequest, NotFound, TooManyRequests, Conflict
 
 from src.discovery.discovery_engine import DiscoveryEngine, DiscoveryScope
 from src.security.security_engine import SecurityTestEngine
@@ -41,6 +43,7 @@ from src.core.scope import bounded_integer, validate_request, validate_agent_end
 from src.core.transport import ScanBudget, scan_transport, current_budget
 from src.core.jobs import JobStore, JobDispatcher, TERMINAL_STATES
 from src.core.schema import initialize_schema, SCHEMA_VERSION
+from src.core.templates import project_template, template_revision
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -77,6 +80,7 @@ for _setting, _default, _maximum in (
     ("SCAN_TIMEOUT_SECONDS", 300, 3600), ("MAX_CONCURRENT_SCANS", 2, 32),
     ("SCAN_MAX_REQUESTS", 500, 10000), ("SCAN_MAX_RESPONSE_BYTES", 1048576, 16777216),
     ("SCAN_MAX_QUEUED", 32, 10000),
+    ("SCAN_MAX_TEMPLATES", 64, 1024),
 ):
     app.config[_setting] = bounded_integer(int(os.environ.get(_setting, _default)), _setting, _maximum)
 
@@ -187,6 +191,21 @@ class SchemaVersion(db.Model):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class ScanTemplate(db.Model):
+    """Tenant-owned recipe, not a queued job or a credential store."""
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    scan_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    scan_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_scope: Mapped[dict] = mapped_column(JSON, nullable=False)
+    scan_config: Mapped[dict] = mapped_column(JSON, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+
+
 class AuditEvent(db.Model):
     """Minimal transition history; never store scan inputs or response content."""
 
@@ -277,63 +296,197 @@ def list_scans():
 def start_scan():
     """Persist a scan and queue entry in one transaction."""
     try:
-        scan_name, scan_type, target_scope, scan_config = validate_request(
-            request.get_json(silent=True), app.config,
-        )
-        if scan_type == "security_only":
-            source = ScanSession.query.filter_by(
-                id=scan_config["source_scan_id"], organization_id=g.user["organization_id"],
-            ).first()
-            if source is None:
-                return jsonify({"success": False, "error": "Source scan not found"}), 404
-            if source.status != "completed":
-                return jsonify({"success": False, "error": "Source scan must be completed"}), 400
-            previous = db.session.get(ScanResult, source.id)
-            if not previous:
-                return jsonify({"success": False, "error": "Source scan has no versioned results"}), 400
-            if any(agent.get("endpoint_redacted") for agent in previous.result.get("agents", [])):
-                return jsonify({"success": False, "error": "Source endpoints were redacted; supply fresh targets"}), 400
-            try:
-                apply_model_overrides(previous.result.get("agents", []), scan_config.get("model_overrides", {}))
-            except ValueError as exc:
-                raise ScopeValidationError(str(exc)) from exc
-            source_agents = DiscoveredAgentModel.query.filter_by(scan_id=source.id).all()
-            if not source_agents:
-                return jsonify({"success": False, "error": "Source scan has no assets"}), 400
-            validate_agent_endpoints([{"endpoint": agent.endpoint_url} for agent in source_agents], app.config)
-
-        scan_id = generate_scan_id()
-        scan_session = ScanSession(
-            id=scan_id,
-            organization_id=g.user["organization_id"],
-            scan_name=scan_name,
-            scan_type=scan_type,
-            target_scope=target_scope,
-            scan_config=scan_config,
-            created_by=g.user.get("user_id"),
-            user_ip=request.remote_addr,
-            status="queued",
-        )
+        definition = _prepare_scan(request.get_json(silent=True), g.user["organization_id"])
+        db.session.rollback()
         with _admission_lock:
-            if ScanJob.query.filter_by(status="queued").count() >= app.config["SCAN_MAX_QUEUED"]:
-                return jsonify({"success": False, "error": "Scan queue is full"}), 429
-            db.session.add(scan_session)
-            db.session.add(ScanJob(scan_id=scan_id))
-            db.session.add(AuditEvent(scan_id=scan_id, organization_id=scan_session.organization_id,
-                                      event="admitted", status="queued"))
-            db.session.commit()
-        if _job_dispatcher:
-            _job_dispatcher.wake()
+            scan_id = _queue_scan(definition, g.user["organization_id"],
+                                  g.user.get("user_id"), request.remote_addr)
         return jsonify({"success": True, "scan_id": scan_id, "message": "Scan queued"}), 202
 
     except ScopeValidationError as e:
+        db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 400
     except HTTPException as e:
+        db.session.rollback()
         return jsonify({"success": False, "error": e.description}), e.code
     except Exception as e:
         db.session.rollback()
         app.logger.error(f"Error starting scan: {e}", exc_info=True)
         return jsonify({"success": False, "error": "Failed to start scan"}), 500
+
+
+def _prepare_scan(data, tenant, *, retain_declaration=True):
+    """Validate current policy while retaining declared DNS and path intent."""
+    name, mode, scope, options = validate_request(data, app.config)
+    if mode == "security_only":
+        source = ScanSession.query.filter_by(id=options["source_scan_id"], organization_id=tenant).first()
+        if source is None:
+            raise NotFound("Source scan not found")
+        if source.status != "completed":
+            raise BadRequest("Source scan must be completed")
+        previous = db.session.get(ScanResult, source.id)
+        if not previous:
+            raise BadRequest("Source scan has no versioned results")
+        if any(agent.get("endpoint_redacted") for agent in previous.result.get("agents", [])):
+            raise BadRequest("Source endpoints were redacted; supply fresh targets")
+        try:
+            apply_model_overrides(previous.result.get("agents", []), options.get("model_overrides", {}))
+        except ValueError as exc:
+            raise ScopeValidationError(str(exc)) from exc
+        source_agents = DiscoveredAgentModel.query.filter_by(scan_id=source.id).all()
+        if not source_agents:
+            raise BadRequest("Source scan has no assets")
+        validate_agent_endpoints([{"endpoint": agent.endpoint_url} for agent in source_agents], app.config)
+    elif retain_declaration:
+        # Execution resolves these declarations again, rather than trusting stale DNS or symlinks.
+        for key in ("network_ranges", "domains", "repositories", "traffic_sources"):
+            scope[key] = deepcopy(data.get("target_scope", {}).get(key, []))
+    return {"scan_name": name, "scan_type": mode, "target_scope": scope, "scan_config": options}
+
+
+def _queue_scan(definition, tenant, actor, user_ip):
+    """Caller holds the admission lock; commit all admission records together."""
+    if ScanJob.query.filter_by(status="queued").count() >= app.config["SCAN_MAX_QUEUED"]:
+        raise TooManyRequests("Scan queue is full")
+    scan_id = generate_scan_id()
+    db.session.add(ScanSession(id=scan_id, organization_id=tenant, **deepcopy(definition),
+                              created_by=actor, user_ip=user_ip, status="queued"))
+    db.session.add(ScanJob(scan_id=scan_id))
+    db.session.add(AuditEvent(scan_id=scan_id, organization_id=tenant, event="admitted", status="queued"))
+    db.session.commit()
+    if _job_dispatcher:
+        _job_dispatcher.wake()
+    return scan_id
+
+
+def _template_api(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except ScopeValidationError as exc:
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(exc)}), 400
+        except HTTPException as exc:
+            db.session.rollback()
+            return jsonify({"success": False, "error": exc.description}), exc.code
+        except Exception:
+            db.session.rollback()
+            app.logger.error("Template operation failed")
+            return jsonify({"success": False, "error": "Template operation failed"}), 500
+    return wrapped
+
+
+def _owned_template(template_id, tenant):
+    row = ScanTemplate.query.filter_by(id=template_id, organization_id=tenant).first()
+    if row is None:
+        raise NotFound("Template not found")
+    return row
+
+
+def _template_definition(row):
+    return {key: deepcopy(getattr(row, key))
+            for key in ("scan_name", "scan_type", "target_scope", "scan_config")}
+
+
+def _template_json(row, *, definition=True):
+    result = {"id": row.id, "scan_name": row.scan_name, "scan_type": row.scan_type,
+              "revision": row.revision, "created_at": row.created_at.isoformat(),
+              "updated_at": row.updated_at.isoformat()}
+    if definition:
+        result.update(_template_definition(row))
+    return result
+
+
+def _prepare_template(data, tenant):
+    definition = _prepare_scan(project_template(data), tenant)
+    # Defaults and normalized flags count toward the persisted document limit too.
+    project_template(definition)
+    return definition
+
+
+@app.route("/api/templates", methods=["GET", "POST"])
+@require_auth
+@_template_api
+def templates_collection():
+    tenant = g.user["organization_id"]
+    if request.method == "GET":
+        try:
+            limit, offset = int(request.args.get("limit", "25")), int(request.args.get("offset", "0"))
+        except ValueError as exc:
+            raise BadRequest("Invalid pagination") from exc
+        if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
+            raise BadRequest("Invalid pagination")
+        query = ScanTemplate.query.filter_by(organization_id=tenant)
+        rows = query.order_by(ScanTemplate.updated_at.desc(), ScanTemplate.id.desc()).offset(offset).limit(limit).all()
+        return jsonify({"success": True, "templates": [_template_json(row, definition=False) for row in rows],
+                        "total": query.count(), "limit": limit, "offset": offset})
+    definition = _prepare_template(request.get_json(silent=True), tenant)
+    db.session.rollback()
+    with _admission_lock:
+        if ScanTemplate.query.filter_by(organization_id=tenant).count() >= app.config["SCAN_MAX_TEMPLATES"]:
+            raise TooManyRequests("Template limit reached")
+        row = ScanTemplate(id=uuid.uuid4().hex, organization_id=tenant,
+                           created_by=g.user.get("user_id"), **definition)
+        db.session.add(row)
+        db.session.commit()
+        return jsonify({"success": True, "template": _template_json(row)}), 201
+
+
+@app.route("/api/templates/<template_id>", methods=["GET", "PUT", "DELETE"])
+@require_auth
+@_template_api
+def template_item(template_id):
+    tenant = g.user["organization_id"]
+    row = _owned_template(template_id, tenant)
+    if request.method == "GET":
+        return jsonify({"success": True, "template": _template_json(row)})
+    if request.method == "PUT":
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            raise BadRequest("JSON object required")
+        revision = template_revision(data.get("revision"))
+        if revision != row.revision or revision == 2**31 - 1:
+            raise Conflict("Template revision changed; reload before updating")
+        definition = _prepare_template({key: value for key, value in data.items() if key != "revision"}, tenant)
+    db.session.rollback()
+    with _admission_lock:
+        row = _owned_template(template_id, tenant)
+        if request.method == "DELETE":
+            db.session.delete(row)
+            db.session.commit()
+            return jsonify({"success": True})
+        changed = db.session.execute(update(ScanTemplate).where(
+            ScanTemplate.id == template_id, ScanTemplate.organization_id == tenant,
+            ScanTemplate.revision == revision,
+        ).values(**definition, revision=revision + 1, updated_at=_utcnow()))
+        if changed.rowcount != 1:
+            raise Conflict("Template revision changed; reload before updating")
+        db.session.commit()
+        db.session.refresh(row)
+        return jsonify({"success": True, "template": _template_json(row)})
+
+
+@app.route("/api/templates/<template_id>/run", methods=["POST"])
+@require_auth
+@_template_api
+def run_template(template_id):
+    tenant = g.user["organization_id"]
+    row = _owned_template(template_id, tenant)
+    revision = row.revision
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or set(data) - {"revision"}:
+        raise BadRequest("Template run requires a JSON object containing only optional revision")
+    if "revision" in data and template_revision(data["revision"]) != revision:
+        raise Conflict("Template revision changed; reload before running")
+    definition = _prepare_template(_template_definition(row), tenant)
+    db.session.rollback()
+    with _admission_lock:
+        row = _owned_template(template_id, tenant)
+        if row.revision != revision:
+            raise Conflict("Template revision changed; reload before running")
+        scan_id = _queue_scan(definition, tenant, g.user.get("user_id"), request.remote_addr)
+    return jsonify({"success": True, "scan_id": scan_id, "message": "Scan queued"}), 202
 
 
 @app.route("/api/scans/<scan_id>/cancel", methods=["POST"])
@@ -576,11 +729,12 @@ def _execute_job(scan_id, cancelled):
         if not scan:
             raise ValueError("Job has no scan")
         # Queued jobs must obey the current server policy, not an earlier allowlist.
-        _, scan_type, scope, options = validate_request({
+        definition = _prepare_scan({
             "scan_type": scan.scan_type, "scan_name": scan.scan_name,
             "target_scope": scan.target_scope, "scan_config": scan.scan_config,
-        }, app.config)
-    _run_scan_in_thread(scan_id, scan_type, scope, options, cancelled)
+        }, scan.organization_id, retain_declaration=False)
+    _run_scan_in_thread(scan_id, definition["scan_type"], definition["target_scope"],
+                        definition["scan_config"], cancelled)
 
 
 def _record_terminal(scan_id, status, error):

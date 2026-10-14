@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import MetaData, create_engine, event, inspect, insert, select, text, CheckConstraint, DefaultClause
 
 from src.core.jobs import JobDispatcher
-from src.core.schema import BASE_TABLES, LEGACY_LAYOUTS, SchemaError, initialize_schema
+from src.core.schema import BASE_TABLES, LEGACY_LAYOUTS, SCHEMA_VERSION, VERSION_ONE_TABLES, SchemaError, initialize_schema
 from tests.test_api_auth import api as api, headers
 from tests.test_jobs import store as store, enqueue, state, result
 
@@ -37,7 +37,7 @@ def test_fresh_schema_and_restart_are_idempotent(database):
     initialize_schema(engine, module.db.metadata)
     assert set(inspect(engine).get_table_names()) == set(module.db.metadata.tables)
     initialize_schema(engine, module.db.metadata)
-    assert version(engine, module) == [(1, 1)]
+    assert version(engine, module) == [(1, SCHEMA_VERSION)]
 
 
 @pytest.mark.parametrize("layout", LEGACY_LAYOUTS)
@@ -64,7 +64,7 @@ def test_recognized_legacy_upgrade_preserves_rows_and_creates_no_fake_history(da
             assert connection.scalar(select(module.ScanResult.result))["retained"] == "finding"
         if "scan_job" in layout:
             assert connection.scalar(select(module.ScanJob.status)) == "completed"
-    assert version(engine, module) == [(1, 1)]
+    assert version(engine, module) == [(1, SCHEMA_VERSION)]
 
 
 @pytest.mark.parametrize("mutation", ["unknown_table", "extra_column", "missing_column", "future_version",
@@ -126,7 +126,83 @@ def test_schema_ddl_and_version_stamp_roll_back_together(database):
         event.remove(engine, "before_cursor_execute", fail_stamp)
     assert inspect(engine).get_table_names() == []
     initialize_schema(engine, module.db.metadata)
+    assert version(engine, module) == [(1, SCHEMA_VERSION)]
+
+
+def version_one_database(module, engine):
+    metadata = MetaData()
+    for name in VERSION_ONE_TABLES:
+        module.db.metadata.tables[name].to_metadata(metadata)
+    metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(insert(metadata.tables["schema_version"]).values(id=1, version=1))
+        connection.execute(insert(metadata.tables["scan_session"]).values(
+            id="existing", organization_id="tenant-a", scan_name="retained", scan_type="discovery_only",
+            status="completed", target_scope={}, scan_config={}))
+        connection.execute(insert(metadata.tables["scan_result"]).values(
+            scan_id="existing", result={"status": "completed", "retained": "finding"}))
+    return metadata
+
+
+def test_version_one_additive_upgrade_preserves_existing_rows(database):
+    module, engine = database
+    version_one_database(module, engine)
+    initialize_schema(engine, module.db.metadata)
+    initialize_schema(engine, module.db.metadata)
+    with engine.connect() as connection:
+        assert connection.scalar(select(module.ScanSession.scan_name)) == "retained"
+        assert connection.scalar(select(module.ScanResult.result))["retained"] == "finding"
+        assert connection.execute(select(module.ScanTemplate.__table__)).all() == []
+    assert version(engine, module) == [(1, SCHEMA_VERSION)]
+
+
+def test_version_one_upgrade_failure_rolls_back_table_and_stamp(database):
+    module, engine = database
+    version_one_database(module, engine)
+
+    def fail_stamp(connection, cursor, statement, parameters, context, many):
+        if statement.startswith("UPDATE schema_version"):
+            raise RuntimeError("injected upgrade failure")
+
+    event.listen(engine, "before_cursor_execute", fail_stamp)
+    try:
+        with pytest.raises(RuntimeError, match="injected"):
+            initialize_schema(engine, module.db.metadata)
+    finally:
+        event.remove(engine, "before_cursor_execute", fail_stamp)
+    assert set(inspect(engine).get_table_names()) == VERSION_ONE_TABLES
     assert version(engine, module) == [(1, 1)]
+    initialize_schema(engine, module.db.metadata)
+    assert version(engine, module) == [(1, SCHEMA_VERSION)]
+
+
+@pytest.mark.parametrize("mutation", ["unstamped_template", "missing_base", "future", "duplicate_stamp",
+                                      "wrong_stamp_id", "changed_column", "extra_default"])
+def test_version_one_unknown_layout_rejected_without_writes(database, mutation):
+    module, engine = database
+    version_one_database(module, engine)
+    with engine.begin() as connection:
+        if mutation == "unstamped_template":
+            module.ScanTemplate.__table__.create(connection)
+        elif mutation == "missing_base":
+            connection.exec_driver_sql("DROP TABLE scan_result")
+        elif mutation == "future":
+            connection.exec_driver_sql("UPDATE schema_version SET version = 3")
+        elif mutation == "duplicate_stamp":
+            connection.exec_driver_sql("INSERT INTO schema_version VALUES (2, 1)")
+        elif mutation == "wrong_stamp_id":
+            connection.exec_driver_sql("UPDATE schema_version SET id = 2")
+        elif mutation == "changed_column":
+            connection.exec_driver_sql("ALTER TABLE scan_session ADD COLUMN unknown TEXT")
+        else:
+            connection.exec_driver_sql("ALTER TABLE audit_event ADD COLUMN unknown TEXT DEFAULT 'x'")
+        before = connection.exec_driver_sql("SELECT name, sql FROM sqlite_master ORDER BY name").all()
+        before_stamp = connection.exec_driver_sql("SELECT * FROM schema_version ORDER BY id").all()
+    with pytest.raises(SchemaError):
+        initialize_schema(engine, module.db.metadata)
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT name, sql FROM sqlite_master ORDER BY name").all() == before
+        assert connection.exec_driver_sql("SELECT * FROM schema_version ORDER BY id").all() == before_stamp
 
 
 def test_benign_extra_index_is_preserved_during_acceptance(database):
