@@ -540,7 +540,10 @@ class AIAgentScanner {
                 body: JSON.stringify({template_id: pin.id, template_revision: pin.revision, interval_seconds: interval, total_runs: runs})});
             if (!current()) return;
             this.validateSchedule(data.schedule);
-            if (data.schedule.state !== 'disabled' || data.schedule.template_id !== pin.id || data.schedule.template_revision !== pin.revision) throw new Error('Server returned an unexpected schedule pin or state. Refresh the list.');
+            if (data.schedule.state !== 'disabled' || data.schedule.template_id !== pin.id || data.schedule.template_revision !== pin.revision ||
+                data.schedule.interval_seconds !== interval || data.schedule.total_runs !== runs || data.schedule.revision !== 1 ||
+                data.schedule.admitted_runs !== 0 || data.schedule.outstanding_scan_id !== null || data.schedule.next_due_at !== null ||
+                data.schedule.pause_reason !== null) throw new Error('Server returned an unexpected schedule pin, recurrence, or state. Refresh the list.');
             this.clearOccurrences();
             this.showSchedule(data.schedule);
             this.append(this.el('scheduleOccurrences'), 'option', 'No admitted occurrences.').value = '';
@@ -579,6 +582,9 @@ class AIAgentScanner {
             if (!current()) return;
             this.validateSchedule(data.schedule);
             if (data.schedule.id !== row.id || data.schedule.template_id !== row.template_id || data.schedule.template_revision !== row.template_revision) throw new Error('Server returned a different schedule or pin. Refresh detail.');
+            if (data.schedule.revision !== row.revision + 1 || data.schedule.interval_seconds !== row.interval_seconds ||
+                data.schedule.total_runs !== row.total_runs || (action === 'enable' ? data.schedule.state !== 'enabled' :
+                    !['paused', 'completed'].includes(data.schedule.state))) throw new Error('Server did not return the requested schedule transition. Refresh detail.');
             this.showSchedule(data.schedule);
             this.el('reviewScheduleTemplate').checked = false;
             this.notice(action === 'enable' ? 'Schedule enabled. Its first due time is one interval from now; refresh to inspect admissions.' : 'Schedule paused. Existing admitted scans are unchanged.');

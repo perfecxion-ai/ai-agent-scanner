@@ -469,7 +469,7 @@ test('schedule creation requires explicit clean saved-template review and stays 
     const calls = [];
     const {app} = fixture(async (path, options) => {
         calls.push({path, options});
-        return response(path.includes('?') ? {schedules: [savedSchedule()], total: 1} : {schedule: savedSchedule()}, 201);
+        return response(path.includes('?') ? {schedules: [savedSchedule()], total: 1} : {schedule: savedSchedule({revision: 1})}, 201);
     });
     app.token = 'fixture-token';
     await app.createSchedule();
@@ -533,7 +533,7 @@ test('enable and pause use displayed schedule revision and do not cancel admitte
     const calls = [];
     const {app} = fixture(async (path, options) => {
         calls.push({path, options});
-        return response(path.includes('?') ? {schedules: [], total: 0} : {schedule: savedSchedule({revision: 3,
+        return response(path.includes('?') ? {schedules: [], total: 0} : {schedule: savedSchedule({revision: JSON.parse(options.body).revision + 1,
             state: path.endsWith('/enable') ? 'enabled' : 'paused', pause_reason: path.endsWith('/pause') ? 'operator_paused' : null,
             outstanding_scan_id: 'admitted', admitted_runs: 1, next_due_at: path.endsWith('/enable') ? '2026-10-13T10:00:00+00:00' : null})});
     });
@@ -765,8 +765,10 @@ test('401 schedule response clears all protected workflow state', async () => {
 });
 
 test('unexpected server schedule IDs pins and active creation never become actionable', async () => {
-    for (const changes of [{state: 'enabled'}, {template_revision: 4}, {template_id: 'different'}]) {
-        const {app} = fixture(async () => response({schedule: savedSchedule(changes)}));
+    for (const changes of [{state: 'enabled'}, {template_revision: 4}, {template_id: 'different'}, {interval_seconds: 120},
+        {total_runs: 5}, {admitted_runs: 1}, {outstanding_scan_id: 'unexpected'}, {next_due_at: '2026-10-13T10:00:00+00:00'},
+        {revision: 2}, {pause_reason: 'policy_review'}]) {
+        const {app} = fixture(async () => response({schedule: savedSchedule({revision: 1, ...changes})}));
         app.token = 'fixture-token'; reviewPin(app);
         await app.createSchedule();
         assert.equal(app.schedule, null);
@@ -777,6 +779,19 @@ test('unexpected server schedule IDs pins and active creation never become actio
     await app.openSchedule('schedule');
     assert.equal(app.schedule, null);
     assert.match(app.el('notice').textContent, /different schedule/);
+});
+
+test('schedule transition responses cannot falsely claim enable pause or changed recurrence', async () => {
+    for (const action of ['enable', 'pause']) for (const changes of [{state: 'disabled'}, {state: 'enabled'}, {state: 'paused'},
+        {interval_seconds: 120}, {total_runs: 5}, {revision: 2}, {template_id: 'different'}, {template_revision: 4}, {id: 'different'}]) {
+        if ((action === 'enable' && changes.state === 'enabled') || (action === 'pause' && changes.state === 'paused')) continue;
+        const {app} = fixture(async () => response({schedule: savedSchedule({revision: 3, state: action === 'enable' ? 'enabled' : 'paused', ...changes})}));
+        app.token = 'fixture-token'; app.showSchedule(savedSchedule()); reviewPin(app);
+        await app.changeSchedule(action);
+        assert.equal(app.schedule.state, 'disabled');
+        assert.equal(app.schedule.revision, 2);
+        assert.match(app.el('notice').textContent, /different schedule or pin|requested schedule transition/);
+    }
 });
 
 test('schedule and template deletion move focus only after restoring enabled controls', async () => {
