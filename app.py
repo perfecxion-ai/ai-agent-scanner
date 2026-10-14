@@ -17,6 +17,7 @@ import threading
 import asyncio
 import hmac
 import uuid
+from copy import deepcopy
 from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Dict, Any
@@ -26,7 +27,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import String, DateTime, Integer, Float, Boolean, Text, JSON, select
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, BadRequest, NotFound, TooManyRequests
 
 from src.discovery.discovery_engine import DiscoveryEngine, DiscoveryScope
 from src.security.security_engine import SecurityTestEngine
@@ -277,53 +278,10 @@ def list_scans():
 def start_scan():
     """Persist a scan and queue entry in one transaction."""
     try:
-        scan_name, scan_type, target_scope, scan_config = validate_request(
-            request.get_json(silent=True), app.config,
-        )
-        if scan_type == "security_only":
-            source = ScanSession.query.filter_by(
-                id=scan_config["source_scan_id"], organization_id=g.user["organization_id"],
-            ).first()
-            if source is None:
-                return jsonify({"success": False, "error": "Source scan not found"}), 404
-            if source.status != "completed":
-                return jsonify({"success": False, "error": "Source scan must be completed"}), 400
-            previous = db.session.get(ScanResult, source.id)
-            if not previous:
-                return jsonify({"success": False, "error": "Source scan has no versioned results"}), 400
-            if any(agent.get("endpoint_redacted") for agent in previous.result.get("agents", [])):
-                return jsonify({"success": False, "error": "Source endpoints were redacted; supply fresh targets"}), 400
-            try:
-                apply_model_overrides(previous.result.get("agents", []), scan_config.get("model_overrides", {}))
-            except ValueError as exc:
-                raise ScopeValidationError(str(exc)) from exc
-            source_agents = DiscoveredAgentModel.query.filter_by(scan_id=source.id).all()
-            if not source_agents:
-                return jsonify({"success": False, "error": "Source scan has no assets"}), 400
-            validate_agent_endpoints([{"endpoint": agent.endpoint_url} for agent in source_agents], app.config)
-
-        scan_id = generate_scan_id()
-        scan_session = ScanSession(
-            id=scan_id,
-            organization_id=g.user["organization_id"],
-            scan_name=scan_name,
-            scan_type=scan_type,
-            target_scope=target_scope,
-            scan_config=scan_config,
-            created_by=g.user.get("user_id"),
-            user_ip=request.remote_addr,
-            status="queued",
-        )
         with _admission_lock:
-            if ScanJob.query.filter_by(status="queued").count() >= app.config["SCAN_MAX_QUEUED"]:
-                return jsonify({"success": False, "error": "Scan queue is full"}), 429
-            db.session.add(scan_session)
-            db.session.add(ScanJob(scan_id=scan_id))
-            db.session.add(AuditEvent(scan_id=scan_id, organization_id=scan_session.organization_id,
-                                      event="admitted", status="queued"))
-            db.session.commit()
-        if _job_dispatcher:
-            _job_dispatcher.wake()
+            definition = _prepare_scan(request.get_json(silent=True), g.user["organization_id"])
+            scan_id = _queue_scan(definition, g.user["organization_id"],
+                                  g.user.get("user_id"), request.remote_addr)
         return jsonify({"success": True, "scan_id": scan_id, "message": "Scan queued"}), 202
 
     except ScopeValidationError as e:
@@ -334,6 +292,50 @@ def start_scan():
         db.session.rollback()
         app.logger.error(f"Error starting scan: {e}", exc_info=True)
         return jsonify({"success": False, "error": "Failed to start scan"}), 500
+
+
+def _prepare_scan(data, tenant):
+    """Validate current policy while retaining declared DNS and path intent."""
+    name, mode, scope, options = validate_request(data, app.config)
+    if mode == "security_only":
+        source = ScanSession.query.filter_by(id=options["source_scan_id"], organization_id=tenant).first()
+        if source is None:
+            raise NotFound("Source scan not found")
+        if source.status != "completed":
+            raise BadRequest("Source scan must be completed")
+        previous = db.session.get(ScanResult, source.id)
+        if not previous:
+            raise BadRequest("Source scan has no versioned results")
+        if any(agent.get("endpoint_redacted") for agent in previous.result.get("agents", [])):
+            raise BadRequest("Source endpoints were redacted; supply fresh targets")
+        try:
+            apply_model_overrides(previous.result.get("agents", []), options.get("model_overrides", {}))
+        except ValueError as exc:
+            raise ScopeValidationError(str(exc)) from exc
+        source_agents = DiscoveredAgentModel.query.filter_by(scan_id=source.id).all()
+        if not source_agents:
+            raise BadRequest("Source scan has no assets")
+        validate_agent_endpoints([{"endpoint": agent.endpoint_url} for agent in source_agents], app.config)
+    else:
+        # Execution resolves these declarations again, rather than trusting stale DNS or symlinks.
+        for key in ("network_ranges", "domains", "repositories", "traffic_sources"):
+            scope[key] = deepcopy(data.get("target_scope", {}).get(key, []))
+    return {"scan_name": name, "scan_type": mode, "target_scope": scope, "scan_config": options}
+
+
+def _queue_scan(definition, tenant, actor, user_ip):
+    """Caller holds the admission lock; commit all admission records together."""
+    if ScanJob.query.filter_by(status="queued").count() >= app.config["SCAN_MAX_QUEUED"]:
+        raise TooManyRequests("Scan queue is full")
+    scan_id = generate_scan_id()
+    db.session.add(ScanSession(id=scan_id, organization_id=tenant, **deepcopy(definition),
+                              created_by=actor, user_ip=user_ip, status="queued"))
+    db.session.add(ScanJob(scan_id=scan_id))
+    db.session.add(AuditEvent(scan_id=scan_id, organization_id=tenant, event="admitted", status="queued"))
+    db.session.commit()
+    if _job_dispatcher:
+        _job_dispatcher.wake()
+    return scan_id
 
 
 @app.route("/api/scans/<scan_id>/cancel", methods=["POST"])
