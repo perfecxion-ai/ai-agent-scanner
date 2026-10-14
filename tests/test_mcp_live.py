@@ -275,8 +275,8 @@ def test_external_schema_reference_is_never_fetched(server):
     assert len(server[2]) == 2
 
 
-def test_credential_echo_in_schema_pointer_and_cookie_never_persist(server, monkeypatch):
-    secret = "fixture-live-bearer-never-export"
+@pytest.mark.parametrize("secret", ["fixture-live-bearer-never-export", "fixture/live/token", "fixture~live~token", "fixture~/live/~token"])
+def test_credential_echo_in_schema_pointer_and_cookie_never_persist(server, monkeypatch, secret):
     monkeypatch.setenv("MCP_FIXTURE_TOKEN", secret)
     def dispatch(request, headers):
         assert headers["Authorization"] == "Bearer " + secret
@@ -289,6 +289,8 @@ def test_credential_echo_in_schema_pointer_and_cookie_never_persist(server, monk
     assert report["status"] == "completed"
     assert report["observations"] and "[redacted]" in json.dumps(report)
     assert secret not in json.dumps(report) and secret not in json.dumps(to_sarif(report))
+    escaped = secret.replace("~", "~0").replace("/", "~1")
+    assert escaped not in json.dumps(report) and escaped not in json.dumps(to_sarif(report))
     finding = report["observations"][0]
     public_identity = f'{finding["rule_id"]}:{finding["source"]}:{finding["json_pointer"]}'
     assert finding["id"] == hashlib.sha256(public_identity.encode()).hexdigest()[:20]
@@ -445,6 +447,20 @@ def test_cli_live_json_sarif_and_incomplete_exit_status(server):
     server[1]["dispatch"] = lambda request, headers: (401, {"Content-Type": "application/json"}, b'{}')
     result = CliRunner().invoke(cli, args)
     assert result.exit_code == 1 and '"status": "failed"' in result.output
+
+
+@pytest.mark.parametrize("status", ["failed", "partial", "completed"])
+def test_live_sarif_execution_status_does_not_claim_incomplete_success(server, status):
+    report = collect(server)
+    report["status"] = status
+    sarif = to_sarif(report)
+    assert sarif["runs"][0]["invocations"][0]["executionSuccessful"] == (status == "completed")
+    assert sarif["runs"][0]["properties"]["checks"][0]["outcome"] == "inconclusive"
+
+
+def test_passive_sarif_retains_successful_execution_default():
+    from src.mcp import assess
+    assert to_sarif(assess(tools={"tools": []}))["runs"][0]["invocations"][0]["executionSuccessful"] is True
 
 
 def test_cli_requires_explicit_allowlist_and_hides_invalid_credential(server):

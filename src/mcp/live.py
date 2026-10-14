@@ -290,6 +290,9 @@ def _headers(api_key_env):
             raise ValueError("MCP credential is missing or not a visible ASCII token")
         headers["Authorization"] = f"Bearer {value}"
         secrets.update((value, f"Bearer {value}"))
+        # Schema field names become escaped JSON Pointer components in findings.
+        # Remove those representations before computing public observation IDs.
+        secrets.update(secret.replace("~", "~0").replace("/", "~1") for secret in tuple(secrets))
     return headers, secrets
 
 
