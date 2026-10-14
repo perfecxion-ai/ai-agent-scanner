@@ -47,6 +47,7 @@ are operator-selected. Server scans additionally require explicit allowlists.
 | Active security probes | Sends prompt, access-control, and privacy probes to configured endpoints | Successful testing when the provider rejects requests or the adapter is unsupported |
 | Passive MCP review | Inspects local configuration and saved tool schemas; emits JSON or SARIF | Live MCP authorization, sandbox enforcement, or tool exploitation |
 | Read-only live MCP inventory | Collects bounded public tool schemas from an explicitly scoped, already-running MCP endpoint | Authorization/Origin enforcement, tool execution, or complete MCP interoperability |
+| Controlled MCP policy checks | Compares protected inventory against an explicit fixture policy with an authenticated positive control | Browser exploitation, tool-execution authorization, or an overall security pass |
 | Offline replay | Compares recorded outputs and tool requests against explicit policies and labels | Production accuracy, a live injection campaign, or proof of tool execution |
 | Reporting | Preserves findings, observations, phase status, and risk estimates; exports JSON/SARIF | Compliance certification or a standardized CVSS score |
 
@@ -57,6 +58,7 @@ ai-agent-scanner scan --config lab-targets.json --format sarif --output results.
 ai-agent-scanner mcp --config mcp-client.json --output mcp-review.json
 ai-agent-scanner mcp --tools saved-tools.json --format sarif --output mcp.sarif
 ai-agent-scanner mcp-live --endpoint http://127.0.0.1:8000/mcp --allow-network 127.0.0.1/32 --allow-loopback --output mcp-inventory.json
+ai-agent-scanner mcp-check --endpoint http://127.0.0.1:8000/mcp --allow-network 127.0.0.1/32 --allow-loopback --api-key-env MCP_ACCESS_TOKEN --policy mcp-policy.json --output mcp-checks.json
 ai-agent-scanner evaluate --suite lab-transcripts.json --output metrics.json
 ai-agent-scanner diff --before baseline.json --after results.json --output changes.json
 ai-agent-scanner triage --report results.json --policy suppressions.json --output triaged.json
@@ -91,6 +93,11 @@ The `mcp-live` command supports only the documented MCP `2026-07-28` Streamable
 HTTP inventory subset. It never launches configured commands or invokes tools,
 and completed collection leaves runtime security unassessed. See
 [live MCP scope, credentials, and limits](docs/mcp-live.md).
+The separate `mcp-check` command requires an endpoint-bound local policy, an
+issued bearer credential, and an operator-seeded protected fixture tool. It
+tests only the declared inventory boundary, never invokes tools, and keeps
+missing prerequisites or canary-free responses distinct from passed checks.
+See [controlled MCP policy checks](docs/mcp-policy.md).
 
 ## Web application
 
