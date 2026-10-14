@@ -46,6 +46,8 @@ use approved addresses, while a single HTTP observation pass retains the hostnam
 for Host/SNI and stable endpoint identity. HTTP independently revalidates its DNS
 answers through the shared transport policy. These are authority observations,
 not a claim that every individual DNS member serves the same inventory.
+Hostname observations omit unknown internet exposure rather than treating every
+DNS name as public. Literal IP observations use the address's global classification.
 
 The API's admission policy currently normalizes requested domains to approved IP
 ranges. Its network discovery therefore remains IP-based and can miss virtual

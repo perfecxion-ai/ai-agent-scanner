@@ -203,12 +203,15 @@ class NetworkScanner:
         return agents
 
     def _asset(self, host, port, scheme, endpoint, provider, status):
+        metadata = {'host': host, 'port': port, 'scheme': scheme,
+                    'response_status': status, 'evidence_status': 'protocol_observation'}
+        exposure = self._is_internet_facing(host)
+        if exposure is not None:
+            metadata['internet_facing'] = exposure
         return {'id': str(uuid.uuid5(uuid.NAMESPACE_URL, 'network:' + endpoint + ':' + provider)),
                 'name': f'{provider} service on {host}:{port}', 'provider': provider,
                 'endpoint': endpoint, 'discovery_method': 'network_scan', 'confidence': 0.8,
-                'metadata': {'host': host, 'port': port, 'scheme': scheme,
-                             'response_status': status, 'internet_facing': self._is_internet_facing(host),
-                             'evidence_status': 'protocol_observation'}}
+                'metadata': metadata}
 
     async def _read_document(self, response, signatures=()):
         if response.status != 200:
@@ -340,4 +343,6 @@ class NetworkScanner:
         try:
             return ipaddress.ip_address(host).is_global
         except ValueError:
-            return True
+            # A DNS name is not proof of global exposure. HTTP resolves separately
+            # from TCP eligibility, so do not invent peer-specific exposure.
+            return None

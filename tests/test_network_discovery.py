@@ -219,6 +219,7 @@ async def test_real_domain_retains_host_and_does_not_expand(service, monkeypatch
     with scan_transport(budget()):
         assets = await scanner.scan_domain('localhost', DiscoveryEngine().ai_signatures)
     assert assets[0]['endpoint'] == f'http://localhost:{port}/v1/models'
+    assert 'internet_facing' not in assets[0]['metadata']
     assert all(host == f'localhost:{port}' for _, _, host in calls)
     resolver.assert_awaited_once_with('localhost')
 
@@ -362,6 +363,16 @@ def test_identity_does_not_collide_across_protocols_or_routes():
     assets = [scanner._asset('host', 443, scheme, f'{scheme}://host:443{path}', 'ollama', 200)
               for scheme in ('http', 'https') for path in ('/api/tags', '/prefix/api/tags')]
     assert len({asset['id'] for asset in assets}) == 4
+
+
+@pytest.mark.parametrize('host,expected', [('127.0.0.1', False), ('10.0.0.1', False), ('8.8.8.8', True),
+                                         ('localhost', None), ('internal.fixture.invalid', None)])
+def test_exposure_uses_literal_addresses_and_never_assumes_dns_is_public(host, expected):
+    asset = NetworkScanner()._asset(host, 80, 'http', f'http://{host}/v1/models', 'openai-compatible', 200)
+    if expected is None:
+        assert 'internet_facing' not in asset['metadata']
+    else:
+        assert asset['metadata']['internet_facing'] is expected
 
 
 @pytest.mark.asyncio
