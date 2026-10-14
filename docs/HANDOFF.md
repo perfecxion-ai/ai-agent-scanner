@@ -87,20 +87,46 @@ fetches external references, or follows authentication metadata. Collection
 outcomes are not security passes; runtime authorization, Origin, and execution
 checks remain skipped. See [live scope](mcp-live.md) and [network scope](network-discovery.md).
 
+### Controlled policy and saved-template checkpoint
+
+PR #29 adds a separate `mcp-check` command for declared protected inventory
+policy. An authenticated fixture baseline gates isolated credential and Origin
+controls. Valid protected tool disclosure can confirm only that inventory
+boundary; public enumeration, malformed responses, marker echoes, and missing
+prerequisites cannot establish passes. Shared budgets, reflection guards,
+secret-safe public identities, and JSON/SARIF check provenance have regressions.
+Tool execution, browser exploitation, OAuth, and legacy adapters remain unsupported.
+Operator canary provenance is declared, not independently attested. See
+[controlled checks](mcp-policy.md).
+
+PR #30 adds tenant-owned API templates with bounded lists, quota, optimistic
+revisions, and manual runs through the shared scan admission path. Creation,
+update, admission, and worker execution recheck scope and source prerequisites.
+Declared domains and unresolved absolute paths survive until worker validation;
+recipe edits/deletion do not change admitted snapshots. Exact SQLite version 1
+upgrades add the template table transactionally, preserving existing records.
+This is API-only: dashboard template controls and scheduling are pending. See
+[template contract](scan-templates.md).
+
 ## Next delivery sequence
 
-1. Add controlled read-only MCP authorization and Origin checks only with declared
-   policy and protected fixture provenance. Public tool enumeration or accepting an
-   arbitrary Origin alone cannot establish a vulnerability. Design any legacy
-   protocol adapter separately; do not silently downgrade the current client.
-2. Add saved templates and scheduling only through the existing tenant-owned
-   admission/policy path. Review schema changes, bounded recurrence, restart
-   behavior, cancellation, and server policy revalidation before implementation.
+1. Add dashboard template controls for manual save/edit/run/delete using the
+   implemented tenant-owned API. Cover stale revisions, policy failures, source
+   selection, logout/late responses, safe text, and desktop/mobile browser flows.
+2. Add finite scheduling through the shared template admission/policy path. Pin
+   the template revision and review transactional occurrence state, bounded
+   recurrence, restart/no-catch-up behavior, cancellation, and policy revalidation.
+   Keep synchronous DNS/filesystem preflight outside the dispatcher cancellation
+   loop. Do not automatically enable schedules or scan real targets.
    External integrations need an explicit supported destination and secret contract.
 3. Expand representative accuracy and service-compatibility fixtures, then run
    load/soak, accessibility, and deployed backup/upgrade acceptance. Keep real
    provider compatibility separate from mocked SDK and synthetic protocol fixtures;
    do not require paid calls or claim complete coverage from line percentages.
+
+Broader live MCP and any legacy adapter need separate versioned designs. Do not
+silently downgrade the current client or equate fixture inventory checks with
+tool authorization, sandboxing, browser exploits, or complete attack coverage.
 
 Each slice needs positive/negative fixtures, a concise independent review, all
 required CI checks, and truthful operator documentation before merge. These are

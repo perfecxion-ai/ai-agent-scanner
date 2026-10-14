@@ -7,15 +7,18 @@ and dashboard evidence views. None of these merges publishes a package.
 PRs #24 through #26 add cross-version timeout accounting, conservative network
 inventories, and scoped read-only live MCP collection.
 PR #28 updates current TGI recognition and its conservative historical boundary.
+PRs #29 and #30 add controlled protected MCP inventory checks and tenant-owned
+API templates with an exact SQLite version 1 to 2 upgrade.
 
 ## Automated checks
 
-- Local Linux/Python 3.10.20: 744 pytest cases passed. The suite invokes 25 Node
+- Local Linux/Python 3.10.20: 935 pytest cases passed. The suite invokes 25 Node
   controller tests, which also passed independently.
-- Line coverage across `src`, `app`, and `scanner_cli`: 89%. The shared pipeline
-  is 95%, transport 99%, durable jobs 91%, schema acceptance 94%, and API 91%.
-  Mocked cloud inventory is 92%, traffic parsing 89%, network discovery 97%,
-  and the live MCP client 95%. This measures executed
+- Line coverage across `src`, `app`, and `scanner_cli`: 90%. The shared pipeline
+  is 95%, transport 99%, durable jobs 91%, schema acceptance 94%, and API 94%.
+  Mocked cloud inventory is 92%, traffic parsing 89%, and network discovery 97%.
+  The live MCP client and controlled policy module are each 96%; the small strict
+  template projection helper is 100%. This measures executed
   source lines, not attack coverage or security effectiveness.
 - Ruff and the configured medium/high-severity Bandit gate pass, including API
   source. Lower-severity static findings still require contextual review.
@@ -45,6 +48,19 @@ PR #28 updates current TGI recognition and its conservative historical boundary.
   escaped credentials, schema/pointer limits, and immutable timed-out validation.
   Failed or partial collection marks SARIF invocation unsuccessful. Security
   checks remain skipped or inconclusive; no tool is invoked.
+- Controlled MCP fixtures require a complete authenticated protected inventory
+  baseline before isolated authorization/Origin controls. They cover denied-status
+  disclosure, denial-body/header echoes, canonical/encoded URL and cursor
+  reflection, opaque cursors, secret/contract identity collisions, shared budgets,
+  partial evidence, and policy output aliases. Findings apply only to the declared
+  inventory policy; tool execution and browser exploitation are not assessed.
+- Template fixtures cover tenant-scoped CRUD/list/run, quotas, optimistic revisions,
+  recipe edit/delete races, commit rollback, source/model/endpoint prerequisites,
+  queued snapshot independence, DNS/symlink changes, and current-policy worker
+  validation. Real SQLite tests cover exact version 1 upgrade, transaction rollback,
+  repeated initialization, and malformed/future layout rejection before writes.
+  Templates are API-only; no timer, dashboard template workflow, or external delivery
+  is implemented. Existing dashboard Node tests remain unchanged.
 - Explicit JSON nesting limits were checked on Python 3.10 and an isolated Python
   3.12 environment. Network exponent overflow is rejected. Request and streamed
   body timeouts each record one failure, including Python 3.10's distinct exception.
@@ -79,8 +95,8 @@ remain synthetic; this does not validate a real model's behavior.
 The default 200-job disposable SQLite workload passed with two workers:
 179 completed, 20 cancelled, one interrupted, 181 unique claims, 582 audit events,
 and consistent job/session/report states. A repeated integrated run took
-7.987785 seconds (22.409 completed jobs/second); no throughput threshold is an
-acceptance criterion. Four-job acceptance passed and a deliberately insufficient
+9.806661 seconds (18.253 completed jobs/second) on schema version 2; no throughput
+threshold is an acceptance criterion. Four-job acceptance passed and a deliberately insufficient
 deadline reported failure. See [performance scope and reproducible commands](performance.md).
 
 Installed AWS, Azure, and GCP SDK method signatures and resource/list schemas were
@@ -100,6 +116,9 @@ inventory because the installed Google SDK warns about Python 3.10 support.
 - Replay metrics describe synthetic or supplied labels, not representative
   production precision/recall. Passive MCP and read-only live inventory do not
   execute tools or test runtime authorization, Origin enforcement, or sandboxing.
+  Controlled policy checks sample only explicit protected inventory fixtures and
+  the first control page; they do not close those broader runtime gaps. Operator
+  fixture provenance is trusted input, not independently verified attestation.
   The live client supports only MCP 2026-07-28 and its documented input-schema
   subset; legacy versions, OAuth acquisition, and broad interoperability remain gaps.
 - PostgreSQL, distributed workers, network-filesystem locking, and overlapping
