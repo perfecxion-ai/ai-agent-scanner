@@ -27,6 +27,8 @@ const checkedReport = (checks, score = null) => ({status: 'completed', check_sch
     agents: [{id: 'asset', name: 'Fixture', security_status: 'completed', risk_score: score, checks, vulnerabilities: []}],
     security_results: [], summary: {overall_risk_score: score}});
 const auditEvent = id => ({id, event: 'claim', previous_status: 'queued', status: 'running', created_at: '2026-10-13T10:00:00'});
+const savedTemplate = (changes = {}) => ({id: 'recipe', revision: 3, scan_name: 'Lab recipe', scan_type: 'discovery_only',
+    target_scope: {network_ranges: ['192.0.2.0/28'], active_probe: false}, scan_config: {timeout_seconds: 120}, ...changes});
 
 test('sign in clears credential input and authenticated calls use bearer token', async () => {
     const calls = [];
@@ -161,6 +163,293 @@ test('default fetch adapter does not bind native fetch to the controller', async
         app.token = 'fixture-token';
         assert.deepEqual(await app.request('/api/agents'), {success: true});
     } finally { global.fetch = original; }
+});
+
+test('template lists use authenticated bounded pagination and safe text', async () => {
+    const calls = [];
+    const {app} = fixture(async (path, options) => {
+        calls.push({path, options});
+        return response({templates: [savedTemplate({scan_name: '<script>bad</script>'})], total: 60});
+    });
+    app.token = 'fixture-token'; app.templateOffset = 25;
+    await app.loadTemplates();
+    assert.equal(calls[0].path, '/api/templates?limit=25&offset=25');
+    assert.equal(calls[0].options.headers.Authorization, 'Bearer fixture-token');
+    assert.equal(app.el('templateList').children[0].textContent, '<script>bad</script> / revision 3');
+    assert.equal(app.el('previousTemplatesBtn').disabled, false);
+    assert.equal(app.el('nextTemplatesBtn').disabled, false);
+    app.templateOffset = 100000;
+    await app.loadTemplates();
+    assert.equal(app.el('nextTemplatesBtn').disabled, true);
+    app.el('nextTemplatesBtn').handlers.click();
+    assert.equal(app.templateOffset, 100000);
+});
+
+test('template lists reject oversized and malformed pages without rendering', async () => {
+    for (const data of [{templates: Array.from({length: 26}, () => savedTemplate()), total: 26},
+        {templates: [savedTemplate()], total: -1}, {templates: [savedTemplate({revision: 0})], total: 1}]) {
+        const {app} = fixture(async () => response(data));
+        app.token = 'fixture-token';
+        await app.loadTemplates();
+        assert.equal(app.el('templateList').children.length, 0);
+        assert.match(app.el('notice').textContent, /invalid template/);
+    }
+});
+
+test('new template list request supersedes an older page', async () => {
+    const replies = [];
+    const {app} = fixture(() => new Promise(done => replies.push(done)));
+    app.token = 'fixture-token';
+    const old = app.loadTemplates();
+    app.templateOffset = 25;
+    const current = app.loadTemplates();
+    replies[1](response({templates: [savedTemplate({id: 'new', scan_name: 'New page'})], total: 26}));
+    await current;
+    replies[0](response({error: 'Old page failed'}, 500));
+    await old;
+    assert.equal(app.el('templateList').children[0].value, 'new');
+    assert.doesNotMatch(app.el('notice').textContent, /Old page/);
+});
+
+test('save current form creates a template without admitting or polling a scan', async () => {
+    const calls = [];
+    const {app} = fixture(async (path, options) => {
+        calls.push({path, options});
+        return response(path.includes('?') ? {templates: [savedTemplate()], total: 1} : {template: savedTemplate()}, 201);
+    });
+    app.token = 'fixture-token'; app.el('scanName').value = 'Fixture';
+    app.el('scanType').value = 'discovery_only'; app.el('networkRanges').value = '192.0.2.1';
+    await app.saveTemplate();
+    assert.equal(calls[0].path, '/api/templates');
+    assert.equal(calls[0].options.method, 'POST');
+    assert.deepEqual(JSON.parse(calls[0].options.body), {scan_name: 'Fixture', scan_type: 'discovery_only',
+        target_scope: {network_ranges: ['192.0.2.1'], domains: [], repositories: [], traffic_sources: []}, scan_config: {}});
+    assert.equal(app.scanId, null);
+    assert.equal(app.timer, null);
+    assert.equal(app.template.revision, 3);
+    assert.equal(app.el('templateEditorView').hidden, false);
+    assert.equal(calls.length, 2);
+});
+
+test('save form preserves security-only source models and excludes new targets', async () => {
+    let body;
+    const {app} = fixture(async (path, options) => {
+        if (options.method === 'POST') body = JSON.parse(options.body);
+        return response(path.includes('?') ? {templates: [], total: 0} : {template: savedTemplate()});
+    });
+    app.token = 'fixture-token'; app.el('scanName').value = 'Source recipe';
+    app.el('scanType').value = 'security_only'; app.el('sourceScanId').value = 'source';
+    app.el('modelOverrides').value = '{"asset":"fixture-model"}';
+    app.el('networkRanges').value = 'not-used.example.test';
+    await app.saveTemplate();
+    assert.deepEqual(body.target_scope, {});
+    assert.deepEqual(body.scan_config, {source_scan_id: 'source', model_overrides: {asset: 'fixture-model'}});
+});
+
+test('invalid source models and missing targets cannot save or scan', async () => {
+    for (const action of ['saveTemplate', 'startScan']) {
+        const {app} = fixture(async () => { throw new Error('Unexpected network call'); });
+        app.token = 'fixture-token'; app.el('scanType').value = 'security_only';
+        await app[action](event);
+        assert.match(app.el('notice').textContent, /completed source scan ID/);
+        app.el('sourceScanId').value = 'source'; app.el('modelOverrides').value = '[]';
+        await app[action](event);
+        assert.match(app.el('notice').textContent, /Model selections must/);
+        app.el('scanType').value = 'discovery_only';
+        await app[action](event);
+        assert.match(app.el('notice').textContent, /at least one target/);
+    }
+});
+
+test('complete definition editor preserves advanced targets and source models on update', async () => {
+    const calls = [];
+    const definition = savedTemplate({scan_type: 'security_only', target_scope: {},
+        scan_config: {source_scan_id: 'source', model_overrides: {asset: 'model'}, timeout_seconds: 180, advanced_future_field: false}});
+    const {app} = fixture(async (path, options) => {
+        calls.push({path, options});
+        return response(path.includes('?') ? {templates: [], total: 0} : {template: {...definition, revision: 4}});
+    });
+    app.token = 'fixture-token'; app.showTemplate(definition);
+    await app.updateTemplate();
+    const body = JSON.parse(calls[0].options.body);
+    assert.deepEqual(body.scan_config, definition.scan_config);
+    assert.equal(body.revision, 3);
+    assert.equal(calls[0].options.method, 'PUT');
+    assert.equal(app.template.revision, 4);
+    assert.equal(app.scanId, null);
+    app.showTemplate(savedTemplate());
+    assert.equal(JSON.parse(app.el('templateEditor').value).target_scope.active_probe, false);
+});
+
+test('update rejects malformed JSON and unsupported top-level fields without discarding editor text', async () => {
+    const {app} = fixture(async () => { throw new Error('Unexpected network call'); });
+    app.token = 'fixture-token'; app.showTemplate(savedTemplate());
+    for (const text of ['{bad', '[]', '{"revision":4}', '{}']) {
+        app.el('templateEditor').value = text;
+        await app.updateTemplate();
+        assert.equal(app.el('templateEditor').value, text);
+        assert.match(app.el('notice').textContent, /valid JSON|four displayed fields/);
+    }
+});
+
+test('stale revision keeps editor changes and does not retry automatically', async () => {
+    for (const action of ['updateTemplate', 'runTemplate']) {
+        let calls = 0;
+        const {app} = fixture(async () => { calls += 1; return response({error: 'stale'}, 409); });
+        app.token = 'fixture-token'; app.showTemplate(savedTemplate());
+        const original = app.el('templateEditor').value;
+        await app[action]();
+        assert.equal(calls, 1);
+        assert.equal(app.template.revision, 3);
+        assert.equal(app.el('templateEditor').value, original);
+        assert.match(app.el('notice').textContent, /Template changed.*Reload/);
+        assert.equal(app.el('runTemplateBtn').disabled, false);
+    }
+});
+
+test('missing or foreign template uses the same unavailable notice', async () => {
+    for (const action of ['openTemplate', 'updateTemplate', 'runTemplate', 'deleteTemplate']) {
+        const {app} = fixture(async () => response({error: 'not found'}, 404));
+        app.token = 'fixture-token'; app.showTemplate(savedTemplate());
+        await app[action]('recipe');
+        assert.match(app.el('notice').textContent, /missing or unavailable to this organization/);
+        assert.equal(app.scanId, null);
+    }
+});
+
+test('policy, source and queue errors are displayed as text without admitting a scan', async () => {
+    for (const status of [400, 403, 429, 500]) {
+        const {app} = fixture(async () => response({error: '<script>fixture failure</script>'}, status));
+        app.token = 'fixture-token'; app.showTemplate(savedTemplate());
+        await app.runTemplate();
+        assert.equal(app.el('notice').textContent, '<script>fixture failure</script>');
+        assert.equal(app.scanId, null);
+        assert.equal(app.templateBusy, false);
+    }
+});
+
+test('manual run pins saved revision and ignores unsaved JSON before selecting admitted scan', async () => {
+    const calls = [];
+    const {app} = fixture(async (path, options) => {
+        calls.push({path, options});
+        return response(options.method === 'POST' ? {scan_id: 'admitted'} : {scans: [], total: 0}, 202);
+    });
+    app.token = 'fixture-token'; app.showTemplate(savedTemplate({id: 'recipe/id'}));
+    app.el('templateEditor').value = '{not saved';
+    app.selectScan = async id => { app.scanId = id; };
+    await app.runTemplate();
+    assert.equal(calls[0].path, '/api/templates/recipe%2Fid/run');
+    assert.deepEqual(JSON.parse(calls[0].options.body), {revision: 3});
+    assert.equal(app.scanId, 'admitted');
+    assert.equal(app.el('templateEditor').value, '{not saved');
+});
+
+test('delete removes only the recipe and keeps selected scan state unchanged', async () => {
+    const calls = [];
+    const {app} = fixture(async (path, options) => { calls.push({path, options}); return response({templates: [], total: 0}); });
+    app.token = 'fixture-token'; app.scanId = 'admitted'; app.showTemplate(savedTemplate());
+    await app.deleteTemplate();
+    assert.equal(calls[0].path, '/api/templates/recipe');
+    assert.equal(calls[0].options.method, 'DELETE');
+    assert.equal(app.scanId, 'admitted');
+    assert.equal(app.template, null);
+    assert.equal(app.el('templateEditor').value, '');
+    assert.equal(app.el('templateEditorView').hidden, true);
+    assert.ok(calls.every(call => !call.path.includes('/cancel')));
+});
+
+test('all template requests are suppressed after logout including late errors', async () => {
+    for (const action of ['loadTemplates', 'openTemplate', 'updateTemplate', 'runTemplate', 'deleteTemplate', 'saveTemplate']) {
+        for (const failure of [false, true]) {
+            let resolve;
+            const {app} = fixture(() => new Promise(done => { resolve = done; }));
+            app.token = 'fixture-token'; app.showTemplate(savedTemplate());
+            app.el('scanType').value = 'discovery_only'; app.el('networkRanges').value = '192.0.2.1';
+            const pending = app[action]('recipe');
+            app.logout();
+            resolve(response(failure ? {error: 'Old failure'} : {template: savedTemplate(), templates: [savedTemplate()], total: 1, scan_id: 'late'}, failure ? 500 : 200));
+            await pending;
+            assert.equal(app.el('notice').textContent, 'Signed out.');
+            assert.equal(app.el('templateList').children.length, 0);
+            assert.equal(app.el('templateEditor').value, '');
+            assert.equal(app.el('templateIdentity').textContent, '');
+            assert.equal(app.el('templateEditorView').hidden, true);
+            assert.equal(app.el('templateControls').disabled, true);
+            assert.equal(app.template, null);
+            assert.equal(app.templateHasNext, false);
+            assert.equal(app.scanId, null);
+        }
+    }
+});
+
+test('pending template actions block duplicate mutations and restore buttons', async () => {
+    let resolve; let calls = 0;
+    const {app} = fixture(() => { calls += 1; return new Promise(done => { resolve = done; }); });
+    app.token = 'fixture-token'; app.showTemplate(savedTemplate());
+    const pending = app.updateTemplate();
+    assert.equal(app.el('updateTemplateBtn').disabled, true);
+    assert.equal(app.el('templateEditor').disabled, true);
+    await app.runTemplate(); await app.deleteTemplate();
+    assert.equal(calls, 1);
+    resolve(response({error: 'rejected'}, 403));
+    await pending;
+    assert.equal(app.el('updateTemplateBtn').disabled, false);
+    assert.equal(app.el('templateEditor').disabled, false);
+});
+
+test('template run responses and errors cannot override a newer selected scan', async () => {
+    for (const failure of [false, true]) {
+        let resolve;
+        const {app} = fixture(() => new Promise(done => { resolve = done; }));
+        app.token = 'fixture-token'; app.showTemplate(savedTemplate());
+        const pending = app.runTemplate();
+        app.selection += 1; app.scanId = 'newer'; app.notice('Newer scan selected.');
+        resolve(response(failure ? {error: 'Old failure'} : {scan_id: 'old'}, failure ? 500 : 202));
+        await pending;
+        assert.equal(app.scanId, 'newer');
+        assert.equal(app.el('notice').textContent, 'Newer scan selected.');
+        assert.equal(app.templateBusy, false);
+    }
+});
+
+test('loading or saving another recipe cannot silently discard dirty editor text', async () => {
+    let calls = 0;
+    const {app} = fixture(async () => { calls += 1; return response({templates: [savedTemplate()], total: 1}); });
+    app.token = 'fixture-token'; app.showTemplate(savedTemplate());
+    const original = app.el('templateEditor').value;
+    app.el('templateEditor').value = '{dirty text';
+    await app.openTemplate('another'); await app.saveTemplate();
+    assert.equal(calls, 0);
+    assert.equal(app.el('templateEditor').value, '{dirty text');
+    assert.match(app.el('notice').textContent, /Unsaved editor changes/);
+    await app.loadTemplates();
+    assert.equal(app.el('templateEditor').value, '{dirty text');
+    app.el('discardTemplateBtn').handlers.click();
+    assert.equal(app.el('templateEditor').value, original);
+    assert.equal(app.template.revision, 3);
+    assert.equal(calls, 1);
+});
+
+test('failed initial template list leaves authenticated refresh and form save usable', async () => {
+    let fail = true;
+    const {app} = fixture(async path => {
+        if (path === '/api/auth/token') return response({token: 'fixture-token'});
+        if (path.startsWith('/api/templates?')) return fail ? response({error: 'Template service unavailable'}, 503) :
+            response({templates: [savedTemplate()], total: 1});
+        return response({scans: [], total: 0});
+    });
+    app.el('operatorKey').value = 'fixture-key';
+    await app.login(event);
+    assert.equal(app.token, 'fixture-token');
+    assert.equal(app.el('refreshTemplatesBtn').disabled, false);
+    assert.equal(app.el('saveTemplateBtn').disabled, false);
+    assert.match(app.el('notice').textContent, /Template service unavailable/);
+    fail = false;
+    await app.loadTemplates();
+    assert.equal(app.el('templateList').children.length, 1);
+    app.logout();
+    assert.equal(app.el('refreshTemplatesBtn').disabled, true);
+    assert.equal(app.el('saveTemplateBtn').disabled, true);
 });
 
 test('check execution and outcome remain distinct, with safe reasons and cloud identity', () => {

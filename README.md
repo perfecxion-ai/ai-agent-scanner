@@ -50,7 +50,7 @@ are operator-selected. Server scans additionally require explicit allowlists.
 | Controlled MCP policy checks | Compares protected inventory against an explicit fixture policy with an authenticated positive control | Browser exploitation, tool-execution authorization, or an overall security pass |
 | Offline replay | Compares recorded outputs and tool requests against explicit policies and labels | Production accuracy, a live injection campaign, or proof of tool execution |
 | Reporting | Preserves findings, observations, phase status, and risk estimates; exports JSON/SARIF | Compliance certification or a standardized CVSS score |
-| Saved scan templates | Stores tenant-owned API recipes and manually admits runs under current server policy | Dashboard template controls, scheduled runs, or credential storage |
+| Saved scan templates | Stores tenant-owned recipes with manual dashboard/API runs under current server policy | Scheduled runs or credential storage |
 
 ```bash
 ai-agent-scanner discover --repository ./src --output code-inventory.json
@@ -131,7 +131,9 @@ The authenticated [template API](docs/scan-templates.md) saves existing scan
 definitions with revision checks and bounded tenant quotas. Manual runs share
 the scan queue and revalidate current scope and source prerequisites. Template
 editing or deletion does not change an already admitted job. Dashboard template
-controls and scheduling are not implemented yet.
+controls support manual save, full-definition editing, pinned-revision runs, and
+deletion. Dirty editor changes require explicit discard before replacement.
+Scheduling remains separate from these manual controls.
 Review [persistent jobs](docs/jobs.md), [authentication](docs/authentication.md),
 [server scan policy](docs/scan-policy.md), and [development/container instructions](docs/DEVELOPMENT.md)
 before deployment. Startup upgrades only [known SQLite layouts](docs/jobs.md#schema-upgrades);

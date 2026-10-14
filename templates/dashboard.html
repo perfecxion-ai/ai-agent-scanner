@@ -48,7 +48,30 @@
             <label for="modelOverrides">Model selections (optional JSON)</label><textarea id="modelOverrides" rows="3" placeholder='{"asset-id":"operator-selected-model"}'></textarea>
             <p class="hint">Map source asset IDs to model names. Do not include credentials or endpoints.</p></div>
           <button id="startScanBtn" type="submit">Queue scan</button>
+          <button id="saveTemplateBtn" class="secondary" type="button">Save form as new template</button>
         </fieldset></form>
+        <section class="templates" aria-labelledby="templatesTitle"><h3 id="templatesTitle">Saved templates</h3>
+          <p class="hint">Saving or editing never starts a scan. Templates are not secret storage.</p>
+          <fieldset id="templateControls" disabled>
+            <label for="templateList">Saved recipes</label><select id="templateList"><option value="">Sign in to load templates</option></select>
+            <div class="actions"><button id="openTemplateBtn" class="secondary" type="button" disabled>Load</button>
+              <button id="refreshTemplatesBtn" class="secondary" type="button">Refresh</button></div>
+            <div class="actions"><button id="previousTemplatesBtn" class="secondary" type="button" disabled>Previous</button>
+              <button id="nextTemplatesBtn" class="secondary" type="button" disabled>Next</button></div>
+            <p id="templateCount" class="hint"></p>
+            <div id="templateEditorView" hidden>
+              <p id="templateIdentity" class="hint template-identity"></p>
+              <label for="templateEditor">Complete saved definition (JSON)</label>
+              <textarea id="templateEditor" rows="12" spellcheck="false" aria-describedby="templateEditorHelp"></textarea>
+              <p id="templateEditorHelp" class="hint">Edit all four fields here. Advanced settings and source model selections are preserved. Do not add credentials, canaries, or endpoint overrides.</p>
+              <div class="actions"><button id="updateTemplateBtn" type="button">Update template</button>
+                <button id="runTemplateBtn" class="secondary" type="button">Run saved revision</button>
+                <button id="discardTemplateBtn" class="secondary" type="button">Discard editor changes</button>
+                <button id="deleteTemplateBtn" class="secondary" type="button">Delete recipe</button></div>
+              <p class="hint">Run uses the displayed saved revision, not unsaved JSON edits. Reload after a revision conflict. Deleting a recipe does not cancel existing scans.</p>
+            </div>
+          </fieldset>
+        </section>
       </section>
       <section class="panel results" aria-labelledby="resultsTitle"><p class="eyebrow">02 / Inspect</p><h2 id="resultsTitle">Scan results</h2>
         <div class="history"><label for="scanHistory">Saved scans</label><div class="inline">
