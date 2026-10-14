@@ -61,49 +61,49 @@ class DiscoveryEngine:
             "openai": {
                 "domains": ["api.openai.com", "openai.azure.com"],
                 "headers": ["openai-organization", "openai-version"],
-                "paths": ["/v1/chat/completions", "/v1/completions"],
+                "paths": ["/v1/models"],
                 "response_patterns": ["model", "choices", "usage"]
             },
             "anthropic": {
                 "domains": ["api.anthropic.com"],
                 "headers": ["anthropic-version", "x-api-key"],
-                "paths": ["/v1/messages", "/v1/complete"],
+                "paths": [],
                 "response_patterns": ["content", "model", "usage"]
             },
             "cohere": {
                 "domains": ["api.cohere.ai"],
                 "headers": ["authorization"],
-                "paths": ["/v1/generate", "/v1/chat"],
+                "paths": [],
                 "response_patterns": ["generations", "text"]
             },
             "huggingface": {
                 "domains": ["api-inference.huggingface.co"],
                 "headers": ["authorization"],
-                "paths": ["/models/"],
+                "paths": [],
                 "response_patterns": ["generated_text", "score"]
             },
             "ollama": {
                 "domains": [],
                 "headers": [],
-                "paths": ["/api/tags", "/api/generate"],
+                "paths": ["/api/tags"],
                 "response_patterns": ["models", "name", "modified_at"]
             },
             "vllm": {
                 "domains": [],
                 "headers": [],
-                "paths": ["/v1/models", "/v1/chat/completions"],
+                "paths": ["/v1/models"],
                 "response_patterns": ["model", "choices", "object"]
             },
             "triton": {
                 "domains": [],
                 "headers": [],
-                "paths": ["/v2/health/ready", "/v2/models"],
+                "paths": [],
                 "response_patterns": ["models", "name", "ready"]
             },
             "tgi": {
                 "domains": [],
                 "headers": [],
-                "paths": ["/info", "/generate"],
+                "paths": ["/info"],
                 "response_patterns": ["model_id", "max_input_length", "generated_text"]
             }
         }
