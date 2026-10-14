@@ -181,8 +181,7 @@ async def _body(response, state, request_id):
     return _rpc(await asyncio.to_thread(_decode, bytes(data)), request_id)
 
 
-async def _request(session, endpoint, method, state, headers, cursor=None):
-    request_id = f"inventory-{state.budget.requests + 1}"
+def _message(request_id, method, cursor=None):
     params = {"_meta": {
         "io.modelcontextprotocol/protocolVersion": PROTOCOL_VERSION,
         "io.modelcontextprotocol/clientInfo": {"name": "ai-agent-scanner", "version": "1.1.0"},
@@ -190,9 +189,14 @@ async def _request(session, endpoint, method, state, headers, cursor=None):
     }}
     if cursor is not None:
         params["cursor"] = cursor
+    return {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
+
+
+async def _request(session, endpoint, method, state, headers, cursor=None, request_id=None):
+    request_id = request_id or f"inventory-{state.budget.requests + 1}"
     request_headers = {**headers, "Mcp-Method": method}
     async with session.request("POST", endpoint, headers=request_headers,
-                               json={"jsonrpc": "2.0", "id": request_id, "method": method, "params": params},
+                               json=_message(request_id, method, cursor),
                                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)) as response:
         if response.status in {401, 403}:
             raise LiveError("MCP access denied; inventory not evaluated")

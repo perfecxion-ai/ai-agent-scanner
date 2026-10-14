@@ -263,6 +263,37 @@ def mcp_live_command(endpoint, allow_network, allow_loopback, api_key_env, fmt, 
         raise click.ClickException('MCP inventory is incomplete; inspect report')
 
 
+@cli.command('mcp-check')
+@click.option('--endpoint', required=True, help='Exact already-running protected MCP endpoint')
+@click.option('--allow-network', multiple=True, required=True, help='Explicit allowed network CIDR (repeatable)')
+@click.option('--allow-loopback', is_flag=True, help='Permit explicitly allowlisted loopback targets')
+@click.option('--api-key-env', required=True, help='Environment variable holding the authorized bearer token')
+@click.option('--policy', required=True, type=click.Path(exists=True, dir_okay=False), help='Local trusted protected-inventory policy JSON')
+@click.option('--format', '-f', 'fmt', type=click.Choice(['json', 'sarif']), default='json')
+@click.option('--output', '-o', type=click.Path(dir_okay=False), help='Report destination; default stdout')
+def mcp_check_command(endpoint, allow_network, allow_loopback, api_key_env, policy, fmt, output):
+    """Check declared protected inventory controls without invoking tools."""
+    from src.mcp.policy import check, load_policy
+    from src.mcp import to_sarif
+
+    try:
+        if output:
+            destination, source = Path(output), Path(policy)
+            if (destination.resolve() == source.resolve()
+                    or destination.exists() and destination.samefile(source)):
+                raise ValueError('Output must differ from policy input')
+        report = asyncio.run(check(endpoint, allow_network, load_policy(policy), allow_loopback, api_key_env))
+        rendered = json.dumps(to_sarif(report) if fmt == 'sarif' else report, indent=2)
+        if output:
+            Path(output).write_text(rendered + '\n', encoding='utf-8')
+        else:
+            click.echo(rendered)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException('Unable to check MCP policy; verify local policy, scope, credentials, and output') from exc
+    if report['status'] != 'completed':
+        raise click.ClickException('MCP policy check is incomplete; inspect report')
+
+
 @cli.command('evaluate')
 @click.option('--suite', type=click.Path(exists=True, dir_okay=False), help='Local labeled replay suite JSON; default synthetic smoke fixtures')
 @click.option('--output', '-o', type=click.Path(dir_okay=False), help='Metrics JSON destination; default stdout')

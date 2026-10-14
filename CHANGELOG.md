@@ -33,6 +33,9 @@ These changes are engineering work on the current branch, not a published releas
 - Add scoped read-only live MCP inventory with bounded JSON/SSE pagination and
   schema analysis, secret-safe reports, explicit skipped runtime-security checks,
   and accurate incomplete SARIF execution status.
+- Add controlled protected MCP inventory checks with explicit local policy,
+  authenticated fixture baselines, isolated credential/Origin controls, shared
+  budgets, and conservative JSON/SARIF evidence. No tools are invoked.
 - Add offline replay fixtures for indirect markers, foreign-tenant document
   canaries, and tool-request policies, with labeled confusion and accuracy metrics.
 - Add explicit model/protocol adapters, tenant-owned scan history, and source model selection.
