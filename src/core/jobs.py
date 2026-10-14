@@ -194,7 +194,7 @@ class JobStore:
 
 
 class JobDispatcher:
-    def __init__(self, store, run, workers=2, poll_seconds=0.25, initialize=None):
+    def __init__(self, store, run, workers=2, poll_seconds=0.25, initialize=None, service=None):
         if workers < 1 or poll_seconds <= 0:
             raise ValueError("Worker count and poll interval must be positive")
         self.store, self.run = store, run
@@ -210,6 +210,7 @@ class JobDispatcher:
         self._ownership = DispatcherLock(store.engine)
         self.logger = logging.getLogger(__name__)
         self.initialize = initialize
+        self.service = service
 
     @property
     def ready(self):
@@ -225,10 +226,14 @@ class JobDispatcher:
                     self.initialize()
                 self.store.recover()
                 self._executor = ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix="scan-job")
+                if self.service:
+                    self.service.start()
                 self._thread = threading.Thread(target=self._loop, name="scan-dispatcher", daemon=True)
-                self._healthy = True
+                self._healthy = not self.service or self.service.healthy
                 self._thread.start()
             except Exception:
+                if self.service:
+                    self.service.stop()
                 self._ownership.release()
                 if self._executor:
                     self._executor.shutdown(wait=False)
@@ -239,6 +244,8 @@ class JobDispatcher:
 
     def stop(self, timeout=5):
         self._stop.set()
+        if self.service:
+            self.service.stop()
         self._wake.set()
         if self._thread:
             self._thread.join(timeout)
@@ -282,7 +289,9 @@ class JobDispatcher:
         while True:
             try:
                 self._tick()
-                self._healthy = True
+                if self.service:
+                    self.service.tick(self._stop)
+                self._healthy = not self.service or self.service.healthy
             except Exception:
                 self._healthy = False
                 self.logger.error("Job dispatcher could not access or finalize its queue")
