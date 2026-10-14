@@ -1,5 +1,6 @@
 """Bounded HTTP transport and connection-time target enforcement."""
 
+import asyncio
 import ipaddress
 import json
 import socket
@@ -172,7 +173,7 @@ class SafeSession:
         except TransportPolicyError:
             self.budget.rejections += 1
             raise
-        except (aiohttp.ClientError, TimeoutError):
+        except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError):
             self.budget.failures += 1
             raise
 
