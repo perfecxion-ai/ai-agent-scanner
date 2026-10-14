@@ -5,6 +5,25 @@ start scans when created or edited, run on a timer, or configure external delive
 Scheduling is not implemented. Every route requires the operator's authenticated
 organization; foreign and missing template IDs both return 404.
 
+## Dashboard
+
+After signing in, **Save form as new template** stores the current scan form,
+including security-only source and model selections, without starting a scan.
+The saved-template list uses bounded 25-item pages. Select a recipe and choose
+**Load** to inspect its complete four-field JSON definition. **Update template**
+replaces that definition using the displayed revision. The separate editor keeps
+advanced target and configuration fields intact rather than reconstructing them
+from the simpler new-scan form. Server validation still rejects unsupported fields.
+
+**Run saved revision** admits the displayed saved recipe, not unsaved editor text.
+The admitted scan opens in the results panel. Stale revisions require reloading;
+failed updates and runs retain the editor. Unsaved edits block loading or saving
+another recipe until you update or explicitly **Discard editor changes**. Refreshing
+the list does not replace editor contents. **Delete recipe** removes the template
+only, not existing jobs. Logout clears the recipe list and editor; no token or
+template definition is stored in browser storage. These controls never run on a
+timer or enable an automatic scan.
+
 ## API
 
 `POST /api/templates` accepts the same four definition fields as a scan:
