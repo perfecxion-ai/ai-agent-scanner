@@ -238,6 +238,31 @@ def mcp_command(config, tools_path, fmt, output):
         raise click.ClickException(str(exc)) from exc
 
 
+@cli.command('mcp-live')
+@click.option('--endpoint', required=True, help='Already-running MCP 2026-07-28 HTTP(S) endpoint')
+@click.option('--allow-network', multiple=True, required=True, help='Explicit allowed network CIDR (repeatable)')
+@click.option('--allow-loopback', is_flag=True, help='Permit explicitly allowlisted loopback targets')
+@click.option('--api-key-env', help='Environment variable holding a bearer token; never exported')
+@click.option('--format', '-f', 'fmt', type=click.Choice(['json', 'sarif']), default='json')
+@click.option('--output', '-o', type=click.Path(dir_okay=False), help='Report destination; default stdout')
+def mcp_live_command(endpoint, allow_network, allow_loopback, api_key_env, fmt, output):
+    """Collect read-only live MCP inventory; never start servers or invoke tools."""
+    from src.mcp.live import inventory
+    from src.mcp import to_sarif
+
+    try:
+        report = asyncio.run(inventory(endpoint, allow_network, allow_loopback, api_key_env))
+        rendered = json.dumps(to_sarif(report) if fmt == 'sarif' else report, indent=2)
+        if output:
+            Path(output).write_text(rendered + '\n', encoding='utf-8')
+        else:
+            click.echo(rendered)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException('Unable to collect or write MCP inventory; check target scope and credential configuration') from exc
+    if report['status'] != 'completed':
+        raise click.ClickException('MCP inventory is incomplete; inspect report')
+
+
 @cli.command('evaluate')
 @click.option('--suite', type=click.Path(exists=True, dir_okay=False), help='Local labeled replay suite JSON; default synthetic smoke fixtures')
 @click.option('--output', '-o', type=click.Path(dir_okay=False), help='Metrics JSON destination; default stdout')
