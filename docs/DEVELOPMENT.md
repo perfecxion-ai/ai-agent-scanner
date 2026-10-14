@@ -51,6 +51,9 @@ CI checks all Python files with Ruff, runs tests and installed-wheel smoke check
 on all supported Python versions, audits resolved dependencies (including cloud
 and server extras), runs Bandit, and builds and starts the container. Dependency
 audit failures fail CI. The dependency audit needs access to the advisory service.
+Installed-wheel smoke checks the live MCP command and imports its implementation
+without contacting an endpoint. Network and live MCP tests use local HTTP/DNS
+fixtures; explicit parser-depth limits do not depend on Python recursion behavior.
 
 A published GitHub release reruns CI and publishes the distribution artifacts
 produced by that successful run through the `pypi` environment. Configure its

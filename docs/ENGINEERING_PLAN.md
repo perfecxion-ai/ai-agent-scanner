@@ -89,7 +89,10 @@ These are source-review findings, not evidence of exploitation in a deployment.
   claims, worker limits, terminal consistency, and audit records. PostgreSQL/distributed coordination and a general
   migration framework remain outside the supported deployment boundary.
 - M4 has passive MCP configuration/schema checks and offline replay for indirect
-  markers, RAG tenant canaries, and tool authorization requests. These fixtures
+  markers, RAG tenant canaries, and tool authorization requests. A scoped CLI
+  adapter collects read-only MCP 2026-07-28 Streamable HTTP inventory with bounded
+  JSON/SSE and schema analysis. Inventory does not test runtime authorization,
+  Origin enforcement, tool behavior, or exploitability. These fixtures
   do not establish live attack coverage. Broader live integrations, output sinks,
   supply-chain checks, and representative accuracy benchmarks remain pending.
 - M5 has scoped history and exports, a redesigned dashboard, source model
@@ -100,6 +103,9 @@ These are source-review findings, not evidence of exploitation in a deployment.
   performance testing, deployment review, migration validation, or release sign-off.
 
 Discovery now has bounded traffic-format and mocked cloud SDK acceptance,
-resource-specific cloud identity, and explicit incomplete-source status. Real
+resource-specific cloud identity, typed read-only network inventories, and
+explicit incomplete-source status. DNS/TCP work and JSON nesting are bounded;
+shared protocol responses do not identify vendor ownership, and unknown hostname
+exposure is not labeled internet-facing. Real
 provider accounts and representative capture corpora still need validation.
 CI actions are pinned and uploaded distributions are downloaded and compared.

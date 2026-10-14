@@ -70,20 +70,35 @@ cloud resource IDs, and authenticated audit pagination. Node regressions cover
 stale requests, logout, bounded display, and text rendering. Chromium fixtures
 cover the corresponding authenticated desktop/mobile workflows.
 
+### Network and live protocol checkpoint
+
+PRs #24 through #26 fix cross-version transport timeout accounting, strengthen
+network discovery, and add scoped read-only live MCP inventory. Network fixtures
+cover typed protocol evidence, false attribution, canonical authority, expected
+negative services, incomplete responses, DNS/TCP limits, cancellation, and
+deterministic JSON depth/finiteness. Unknown hostname exposure is omitted.
+
+The live MCP CLI supports the documented 2026-07-28 inventory subset only.
+JSON/SSE, pagination, schemas, and report pointers are bounded; credentials and
+escaped credential echoes are removed. It never starts commands, invokes tools,
+fetches external references, or follows authentication metadata. Collection
+outcomes are not security passes; runtime authorization, Origin, and execution
+checks remain skipped. See [live scope](mcp-live.md) and [network scope](network-discovery.md).
+
 ## Next delivery sequence
 
-1. Expand representative local service-signature fixtures, starting with network
-   discovery's negative cases and bounded incomplete responses. Separate real
-   provider compatibility from mocked SDK acceptance; do not require paid calls.
-2. Add one explicitly supported live lab protocol at a time for the M4 surfaces.
-   Start with a constrained local MCP fixture and public tool schemas. Specify
-   authorization, scope, transport, canary provenance, and request limits before
-   enabling live probes. Keep offline replay available and do not execute arbitrary
-   imported tool commands as a convenience.
-3. Add saved templates and scheduling only through the existing tenant-owned
+1. Add controlled read-only MCP authorization and Origin checks only with declared
+   policy and protected fixture provenance. Public tool enumeration or accepting an
+   arbitrary Origin alone cannot establish a vulnerability. Design any legacy
+   protocol adapter separately; do not silently downgrade the current client.
+2. Add saved templates and scheduling only through the existing tenant-owned
    admission/policy path. Review schema changes, bounded recurrence, restart
    behavior, cancellation, and server policy revalidation before implementation.
    External integrations need an explicit supported destination and secret contract.
+3. Expand representative accuracy and service-compatibility fixtures, then run
+   load/soak, accessibility, and deployed backup/upgrade acceptance. Keep real
+   provider compatibility separate from mocked SDK and synthetic protocol fixtures;
+   do not require paid calls or claim complete coverage from line percentages.
 
 Each slice needs positive/negative fixtures, a concise independent review, all
 required CI checks, and truthful operator documentation before merge. These are
