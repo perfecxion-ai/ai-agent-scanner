@@ -204,8 +204,8 @@ def _bounded_schema(schema, state):
             pending.extend((value, depth + 1) for value in node)
 
 
-def _schema(schema, state):
-    if not isinstance(schema, dict) or schema.get("type") != "object":
+def _schema(schema, state, input_schema=True):
+    if not isinstance(schema, dict) or (input_schema and schema.get("type") != "object"):
         raise LiveError("Invalid MCP tool schema")
     _bounded_schema(schema, state)
     # Validate the syntax, not tool instances. check_schema uses bundled metaschemas.
@@ -225,7 +225,7 @@ def _schema(schema, state):
             continue
         if "$schema" in node and (not isinstance(node["$schema"], str) or node["$schema"].rstrip("#") != SCHEMA_DIALECT):
             raise LiveError("Unsupported MCP schema dialect")
-        if "x-mcp-header" in node:
+        if input_schema and "x-mcp-header" in node:
             value = node["x-mcp-header"]
             if (not reachable or not isinstance(value, str) or not _HEADER_TOKEN.fullmatch(value)
                     or value.lower() in headers or node.get("type") not in {"string", "integer", "boolean"}):
@@ -266,7 +266,7 @@ def _tools(result, state):
                 raise LiveError("Invalid MCP tool metadata")
         _schema(tool.get("inputSchema"), state)
         if "outputSchema" in tool:
-            _schema(tool["outputSchema"], state)
+            _schema(tool["outputSchema"], state, input_schema=False)
     cursor = result.get("nextCursor")
     if cursor is not None and (not isinstance(cursor, str) or len(cursor.encode("utf-8")) > MAX_CURSOR_BYTES):
         raise LiveError("Invalid or excessive MCP pagination cursor")

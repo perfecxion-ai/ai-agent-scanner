@@ -275,6 +275,17 @@ def test_external_schema_reference_is_never_fetched(server):
     assert len(server[2]) == 2
 
 
+@pytest.mark.parametrize("schema", [{"type": "array", "items": {"type": "string"}},
+    {"type": "string"}, {"type": "number"}, {"type": "boolean"}, {"type": "null"}, {},
+    {"type": "array", "items": {"type": "string", "x-mcp-header": "not-an-input-header"}}])
+def test_output_schemas_accept_arbitrary_structured_json_types(server, schema):
+    server[1]["dispatch"] = lambda request, headers: result(request, discovery() if request["method"] == "server/discover" else {
+        "tools": [{**tool(), "outputSchema": schema}]})
+    report = collect(server)
+    assert report["status"] == "completed" and report["tools_assessed"] == 1
+    assert report["checks"][0]["outcome"] == "inconclusive"
+
+
 @pytest.mark.parametrize("secret", ["fixture-live-bearer-never-export", "fixture/live/token", "fixture~live~token", "fixture~/live/~token"])
 def test_credential_echo_in_schema_pointer_and_cookie_never_persist(server, monkeypatch, secret):
     monkeypatch.setenv("MCP_FIXTURE_TOKEN", secret)
