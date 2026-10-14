@@ -289,8 +289,12 @@ class NetworkScanner:
                            and _text(model.get('id')) for model in models)
             return False
         if 'model_id' in patterns:
-            return (_text(document.get('model_id')) and type(document.get('max_input_length')) is int
-                    and document['max_input_length'] > 0)
+            # Current TGI renamed this field; retain the documented older schema
+            # only when the current field is absent. Self-reported router identity
+            # is protocol evidence, not proof of vendor ownership.
+            limit = document.get('max_input_tokens') if 'max_input_tokens' in document else document.get('max_input_length')
+            return (document.get('router') == 'text-generation-router' and _text(document.get('version'))
+                    and _text(document.get('model_id')) and type(limit) is int and limit > 0)
         return False
 
     @staticmethod
@@ -319,7 +323,7 @@ class NetworkScanner:
                 models = document.get('data')
                 if not isinstance(models, list) or models:
                     return True
-            if 'model_id' in patterns and 'model_id' in document:
+            if 'model_id' in patterns and document.get('router') == 'text-generation-router':
                 return True
         return False
 

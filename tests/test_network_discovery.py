@@ -22,7 +22,11 @@ from src.discovery.network_scanner import MAX_DNS_ADDRESSES, MAX_JSON_DEPTH, MAX
 OLLAMA = {'models': [{'name': 'fixture:latest', 'modified_at': '2026-01-01T00:00:00Z'}]}
 MODELS = {'object': 'list', 'data': [{'id': 'fixture-model', 'object': 'model',
                                     'created': 1, 'owned_by': 'fixture'}]}
-TGI = {'model_id': 'fixture/model', 'max_input_length': 4096}
+TGI = {'model_id': 'fixture/model', 'model_sha': None, 'model_pipeline_tag': 'text-generation',
+       'max_concurrent_requests': 128, 'max_best_of': 2, 'max_stop_sequences': 4,
+       'max_input_tokens': 4096, 'max_total_tokens': 8192, 'validation_workers': 2,
+       'max_client_batch_size': 32, 'router': 'text-generation-router', 'version': '3.3.7',
+       'sha': None, 'docker_label': None}
 
 
 class Response:
@@ -88,6 +92,74 @@ async def test_positive_protocol_shapes(provider, document):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('limit_field', ['max_input_tokens', 'max_input_length'], ids=['current', 'legacy'])
+async def test_tgi_current_and_legacy_router_schemas(service, limit_field):
+    document = {key: value for key, value in TGI.items() if key != 'max_input_tokens'}
+    document[limit_field] = 4096
+    responses, calls, port = service
+    responses['/info'] = web.json_response(document)
+    with scan_transport(budget()) as limits:
+        assets = await NetworkScanner()._identify_ai_service('127.0.0.1', port, DiscoveryEngine().ai_signatures)
+    assert len(assets) == 1 and assets[0]['provider'] == 'tgi'
+    assert assets[0]['endpoint'] == f'http://127.0.0.1:{port}/info'
+    assert all(method == 'GET' for method, _, _ in calls)
+    assert limits.failures == limits.rejections == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('limit_field', ['max_input_tokens', 'max_input_length'], ids=['current', 'legacy'])
+@pytest.mark.parametrize('limit', [True, '4096', 0, -1, None], ids=['boolean', 'string', 'zero', 'negative', 'null'])
+async def test_tgi_rejects_invalid_current_or_legacy_limit(limit_field, limit):
+    document = {key: value for key, value in TGI.items() if key != 'max_input_tokens'}
+    document[limit_field] = limit
+    with scan_transport(budget()) as limits:
+        assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures['tgi'])
+    assert limits.failures == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('changes', [{'router': 'generic-router'}, {'router': None}, {'version': ''},
+                                   {'version': None}, {'model_id': ''}, {'model_id': None}],
+                         ids=['wrong-router', 'missing-router', 'empty-version', 'missing-version', 'empty-model', 'missing-model'])
+async def test_tgi_requires_router_version_and_model(changes):
+    document = {**TGI, **changes}
+    for key, value in changes.items():
+        if value is None:
+            document.pop(key)
+    with scan_transport(budget()) as limits:
+        assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures['tgi'])
+    assert limits.failures == (0 if 'router' in changes else 1)
+
+
+@pytest.mark.asyncio
+async def test_tgi_current_limit_takes_precedence_without_rejecting_legacy_extension():
+    signature = DiscoveryEngine().ai_signatures['tgi']
+    with scan_transport(budget()) as limits:
+        assert await NetworkScanner()._is_ai_service(Response({**TGI, 'max_input_length': 'unrelated metadata'}), signature)
+        assert not await NetworkScanner()._is_ai_service(Response({**TGI, 'max_input_tokens': None, 'max_input_length': 4096}), signature)
+    assert limits.failures == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('limit_field', ['max_input_tokens', 'max_input_length'], ids=['current', 'legacy'])
+async def test_generic_model_and_limit_pair_is_not_tgi(service, limit_field):
+    responses, _, port = service
+    responses['/info'] = web.json_response({'model_id': 'generic/model', limit_field: 4096})
+    with scan_transport(budget()) as limits:
+        assert not await NetworkScanner()._identify_ai_service('127.0.0.1', port, DiscoveryEngine().ai_signatures)
+    assert limits.failures == limits.rejections == 0
+
+
+@pytest.mark.asyncio
+async def test_historical_tgi_without_router_discriminator_remains_unsupported():
+    historical = {'model_id': 'fixture/model', 'max_input_length': 4096, 'version': '1.4.5',
+                  'model_dtype': 'torch.float16', 'model_device_type': 'cuda'}
+    with scan_transport(budget()) as limits:
+        assert not await NetworkScanner()._is_ai_service(Response(historical), DiscoveryEngine().ai_signatures['tgi'])
+    assert limits.failures == limits.rejections == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('provider,document', [
     ('ollama', {'models': []}), ('ollama', {'models': [{'name': '', 'modified_at': None}]}),
     ('ollama', {'models': 'model'}), ('ollama', {'models': [False]}),
@@ -129,7 +201,7 @@ async def test_valid_empty_or_unrelated_inventory_is_clean_negative(document):
 @pytest.mark.parametrize('provider,document', [('ollama', {'models': None}),
                                     ('ollama', {'models': [{'name': 'model', 'modified_at': 'not-date'}]}),
                                     ('openai', {'object': 'list', 'data': [None]}),
-                                    ('tgi', {'model_id': 'model', 'max_input_length': None})])
+                                    ('tgi', {**TGI, 'max_input_tokens': None})])
 async def test_invalid_claimed_inventory_marks_incomplete(provider, document):
     with scan_transport(budget()) as limits:
         assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures[provider])
