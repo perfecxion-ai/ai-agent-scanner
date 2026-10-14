@@ -1,4 +1,6 @@
 .inline select{min-width:0}
+.schedules{border-top:1px solid var(--line);margin-top:24px}.schedule-identity{overflow-wrap:anywhere}.schedules button{white-space:normal}.review-pin{display:flex;align-items:flex-start;gap:8px}.review-pin input{width:auto;flex:none;margin-top:4px}
+.schedule-identity:focus-visible{outline:3px solid #3b9a88;outline-offset:3px}
 .templates{border-top:1px solid var(--line);margin-top:24px}.template-identity{overflow-wrap:anywhere}#templateEditor{font-family:ui-monospace,monospace;font-size:.75rem}.templates .actions{gap:6px}.templates button{white-space:normal}
 .check-list:focus-visible,.audit-list:focus-visible{outline:3px solid #3b9a88;outline-offset:3px}
 .check-list{max-height:360px;overflow:auto}.check-record{padding:10px 0;border-bottom:1px solid var(--line)}.check-record:last-child{border:0}.audit-list{padding-left:24px;max-height:320px;overflow:auto;overflow-wrap:anywhere}.audit-list li{padding:8px 6px}.audit-list p{font-size:.8rem;margin:2px 0}.audit-list strong{font-size:.85rem}

@@ -7,6 +7,8 @@ const AUDIT_PAGE_SIZE = 100;
 const AUDIT_DISPLAY_LIMIT = 500;
 const TEMPLATE_PAGE_SIZE = 25;
 const TEMPLATE_OFFSET_LIMIT = 100000;
+const SCHEDULE_PAGE_SIZE = 25;
+const SCHEDULE_OFFSET_LIMIT = 100000;
 
 class AIAgentScanner {
     constructor(doc = document, fetcher = (...args) => fetch(...args)) {
@@ -28,6 +30,13 @@ class AIAgentScanner {
         this.templateSelection = 0;
         this.templateBusy = false;
         this.template = null;
+        this.schedule = null;
+        this.scheduleBusy = false;
+        this.scheduleSelection = 0;
+        this.scheduleRequest = 0;
+        this.scheduleOffset = 0;
+        this.occurrenceRequest = 0;
+        this.occurrenceOffset = 0;
         this.on('loginForm', 'submit', event => this.login(event));
         this.on('logoutBtn', 'click', () => this.logout());
         this.on('scanForm', 'submit', event => this.startScan(event));
@@ -51,9 +60,28 @@ class AIAgentScanner {
         this.on('updateTemplateBtn', 'click', () => this.updateTemplate());
         this.on('runTemplateBtn', 'click', () => this.runTemplate());
         this.on('deleteTemplateBtn', 'click', () => this.deleteTemplate());
+        this.on('templateEditor', 'input', () => { this.el('reviewScheduleTemplate').checked = false; this.scheduleButtons(); });
+        this.on('reviewScheduleTemplate', 'change', () => this.scheduleButtons());
+        this.on('createScheduleBtn', 'click', () => this.createSchedule());
+        this.on('refreshSchedulesBtn', 'click', () => this.loadSchedules());
+        this.on('scheduleList', 'change', () => this.scheduleButtons());
+        this.on('openScheduleBtn', 'click', () => this.openSchedule(this.el('scheduleList').value));
+        this.on('previousSchedulesBtn', 'click', () => { this.scheduleOffset = Math.max(0, this.scheduleOffset - SCHEDULE_PAGE_SIZE); this.loadSchedules(); });
+        this.on('nextSchedulesBtn', 'click', () => { this.scheduleOffset = Math.min(SCHEDULE_OFFSET_LIMIT, this.scheduleOffset + SCHEDULE_PAGE_SIZE); this.loadSchedules(); });
+        this.on('enableScheduleBtn', 'click', () => this.changeSchedule('enable'));
+        this.on('pauseScheduleBtn', 'click', () => this.changeSchedule('pause'));
+        this.on('deleteScheduleBtn', 'click', () => this.deleteSchedule());
+        this.on('refreshScheduleBtn', 'click', () => this.schedule && this.openSchedule(this.schedule.id));
+        this.on('refreshOccurrencesBtn', 'click', () => this.loadOccurrences());
+        this.on('scheduleOccurrences', 'change', () => this.scheduleButtons());
+        this.on('openOccurrenceBtn', 'click', () => this.openOccurrence());
+        this.on('previousOccurrencesBtn', 'click', () => { this.occurrenceOffset = Math.max(0, this.occurrenceOffset - SCHEDULE_PAGE_SIZE); this.loadOccurrences(); });
+        this.on('nextOccurrencesBtn', 'click', () => { this.occurrenceOffset = Math.min(75, this.occurrenceOffset + SCHEDULE_PAGE_SIZE); this.loadOccurrences(); });
         this.on('discardTemplateBtn', 'click', () => {
             if (this.template && !this.templateBusy) {
                 this.el('templateEditor').value = this.templateText;
+                this.el('reviewScheduleTemplate').checked = false;
+                this.scheduleButtons();
                 this.notice('Editor reset to the displayed saved revision. No recipe or scan changed.');
             }
         });
@@ -107,12 +135,14 @@ class AIAgentScanner {
         this.clearReport();
         this.clearAudit();
         this.clearTemplates();
+        this.clearSchedules();
         this.historyOffset = 0;
         this.historyRequest += 1;
         this.el('scanHistory').replaceChildren();
         this.el('historyCount').textContent = '';
         for (const id of ['scanHistory', 'openHistoryBtn', 'refreshHistoryBtn', 'previousHistoryBtn', 'nextHistoryBtn']) this.el(id).disabled = true;
         this.notice('Signed out.');
+        this.el('operatorKey').focus?.();
     }
     async request(path, options = {}, authenticated = true) {
         if (authenticated && !this.token) throw new Error('Sign in first.');
@@ -157,8 +187,10 @@ class AIAgentScanner {
             this.notice('Signed in. Your token stays in this page only.');
             this.el('refreshHistoryBtn').disabled = false;
             this.el('templateControls').disabled = false;
+            this.el('scheduleControls').disabled = false;
             this.templateButtons();
-            await Promise.all([this.loadHistory(), this.loadTemplates()]);
+            this.scheduleButtons();
+            await Promise.all([this.loadHistory(), this.loadTemplates(), this.loadSchedules()]);
         } catch (error) { if (epoch === this.epoch) this.handleError(error); }
         finally { if (epoch === this.epoch) this.el('loginBtn').disabled = false; }
     }
@@ -226,6 +258,7 @@ class AIAgentScanner {
         this.el('templateIdentity').textContent = this.el('templateCount').textContent = '';
         this.el('templateControls').disabled = true;
         this.templateButtons();
+        this.resetScheduleReview();
     }
     templateButtons() {
         for (const id of ['saveTemplateBtn', 'refreshTemplatesBtn', 'openTemplateBtn', 'previousTemplatesBtn', 'nextTemplatesBtn']) {
@@ -237,6 +270,7 @@ class AIAgentScanner {
         for (const id of ['updateTemplateBtn', 'runTemplateBtn', 'deleteTemplateBtn', 'discardTemplateBtn', 'templateEditor']) {
             this.el(id).disabled = !this.token || this.templateBusy || !this.template;
         }
+        this.scheduleButtons();
     }
     async loadTemplates() {
         if (!this.token) return;
@@ -275,6 +309,7 @@ class AIAgentScanner {
         this.templateText = this.el('templateEditor').value;
         this.el('templateIdentity').textContent = `${template.id} / revision ${template.revision}`;
         this.el('templateEditorView').hidden = false;
+        this.resetScheduleReview();
     }
     async templateAction(action, scanSelection = null) {
         if (!this.token || this.templateBusy) return;
@@ -355,6 +390,9 @@ class AIAgentScanner {
     }
     async deleteTemplate() {
         if (!this.template) return;
+        const epoch = this.epoch;
+        const selection = this.templateSelection + 1;
+        let deleted = false;
         await this.templateAction(async current => {
             await this.request(`/api/templates/${encodeURIComponent(this.template.id)}`, {method: 'DELETE'});
             if (!current()) return;
@@ -363,9 +401,248 @@ class AIAgentScanner {
             this.el('templateEditor').value = '';
             this.el('templateIdentity').textContent = '';
             this.el('templateEditorView').hidden = true;
+            this.resetScheduleReview();
             this.notice('Template deleted. Existing scans are unchanged.');
+            deleted = true;
             await this.loadTemplates();
         });
+        if (deleted && epoch === this.epoch && selection === this.templateSelection) this.el('refreshTemplatesBtn').focus?.();
+    }
+    resetScheduleReview() {
+        this.el('reviewScheduleTemplate').checked = false;
+        this.el('scheduleTemplatePin').textContent = this.template ?
+            `Reviewed pin candidate: ${this.template.id} / revision ${this.template.revision}. Read the complete saved definition above.` :
+            'Load a saved template above to review its ID and revision.';
+        this.scheduleButtons();
+    }
+    reviewedSchedulePin() {
+        return Boolean(this.template && !this.templateBusy && this.el('reviewScheduleTemplate').checked &&
+            this.el('templateEditor').value === this.templateText);
+    }
+    clearOccurrences() {
+        this.occurrenceRequest += 1;
+        this.occurrenceOffset = 0;
+        this.occurrenceHasNext = false;
+        this.occurrenceBusy = false;
+        this.el('scheduleOccurrences').replaceChildren();
+        this.el('occurrenceCount').textContent = '';
+    }
+    clearSchedules() {
+        this.scheduleRequest += 1;
+        this.scheduleSelection += 1;
+        this.scheduleOffset = 0;
+        this.scheduleHasNext = false;
+        this.scheduleBusy = false;
+        this.schedule = null;
+        this.el('scheduleList').replaceChildren();
+        this.el('scheduleCount').textContent = '';
+        this.el('scheduleDetail').hidden = true;
+        for (const id of ['scheduleIdentity', 'scheduleStatus', 'scheduleTiming']) this.el(id).textContent = '';
+        this.el('scheduleControls').disabled = true;
+        this.el('scheduleInterval').value = '3600';
+        this.el('scheduleRuns').value = '4';
+        this.clearOccurrences();
+        this.resetScheduleReview();
+    }
+    scheduleButtons() {
+        const ready = Boolean(this.token) && !this.scheduleBusy;
+        this.el('reviewScheduleTemplate').disabled = !ready || !this.template || this.templateBusy;
+        for (const id of ['scheduleInterval', 'scheduleRuns', 'refreshSchedulesBtn', 'scheduleList']) this.el(id).disabled = !ready;
+        this.el('createScheduleBtn').disabled = !ready || !this.reviewedSchedulePin();
+        this.el('openScheduleBtn').disabled = !ready || !this.el('scheduleList').value;
+        this.el('previousSchedulesBtn').disabled = !ready || this.scheduleOffset === 0;
+        this.el('nextSchedulesBtn').disabled = !ready || !this.scheduleHasNext || this.scheduleOffset >= SCHEDULE_OFFSET_LIMIT;
+        const row = this.schedule;
+        const remaining = row && row.state !== 'completed' && row.admitted_runs < row.total_runs;
+        const matchingPin = row && this.template && row.template_id === this.template.id && row.template_revision === this.template.revision;
+        this.el('enableScheduleBtn').disabled = !ready || !remaining || row.state === 'enabled' || !matchingPin || !this.reviewedSchedulePin();
+        this.el('pauseScheduleBtn').disabled = !ready || !row || row.state !== 'enabled';
+        this.el('deleteScheduleBtn').disabled = !ready || !row || row.state === 'enabled' || row.outstanding_scan_id !== null;
+        this.el('refreshScheduleBtn').disabled = !ready || !row;
+        const occurrencesReady = ready && Boolean(row) && !this.occurrenceBusy;
+        this.el('refreshOccurrencesBtn').disabled = !occurrencesReady;
+        this.el('scheduleOccurrences').disabled = !occurrencesReady || !this.el('scheduleOccurrences').value;
+        this.el('openOccurrenceBtn').disabled = !occurrencesReady || !this.el('scheduleOccurrences').value;
+        this.el('previousOccurrencesBtn').disabled = !occurrencesReady || this.occurrenceOffset === 0;
+        this.el('nextOccurrencesBtn').disabled = !occurrencesReady || !this.occurrenceHasNext || this.occurrenceOffset >= 75;
+    }
+    validateSchedule(row) {
+        const integer = (value, min, max) => Number.isSafeInteger(value) && value >= min && value <= max;
+        const identity = value => typeof value === 'string' && value.length > 0 && value.length <= 64;
+        const utc = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|\+00:00)$/.test(value) && Number.isFinite(Date.parse(value));
+        if (!row || !identity(row.id) || !identity(row.template_id) || !integer(row.revision, 1, 2147483647) ||
+            !integer(row.template_revision, 1, 2147483647) || !integer(row.interval_seconds, 60, 2592000) ||
+            !integer(row.total_runs, 1, 100) || !integer(row.admitted_runs, 0, row.total_runs) ||
+            !['disabled', 'enabled', 'paused', 'completed'].includes(row.state) ||
+            !(row.pause_reason === null || (typeof row.pause_reason === 'string' && row.pause_reason.length <= 32)) ||
+            !(row.outstanding_scan_id === null || identity(row.outstanding_scan_id)) ||
+            !(row.next_due_at === null || utc(row.next_due_at))) throw new Error('Server returned an invalid schedule.');
+        return row;
+    }
+    async loadSchedules() {
+        if (!this.token) return;
+        const epoch = this.epoch;
+        const offset = this.scheduleOffset;
+        const request = ++this.scheduleRequest;
+        try {
+            const data = await this.request(`/api/schedules?limit=${SCHEDULE_PAGE_SIZE}&offset=${offset}`);
+            if (epoch !== this.epoch || request !== this.scheduleRequest || offset !== this.scheduleOffset) return;
+            if (!Array.isArray(data.schedules) || data.schedules.length > SCHEDULE_PAGE_SIZE ||
+                !Number.isSafeInteger(data.total) || data.total < 0) throw new Error('Server returned invalid schedule history.');
+            for (const row of data.schedules) this.validateSchedule(row);
+            const list = this.el('scheduleList');
+            list.replaceChildren();
+            for (const row of data.schedules) this.append(list, 'option', `${row.id} / ${row.state} / ${row.admitted_runs} of ${row.total_runs} admitted`).value = row.id;
+            if (!data.schedules.length) this.append(list, 'option', 'No saved schedules on this page.').value = '';
+            this.scheduleHasNext = data.schedules.length > 0 && offset + data.schedules.length < data.total;
+            this.el('scheduleCount').textContent = `${data.schedules.length} shown / ${data.total} saved`;
+            this.scheduleButtons();
+        } catch (error) { if (epoch === this.epoch && request === this.scheduleRequest) this.handleError(error); }
+    }
+    showSchedule(row) {
+        this.validateSchedule(row);
+        this.schedule = {...row};
+        this.el('scheduleIdentity').textContent = `${row.id} / schedule revision ${row.revision}. Pinned template: ${row.template_id} / revision ${row.template_revision}`;
+        this.el('scheduleStatus').textContent = `State: ${row.state}. Reason: ${row.pause_reason || 'none'}. ${row.admitted_runs} of ${row.total_runs} admitted; ${row.total_runs - row.admitted_runs} remaining. Outstanding scan: ${row.outstanding_scan_id || 'none'}.`;
+        this.el('scheduleTiming').textContent = `Interval: ${row.interval_seconds} seconds. Next due (UTC): ${row.next_due_at || 'not scheduled'}. Refresh to observe dispatcher changes.`;
+        this.el('scheduleDetail').hidden = false;
+        this.scheduleButtons();
+    }
+    async scheduleAction(action) {
+        if (!this.token || this.scheduleBusy) return;
+        const epoch = this.epoch;
+        const selection = ++this.scheduleSelection;
+        this.scheduleBusy = true;
+        // Invalidate any pending occurrence page before a schedule changes.
+        this.occurrenceRequest += 1;
+        this.occurrenceBusy = false;
+        this.scheduleButtons();
+        const current = () => epoch === this.epoch && selection === this.scheduleSelection;
+        try { await action(current); }
+        catch (error) {
+            if (current()) {
+                if (error.status === 409) this.notice('Schedule, pinned template, or source changed, or this action is not currently allowed. Refresh detail and review the pin; no automatic retry.', true);
+                else if (error.status === 404) this.notice('Schedule or pinned template is missing or unavailable to this organization. Refresh the list.', true);
+                else this.handleError(error);
+            }
+        } finally { if (current()) { this.scheduleBusy = false; this.scheduleButtons(); } }
+    }
+    async createSchedule() {
+        if (!this.reviewedSchedulePin()) { this.notice('Load and review the complete saved template revision first. Unsaved edits cannot be scheduled.', true); return; }
+        const pin = {...this.template};
+        await this.scheduleAction(async current => {
+            const interval = Number(this.el('scheduleInterval').value);
+            const runs = Number(this.el('scheduleRuns').value);
+            if (!Number.isSafeInteger(interval) || interval < 60 || interval > 2592000 || !Number.isSafeInteger(runs) || runs < 1 || runs > 100) {
+                throw new Error('Use an integer interval from 60 to 2592000 seconds and total runs from 1 to 100.');
+            }
+            const data = await this.request('/api/schedules', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({template_id: pin.id, template_revision: pin.revision, interval_seconds: interval, total_runs: runs})});
+            if (!current()) return;
+            this.validateSchedule(data.schedule);
+            if (data.schedule.state !== 'disabled' || data.schedule.template_id !== pin.id || data.schedule.template_revision !== pin.revision) throw new Error('Server returned an unexpected schedule pin or state. Refresh the list.');
+            this.clearOccurrences();
+            this.showSchedule(data.schedule);
+            this.append(this.el('scheduleOccurrences'), 'option', 'No admitted occurrences.').value = '';
+            this.el('occurrenceCount').textContent = '0 admitted';
+            this.el('scheduleIdentity').focus?.();
+            this.el('reviewScheduleTemplate').checked = false;
+            this.notice('Disabled schedule created. Review the pinned saved recipe again before explicitly enabling. No scan has started.');
+            this.scheduleOffset = 0;
+            await this.loadSchedules();
+        });
+    }
+    async openSchedule(id) {
+        if (!id) return;
+        await this.scheduleAction(async current => {
+            const data = await this.request(`/api/schedules/${encodeURIComponent(id)}`);
+            if (!current()) return;
+            this.validateSchedule(data.schedule);
+            if (data.schedule.id !== id) throw new Error('Server returned a different schedule.');
+            this.clearOccurrences();
+            this.showSchedule(data.schedule);
+            this.el('reviewScheduleTemplate').checked = false;
+            this.el('scheduleIdentity').focus?.();
+            this.notice('Schedule loaded. Review its pinned saved template before enabling; no action was taken.');
+            await this.loadOccurrences();
+        });
+    }
+    async changeSchedule(action) {
+        if (!this.schedule || !['enable', 'pause'].includes(action)) return;
+        const row = {...this.schedule};
+        if (action === 'enable' && (!this.reviewedSchedulePin() || row.template_id !== this.template.id || row.template_revision !== this.template.revision)) {
+            this.notice('Load and explicitly review the exact pinned saved template revision before enabling. Changed pins need a replacement schedule.', true); return;
+        }
+        await this.scheduleAction(async current => {
+            const data = await this.request(`/api/schedules/${encodeURIComponent(row.id)}/${action}`, {method: 'POST',
+                headers: {'Content-Type': 'application/json'}, body: JSON.stringify({revision: row.revision})});
+            if (!current()) return;
+            this.validateSchedule(data.schedule);
+            if (data.schedule.id !== row.id || data.schedule.template_id !== row.template_id || data.schedule.template_revision !== row.template_revision) throw new Error('Server returned a different schedule or pin. Refresh detail.');
+            this.showSchedule(data.schedule);
+            this.el('reviewScheduleTemplate').checked = false;
+            this.notice(action === 'enable' ? 'Schedule enabled. Its first due time is one interval from now; refresh to inspect admissions.' : 'Schedule paused. Existing admitted scans are unchanged.');
+            await this.loadSchedules();
+        });
+    }
+    async deleteSchedule() {
+        if (!this.schedule || this.schedule.state === 'enabled' || this.schedule.outstanding_scan_id !== null) {
+            this.notice('Pause the schedule and wait for its outstanding scan before deleting.', true); return;
+        }
+        const id = this.schedule.id;
+        const epoch = this.epoch;
+        const selection = this.scheduleSelection + 1;
+        let deleted = false;
+        await this.scheduleAction(async current => {
+            await this.request(`/api/schedules/${encodeURIComponent(id)}`, {method: 'DELETE'});
+            if (!current()) return;
+            this.schedule = null;
+            this.el('scheduleDetail').hidden = true;
+            for (const name of ['scheduleIdentity', 'scheduleStatus', 'scheduleTiming']) this.el(name).textContent = '';
+            this.clearOccurrences();
+            this.notice('Schedule and occurrence mappings deleted. Admitted scans and reports are unchanged.');
+            deleted = true;
+            await this.loadSchedules();
+        });
+        if (deleted && epoch === this.epoch && selection === this.scheduleSelection) this.el('refreshSchedulesBtn').focus?.();
+    }
+    async loadOccurrences() {
+        if (!this.token || !this.schedule) return;
+        const epoch = this.epoch;
+        const selection = this.scheduleSelection;
+        const id = this.schedule.id;
+        const offset = this.occurrenceOffset;
+        const request = ++this.occurrenceRequest;
+        const current = () => epoch === this.epoch && selection === this.scheduleSelection && request === this.occurrenceRequest &&
+            id === this.schedule?.id && offset === this.occurrenceOffset;
+        this.occurrenceBusy = true;
+        this.scheduleButtons();
+        try {
+            const data = await this.request(`/api/schedules/${encodeURIComponent(id)}/occurrences?limit=${SCHEDULE_PAGE_SIZE}&offset=${offset}`);
+            if (!current()) return;
+            if (!Array.isArray(data.occurrences) || data.occurrences.length > SCHEDULE_PAGE_SIZE || !Number.isSafeInteger(data.total) ||
+                data.total < 0 || data.total > 100) throw new Error('Server returned invalid schedule occurrences.');
+            let ordinal = offset;
+            for (const row of data.occurrences) {
+                if (!row || !Number.isSafeInteger(row.ordinal) || row.ordinal <= ordinal || row.ordinal > 100 ||
+                    typeof row.scan_id !== 'string' || !row.scan_id || row.scan_id.length > 64 ||
+                    typeof row.created_at !== 'string' || !Number.isFinite(Date.parse(row.created_at)) ||
+                    !/(?:Z|\+00:00)$/.test(row.created_at)) throw new Error('Server returned an invalid occurrence.');
+                ordinal = row.ordinal;
+            }
+            const list = this.el('scheduleOccurrences');
+            list.replaceChildren();
+            for (const row of data.occurrences) this.append(list, 'option', `#${row.ordinal} / ${row.created_at} UTC / ${row.scan_id}`).value = row.scan_id;
+            if (!data.occurrences.length) this.append(list, 'option', 'No admitted occurrences on this page.').value = '';
+            this.occurrenceHasNext = data.occurrences.length > 0 && offset + data.occurrences.length < data.total;
+            this.el('occurrenceCount').textContent = `${data.occurrences.length} shown / ${data.total} admitted`;
+        } catch (error) {
+            if (current()) { this.el('occurrenceCount').textContent = 'Occurrences unavailable. Refresh to retry; admitted scans are unchanged.'; this.handleError(error); }
+        } finally { if (current()) { this.occurrenceBusy = false; this.scheduleButtons(); } }
+    }
+    async openOccurrence() {
+        if (!this.token || this.scheduleBusy || this.occurrenceBusy || !this.schedule) return;
+        await this.selectScan(this.el('scheduleOccurrences').value);
     }
     async openScan(event) {
         event.preventDefault();
