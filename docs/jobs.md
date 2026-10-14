@@ -69,13 +69,21 @@ database URLs, or queue contents.
 ## Schema upgrades
 
 Stop the server and back up the SQLite database with a consistent SQLite backup
-operation before upgrading. Startup validates schema version 1 while holding the
+operation before upgrading. Startup validates schema version 2 while holding the
 dispatcher lock. An empty database is initialized automatically. Recognized
 unversioned layouts are the original `scan_session` and `discovered_agent` tables,
 those tables plus `scan_result`, or those tables plus `scan_result` and `scan_job`.
 Existing column definitions and primary keys must match the supported layout.
 Extra non-unique indexes are accepted. Existing records are preserved; missing additive
 tables and the version stamp are committed in one SQLite transaction.
+
+The exact version 1 layout contains `scan_session`, `discovered_agent`,
+`scan_result`, `scan_job`, `audit_event`, and `schema_version`. It upgrades to
+version 2 by adding only `scan_template` and updating the version stamp in the
+same transaction. Existing rows remain unchanged. Fresh and recognized
+unversioned layouts initialize directly to version 2. An unstamped extra template
+table or a partial versioned layout is not a recognized upgrade path. See
+[saved template boundaries](scan-templates.md).
 
 Unknown tables, views, triggers, additional constraints or unique indexes,
 database column defaults, changed columns,
