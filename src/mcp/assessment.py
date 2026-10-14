@@ -222,12 +222,15 @@ def to_sarif(report):
     findings = report['findings'] + report['observations']
     document = generate_sarif(findings)
     run = document['runs'][0]
-    if report.get('mode') == 'live_inventory':
+    if report.get('mode') in {'live_inventory', 'live_policy_checks'}:
         run['invocations'][0]['executionSuccessful'] = report.get('status') == 'completed'
     run['properties'] = {'mode': report.get('mode', 'passive'), 'ruleset_version': RULESET_VERSION, 'limitations': report['limitations']}
-    for key in ('protocol_version', 'status', 'check_schema_version', 'checks', 'risk_assessment_status'):
+    for key in ('protocol_version', 'status', 'check_schema_version', 'checks', 'risk_assessment_status', 'evidence_context_id', 'endpoint'):
         if key in report:
             run['properties'][key] = report[key]
     for result, finding in zip(run['results'], findings):
         result['properties'].update({key: finding[key] for key in ('rule_id', 'ruleset_version', 'evidence_status', 'source', 'json_pointer')})
+        for key in ('probe_id', 'probe_version', 'evidence_context_id', 'control_status'):
+            if key in finding:
+                result['properties'][key] = finding[key]
     return document
