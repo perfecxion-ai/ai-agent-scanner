@@ -13,6 +13,8 @@ It sends GET requests only. Recognized model inventories are:
   Older `max_input_length` is accepted only when the current field is absent.
   This field fallback still requires the router discriminator and version;
   historical servers without that discriminator remain unsupported.
+  Generic model/limit pairs and missing router identity are clean unidentified
+  observations; malformed responses advertising the TGI router are incomplete.
   A current field takes precedence; unrelated legacy extension metadata cannot
   invalidate an otherwise supported current response. Router identity is
   self-reported protocol evidence, not ownership or live generation compatibility.

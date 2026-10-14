@@ -128,7 +128,7 @@ async def test_tgi_requires_router_version_and_model(changes):
             document.pop(key)
     with scan_transport(budget()) as limits:
         assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures['tgi'])
-    assert limits.failures == 1
+    assert limits.failures == (0 if 'router' in changes else 1)
 
 
 @pytest.mark.asyncio
@@ -147,7 +147,7 @@ async def test_generic_model_and_limit_pair_is_not_tgi(service, limit_field):
     responses['/info'] = web.json_response({'model_id': 'generic/model', limit_field: 4096})
     with scan_transport(budget()) as limits:
         assert not await NetworkScanner()._identify_ai_service('127.0.0.1', port, DiscoveryEngine().ai_signatures)
-    assert limits.failures == 1
+    assert limits.failures == limits.rejections == 0
 
 
 @pytest.mark.asyncio
@@ -156,7 +156,7 @@ async def test_historical_tgi_without_router_discriminator_remains_unsupported()
                   'model_dtype': 'torch.float16', 'model_device_type': 'cuda'}
     with scan_transport(budget()) as limits:
         assert not await NetworkScanner()._is_ai_service(Response(historical), DiscoveryEngine().ai_signatures['tgi'])
-    assert limits.failures == 1
+    assert limits.failures == limits.rejections == 0
 
 
 @pytest.mark.asyncio
@@ -201,7 +201,7 @@ async def test_valid_empty_or_unrelated_inventory_is_clean_negative(document):
 @pytest.mark.parametrize('provider,document', [('ollama', {'models': None}),
                                     ('ollama', {'models': [{'name': 'model', 'modified_at': 'not-date'}]}),
                                     ('openai', {'object': 'list', 'data': [None]}),
-                                    ('tgi', {'model_id': 'model', 'max_input_length': None})])
+                                    ('tgi', {**TGI, 'max_input_tokens': None})])
 async def test_invalid_claimed_inventory_marks_incomplete(provider, document):
     with scan_transport(budget()) as limits:
         assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures[provider])

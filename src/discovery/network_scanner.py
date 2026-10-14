@@ -323,7 +323,7 @@ class NetworkScanner:
                 models = document.get('data')
                 if not isinstance(models, list) or models:
                     return True
-            if 'model_id' in patterns and ('model_id' in document or document.get('router') == 'text-generation-router'):
+            if 'model_id' in patterns and document.get('router') == 'text-generation-router':
                 return True
         return False
 
