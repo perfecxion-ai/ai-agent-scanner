@@ -92,12 +92,18 @@ These are source-review findings, not evidence of exploitation in a deployment.
   markers, RAG tenant canaries, and tool authorization requests. A scoped CLI
   adapter collects read-only MCP 2026-07-28 Streamable HTTP inventory with bounded
   JSON/SSE and schema analysis. Inventory does not test runtime authorization,
-  Origin enforcement, tool behavior, or exploitability. These fixtures
+  Origin enforcement, tool behavior, or exploitability. A separate controlled
+  CLI checks declared protected inventory authorization and Origin boundaries
+  only after an authenticated canary baseline. Its fixture provenance is operator
+  declared; it does not invoke tools or establish browser exploitation. These fixtures
   do not establish live attack coverage. Broader live integrations, output sinks,
   supply-chain checks, and representative accuracy benchmarks remain pending.
 - M5 has scoped history and exports, a redesigned dashboard, source model
   selection, inventory/finding comparison, expiring suppressions, check evidence,
-  and paginated operational audit history. Scheduling,
+  and paginated operational audit history. Tenant-owned API templates use shared
+  admission, revision checks, bounded quota, and current-policy/source revalidation.
+  Exact SQLite version 1 upgrades add the template table in schema version 2.
+  Dashboard template controls, scheduling,
   external integrations, and comprehensive accessibility acceptance remain pending.
 - M6 remains pending. Package and container CI are foundations, not completion of
   performance testing, deployment review, migration validation, or release sign-off.

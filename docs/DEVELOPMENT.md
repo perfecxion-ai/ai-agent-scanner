@@ -35,8 +35,9 @@ docker run --rm -p 127.0.0.1:5000:5000 \
 The container initializes missing database tables and starts Gunicorn as an
 unprivileged user. Keep one worker and one server instance per database. Queued
 jobs survive restarts; active jobs are marked interrupted and are not replayed.
-Table creation adds the job and result tables but does not alter existing table
-schemas. The default SQLite database lives in
+Startup accepts only the documented SQLite layouts. Known upgrades add tables
+and update the schema stamp transactionally without altering existing table
+definitions or rows. The default SQLite database lives in
 `/app/instance`; use a volume to retain it between containers. TLS belongs at the
 deployment proxy. Review authentication configuration before exposing the server.
 The persistent dispatcher currently requires file-backed SQLite on a POSIX
@@ -51,7 +52,8 @@ CI checks all Python files with Ruff, runs tests and installed-wheel smoke check
 on all supported Python versions, audits resolved dependencies (including cloud
 and server extras), runs Bandit, and builds and starts the container. Dependency
 audit failures fail CI. The dependency audit needs access to the advisory service.
-Installed-wheel smoke checks the live MCP command and imports its implementation
+Installed-wheel smoke checks the live MCP inventory and controlled-policy commands
+and imports their implementations
 without contacting an endpoint. Network and live MCP tests use local HTTP/DNS
 fixtures; explicit parser-depth limits do not depend on Python recursion behavior.
 
