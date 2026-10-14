@@ -45,6 +45,9 @@ These changes are engineering work on the current branch, not a published releas
   require conclusive check evidence for new risk assessments and exact passed
   provenance for verified resolution.
 - Show check evidence, cloud resource IDs, and bounded audit history in the dashboard.
+- Add tenant-owned API scan templates with revision checks, bounded quotas,
+  shared admission, and current-policy revalidation. Preserve queued snapshots
+  after recipe edits or deletion; upgrade exact SQLite version 1 layouts to 2.
 
 ### Delivery and documentation
 
