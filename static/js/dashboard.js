@@ -587,6 +587,7 @@ class AIAgentScanner {
                     !['paused', 'completed'].includes(data.schedule.state))) throw new Error('Server did not return the requested schedule transition. Refresh detail.');
             this.showSchedule(data.schedule);
             this.el('reviewScheduleTemplate').checked = false;
+            this.el('scheduleIdentity').focus?.();
             this.notice(action === 'enable' ? 'Schedule enabled. Its first due time is one interval from now; refresh to inspect admissions.' : 'Schedule paused. Existing admitted scans are unchanged.');
             await this.loadSchedules();
         });

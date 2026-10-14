@@ -546,11 +546,14 @@ test('enable and pause use displayed schedule revision and do not cancel admitte
     assert.equal(calls[0].path, '/api/schedules/schedule%2Fid/enable');
     assert.deepEqual(JSON.parse(calls[0].options.body), {revision: 2});
     assert.equal(app.schedule.state, 'enabled');
+    assert.equal(app.el('scheduleIdentity').focused, true);
     assert.match(app.el('scheduleTiming').textContent, /Next due \(UTC\): 2026/);
     assert.match(app.el('scheduleStatus').textContent, /1 of 4 admitted; 3 remaining.*admitted/);
+    app.el('scheduleIdentity').focused = false;
     await app.changeSchedule('pause');
     assert.deepEqual(JSON.parse(calls[2].options.body), {revision: 3});
     assert.equal(app.schedule.state, 'paused');
+    assert.equal(app.el('scheduleIdentity').focused, true);
     assert.equal(app.schedule.outstanding_scan_id, 'admitted');
     assert.ok(calls.every(call => !call.path.includes('/cancel')));
 });
