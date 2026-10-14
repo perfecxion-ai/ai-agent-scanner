@@ -20,7 +20,7 @@ import uuid
 from copy import deepcopy
 from functools import wraps
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
 
 from flask import Flask, render_template, request, jsonify, g
@@ -44,6 +44,7 @@ from src.core.transport import ScanBudget, scan_transport, current_budget
 from src.core.jobs import JobStore, JobDispatcher, TERMINAL_STATES
 from src.core.schema import initialize_schema, SCHEMA_VERSION
 from src.core.templates import project_template, template_revision
+from src.core.schedules import ScheduleService, schedule_definition
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -81,6 +82,7 @@ for _setting, _default, _maximum in (
     ("SCAN_MAX_REQUESTS", 500, 10000), ("SCAN_MAX_RESPONSE_BYTES", 1048576, 16777216),
     ("SCAN_MAX_QUEUED", 32, 10000),
     ("SCAN_MAX_TEMPLATES", 64, 1024),
+    ("SCAN_MAX_SCHEDULES", 64, 1024), ("SCAN_MAX_SCHEDULES_GLOBAL", 256, 4096),
 ):
     app.config[_setting] = bounded_integer(int(os.environ.get(_setting, _default)), _setting, _maximum)
 
@@ -218,6 +220,33 @@ class AuditEvent(db.Model):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
 
 
+class ScanSchedule(db.Model):
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    template_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    template_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_runs: Mapped[int] = mapped_column(Integer, nullable=False)
+    admitted_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="disabled")
+    pause_reason: Mapped[str] = mapped_column(String(32), nullable=True)
+    next_due_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    outstanding_scan_id: Mapped[str] = mapped_column(String(64), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+
+
+class ScanOccurrence(db.Model):
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    schedule_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    organization_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    scan_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -344,7 +373,7 @@ def _prepare_scan(data, tenant, *, retain_declaration=True):
     return {"scan_name": name, "scan_type": mode, "target_scope": scope, "scan_config": options}
 
 
-def _queue_scan(definition, tenant, actor, user_ip):
+def _queue_scan(definition, tenant, actor, user_ip, *, before_commit=None):
     """Caller holds the admission lock; commit all admission records together."""
     if ScanJob.query.filter_by(status="queued").count() >= app.config["SCAN_MAX_QUEUED"]:
         raise TooManyRequests("Scan queue is full")
@@ -353,6 +382,8 @@ def _queue_scan(definition, tenant, actor, user_ip):
                               created_by=actor, user_ip=user_ip, status="queued"))
     db.session.add(ScanJob(scan_id=scan_id))
     db.session.add(AuditEvent(scan_id=scan_id, organization_id=tenant, event="admitted", status="queued"))
+    if before_commit is not None:
+        before_commit(scan_id)
     db.session.commit()
     if _job_dispatcher:
         _job_dispatcher.wake()
@@ -372,8 +403,8 @@ def _template_api(function):
             return jsonify({"success": False, "error": exc.description}), exc.code
         except Exception:
             db.session.rollback()
-            app.logger.error("Template operation failed")
-            return jsonify({"success": False, "error": "Template operation failed"}), 500
+            app.logger.error("Saved scan operation failed")
+            return jsonify({"success": False, "error": "Saved scan operation failed"}), 500
     return wrapped
 
 
@@ -453,6 +484,7 @@ def template_item(template_id):
     with _admission_lock:
         row = _owned_template(template_id, tenant)
         if request.method == "DELETE":
+            _pause_template_schedules(template_id, tenant, "template_deleted")
             db.session.delete(row)
             db.session.commit()
             return jsonify({"success": True})
@@ -462,6 +494,7 @@ def template_item(template_id):
         ).values(**definition, revision=revision + 1, updated_at=_utcnow()))
         if changed.rowcount != 1:
             raise Conflict("Template revision changed; reload before updating")
+        _pause_template_schedules(template_id, tenant, "template_changed")
         db.session.commit()
         db.session.refresh(row)
         return jsonify({"success": True, "template": _template_json(row)})
@@ -503,6 +536,293 @@ def cancel_scan(scan_id):
     if _job_dispatcher:
         _job_dispatcher.wake()
     return jsonify({"success": True, "scan_id": scan_id, "status": status}), 202
+
+
+def _pause_template_schedules(template_id, tenant, reason):
+    db.session.execute(update(ScanSchedule).where(
+        ScanSchedule.template_id == template_id, ScanSchedule.organization_id == tenant,
+        ScanSchedule.state != "completed",
+    ).values(state="paused", pause_reason=reason, next_due_at=None,
+             revision=db.func.min(ScanSchedule.revision + 1, 2**31 - 1), updated_at=_utcnow()))
+
+
+def _owned_schedule(identifier, tenant):
+    row = ScanSchedule.query.filter_by(id=identifier, organization_id=tenant).first()
+    if row is None:
+        raise NotFound("Schedule not found")
+    return row
+
+
+def _schedule_json(row):
+    result = {key: getattr(row, key) for key in (
+        "id", "template_id", "template_revision", "interval_seconds", "total_runs", "admitted_runs",
+        "revision", "state", "pause_reason", "outstanding_scan_id")}
+    for key in ("created_at", "updated_at", "next_due_at"):
+        value = getattr(row, key)
+        result[key] = value.replace(tzinfo=timezone.utc).isoformat() if value is not None else None
+    return result
+
+
+def _pagination():
+    try:
+        limit, offset = int(request.args.get("limit", "25")), int(request.args.get("offset", "0"))
+    except ValueError as exc:
+        raise BadRequest("Invalid pagination") from exc
+    if not 1 <= limit <= 100 or not 0 <= offset <= 100000:
+        raise BadRequest("Invalid pagination")
+    return limit, offset
+
+
+def _schedule_policy():
+    return deepcopy({key: value for key, value in app.config.items() if key.startswith("SCAN_")})
+
+
+def _schedule_token(definition, tenant):
+    """Public configuration and source identity only; no DNS or filesystem work."""
+    policy = _schedule_policy()
+    source = None
+    if definition["scan_type"] == "security_only":
+        identifier = definition["scan_config"]["source_scan_id"]
+        row = ScanSession.query.filter_by(id=identifier, organization_id=tenant).first()
+        result = db.session.get(ScanResult, identifier)
+        assets = DiscoveredAgentModel.query.filter_by(scan_id=identifier).order_by(
+            DiscoveredAgentModel.id).limit(app.config["SCAN_MAX_HOSTS"] + 1).all()
+        if row is None or row.status != "completed" or result is None or not assets:
+            raise BadRequest("Source scan prerequisites changed")
+        if len(assets) > app.config["SCAN_MAX_HOSTS"]:
+            raise BadRequest("Source scan exceeds host budget")
+        source = (row.id, row.status, deepcopy(result.result), [(item.id, item.endpoint_url) for item in assets])
+    return policy, source
+
+
+@app.route("/api/schedules", methods=["GET", "POST"])
+@require_auth
+@_template_api
+def schedules_collection():
+    tenant = g.user["organization_id"]
+    if request.method == "GET":
+        limit, offset = _pagination()
+        query = ScanSchedule.query.filter_by(organization_id=tenant)
+        rows = query.order_by(ScanSchedule.created_at.desc(), ScanSchedule.id.desc()).offset(offset).limit(limit).all()
+        return jsonify({"success": True, "schedules": [_schedule_json(row) for row in rows],
+                        "total": query.count(), "limit": limit, "offset": offset})
+    data = schedule_definition(request.get_json(silent=True))
+    template = _owned_template(data["template_id"], tenant)
+    if template.revision != data["template_revision"]:
+        raise Conflict("Template revision changed; create a schedule for the reviewed revision")
+    declaration = _template_definition(template)
+    before = _schedule_token(declaration, tenant)
+    definition = _prepare_template(declaration, tenant)
+    token = _schedule_token(definition, tenant)
+    if before != token:
+        raise Conflict("Source or policy changed during validation; review before creating")
+    db.session.rollback()
+    with _admission_lock:
+        template = _owned_template(data["template_id"], tenant)
+        if template.revision != data["template_revision"] or token != _schedule_token(definition, tenant):
+            raise Conflict("Template, source, or policy changed; review before creating")
+        if (ScanSchedule.query.filter_by(organization_id=tenant).count() >= app.config["SCAN_MAX_SCHEDULES"]
+                or ScanSchedule.query.count() >= app.config["SCAN_MAX_SCHEDULES_GLOBAL"]):
+            raise TooManyRequests("Schedule limit reached")
+        row = ScanSchedule(id=uuid.uuid4().hex, organization_id=tenant,
+                           created_by=g.user.get("user_id"), **data)
+        db.session.add(row)
+        db.session.commit()
+        return jsonify({"success": True, "schedule": _schedule_json(row)}), 201
+
+
+@app.route("/api/schedules/<identifier>", methods=["GET", "DELETE"])
+@require_auth
+@_template_api
+def schedule_item(identifier):
+    tenant = g.user["organization_id"]
+    row = _owned_schedule(identifier, tenant)
+    if request.method == "GET":
+        return jsonify({"success": True, "schedule": _schedule_json(row)})
+    db.session.rollback()
+    with _admission_lock:
+        row = _owned_schedule(identifier, tenant)
+        if row.state == "enabled" or row.outstanding_scan_id is not None:
+            raise Conflict("Pause the schedule and wait for its outstanding scan before deleting")
+        ScanOccurrence.query.filter_by(schedule_id=identifier, organization_id=tenant).delete()
+        db.session.delete(row)
+        db.session.commit()
+    return jsonify({"success": True})
+
+
+@app.route("/api/schedules/<identifier>/occurrences")
+@require_auth
+@_template_api
+def schedule_occurrences(identifier):
+    tenant = g.user["organization_id"]
+    _owned_schedule(identifier, tenant)
+    limit, offset = _pagination()
+    query = ScanOccurrence.query.filter_by(schedule_id=identifier, organization_id=tenant)
+    rows = query.order_by(ScanOccurrence.ordinal).offset(offset).limit(limit).all()
+    return jsonify({"success": True, "occurrences": [{"ordinal": row.ordinal, "scan_id": row.scan_id,
+        "created_at": row.created_at.replace(tzinfo=timezone.utc).isoformat()} for row in rows],
+        "total": query.count(), "limit": limit, "offset": offset})
+
+
+@app.route("/api/schedules/<identifier>/<action>", methods=["POST"])
+@require_auth
+@_template_api
+def schedule_action(identifier, action):
+    if action not in {"enable", "pause"}:
+        raise NotFound("Schedule action not found")
+    tenant = g.user["organization_id"]
+    row = _owned_schedule(identifier, tenant)
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or set(data) != {"revision"}:
+        raise BadRequest("Schedule action requires only revision")
+    revision = template_revision(data["revision"])
+    if row.revision != revision or revision == 2**31 - 1:
+        raise Conflict("Schedule revision changed; reload before updating")
+    if action == "enable":
+        template = _owned_template(row.template_id, tenant)
+        if template.revision != row.template_revision:
+            raise Conflict("Pinned template changed; create a replacement schedule")
+        declaration = _template_definition(template)
+        before = _schedule_token(declaration, tenant)
+        definition = _prepare_template(declaration, tenant)
+        token = _schedule_token(definition, tenant)
+        if before != token:
+            raise Conflict("Source or policy changed during validation; review before enabling")
+    db.session.rollback()
+    with _admission_lock:
+        row = _owned_schedule(identifier, tenant)
+        if row.revision != revision:
+            raise Conflict("Schedule revision changed; reload before updating")
+        if row.state == "completed" or (action == "enable" and row.admitted_runs >= row.total_runs):
+            raise Conflict("Finite schedule has no remaining occurrences")
+        if action == "enable":
+            template = _owned_template(row.template_id, tenant)
+            if template.revision != row.template_revision or token != _schedule_token(definition, tenant):
+                raise Conflict("Template, source, or policy changed; review before enabling")
+            row.state, row.pause_reason = "enabled", None
+            row.next_due_at = _utcnow() + timedelta(seconds=row.interval_seconds)
+        else:
+            row.state, row.pause_reason, row.next_due_at = "paused", "operator_paused", None
+        row.revision += 1
+        row.updated_at = _utcnow()
+        db.session.commit()
+        result = _schedule_json(row)
+    if _job_dispatcher:
+        _job_dispatcher.wake()
+    return jsonify({"success": True, "schedule": result})
+
+
+def _schedule_recover():
+    with app.app_context(), _admission_lock:
+        db.session.execute(update(ScanSchedule).where(ScanSchedule.state == "enabled").values(
+            state="paused", pause_reason="restart_review", next_due_at=None,
+            revision=db.func.min(ScanSchedule.revision + 1, 2**31 - 1), updated_at=_utcnow()))
+        db.session.commit()
+
+
+def _schedule_candidate():
+    """One bounded DB maintenance transition or one due candidate per tick."""
+    with app.app_context(), _admission_lock:
+        now = _utcnow()
+        row = ScanSchedule.query.join(ScanJob, ScanJob.scan_id == ScanSchedule.outstanding_scan_id).filter(
+            ScanJob.status.in_(TERMINAL_STATES)).order_by(ScanSchedule.updated_at, ScanSchedule.id).first()
+        if row is not None:
+            row.outstanding_scan_id = None
+            if row.admitted_runs >= row.total_runs:
+                row.state, row.pause_reason, row.next_due_at = "completed", None, None
+            elif row.state == "enabled":
+                row.next_due_at = now + timedelta(seconds=row.interval_seconds)
+            row.revision = min(row.revision + 1, 2**31 - 1)
+            row.updated_at = now
+            db.session.commit()
+            return None
+        row = ScanSchedule.query.filter(ScanSchedule.state == "enabled",
+            ScanSchedule.outstanding_scan_id.is_(None), ScanSchedule.next_due_at <= now).order_by(
+            ScanSchedule.next_due_at, ScanSchedule.id).first()
+        if row is None:
+            return None
+        return {"id": row.id, "organization_id": row.organization_id, "revision": row.revision,
+                "template_id": row.template_id, "template_revision": row.template_revision}
+
+
+def _schedule_preflight(candidate):
+    with app.app_context():
+        try:
+            template = ScanTemplate.query.filter_by(id=candidate["template_id"],
+                organization_id=candidate["organization_id"]).first()
+            if template is None:
+                return {"error": "template_deleted"}
+            if template.revision != candidate["template_revision"]:
+                return {"error": "template_changed"}
+            declaration = _template_definition(template)
+            before = _schedule_token(declaration, candidate["organization_id"])
+            definition = _prepare_template(declaration, candidate["organization_id"])
+            token = _schedule_token(definition, candidate["organization_id"])
+            if before != token:
+                return {"error": "policy_review"}
+            return {"definition": definition, "token": token}
+        except (ScopeValidationError, HTTPException):
+            return {"error": "policy_review"}
+        finally:
+            db.session.rollback()
+            db.session.remove()
+
+
+def _schedule_admit(candidate, result, stop):
+    with app.app_context(), _admission_lock:
+        if stop.is_set():
+            return
+        row = ScanSchedule.query.filter_by(id=candidate["id"], organization_id=candidate["organization_id"],
+            revision=candidate["revision"], state="enabled", outstanding_scan_id=None).first()
+        if row is None:
+            return
+        now = _utcnow()
+        template = ScanTemplate.query.filter_by(id=row.template_id, organization_id=row.organization_id).first()
+        reason = result.get("error")
+        if template is None:
+            reason = "template_deleted"
+        elif template.revision != row.template_revision:
+            reason = "template_changed"
+        elif not reason:
+            try:
+                if result["token"] != _schedule_token(result["definition"], row.organization_id):
+                    reason = "policy_review"
+            except HTTPException:
+                reason = "policy_review"
+        if row.revision >= 2**31 - 1:
+            reason = "revision_limit"
+        if reason:
+            row.state, row.pause_reason, row.next_due_at = "paused", reason, None
+        elif row.admitted_runs >= row.total_runs:
+            row.state, row.pause_reason, row.next_due_at = "completed", None, None
+        elif ScanJob.query.filter_by(status="queued").count() >= app.config["SCAN_MAX_QUEUED"]:
+            row.next_due_at = now + timedelta(seconds=60)
+        else:
+            def occurrence(scan_id):
+                if stop.is_set():
+                    raise Conflict("Scheduler stopped before admission")
+                ordinal = row.admitted_runs + 1
+                db.session.add(ScanOccurrence(id=f"{row.id}:{ordinal}", schedule_id=row.id,
+                    organization_id=row.organization_id, scan_id=scan_id, ordinal=ordinal))
+                row.admitted_runs = ordinal
+                row.outstanding_scan_id = scan_id
+                row.next_due_at = None
+                row.revision += 1
+                row.updated_at = now
+            try:
+                _queue_scan(result["definition"], row.organization_id, row.created_by, None, before_commit=occurrence)
+            except Exception:
+                db.session.rollback()
+                raise
+            return
+        row.revision = min(row.revision + 1, 2**31 - 1)
+        row.updated_at = now
+        if not stop.is_set():
+            db.session.commit()
+
+
+def _schedule_service():
+    return ScheduleService(_schedule_candidate, _schedule_preflight, _schedule_admit, _schedule_recover)
 
 
 @app.route("/api/scans/<scan_id>/audit")
@@ -712,7 +1032,8 @@ def start_job_dispatcher():
         with app.app_context():
             dispatcher = JobDispatcher(_get_job_store(), _execute_job,
                                        workers=app.config["MAX_CONCURRENT_SCANS"],
-                                       initialize=lambda: initialize_schema(db.engine, db.metadata))
+                                       initialize=lambda: initialize_schema(db.engine, db.metadata),
+                                       service=_schedule_service())
             dispatcher.start()
         _job_dispatcher = dispatcher
         return dispatcher

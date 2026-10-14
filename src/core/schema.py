@@ -3,12 +3,13 @@
 from sqlalchemy import inspect, insert, select, update
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 BASE_TABLES = frozenset({"scan_session", "discovered_agent"})
 LEGACY_LAYOUTS = (BASE_TABLES, BASE_TABLES | {"scan_result"},
                   BASE_TABLES | {"scan_result", "scan_job"})
 VERSION_ONE_TABLES = BASE_TABLES | {"scan_result", "scan_job", "schema_version", "audit_event"}
 VERSION_TWO_TABLES = VERSION_ONE_TABLES | {"scan_template"}
+VERSION_THREE_TABLES = VERSION_TWO_TABLES | {"scan_schedule", "scan_occurrence"}
 
 
 class SchemaError(RuntimeError):
@@ -45,7 +46,7 @@ def initialize_schema(engine, metadata):
     if engine.dialect.name != "sqlite":
         raise SchemaError("Schema initialization currently supports SQLite only")
     expected = set(metadata.tables)
-    if expected != VERSION_TWO_TABLES:
+    if expected != VERSION_THREE_TABLES:
         raise SchemaError("Unsupported application metadata")
     with engine.connect() as connection:
         # SQLite otherwise may autocommit DDL before a transaction has begun.
@@ -60,14 +61,18 @@ def initialize_schema(engine, metadata):
             if "schema_version" in names:
                 _validate_tables(connection, metadata, {"schema_version"})
                 rows = connection.execute(select(metadata.tables["schema_version"])).all()
-                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, SCHEMA_VERSION):
+                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, 2, SCHEMA_VERSION):
                     raise SchemaError("Unsupported database schema version")
                 version = rows[0][1]
-                if names != (VERSION_ONE_TABLES if version == 1 else VERSION_TWO_TABLES):
+                layouts = {1: VERSION_ONE_TABLES, 2: VERSION_TWO_TABLES, 3: VERSION_THREE_TABLES}
+                if names != layouts[version]:
                     raise SchemaError("Versioned database has missing or unexpected tables")
                 _validate_tables(connection, metadata, names)
                 if version == 1:
                     metadata.tables["scan_template"].create(connection)
+                if version < SCHEMA_VERSION:
+                    metadata.tables["scan_schedule"].create(connection)
+                    metadata.tables["scan_occurrence"].create(connection)
                     connection.execute(update(metadata.tables["schema_version"]).where(
                         metadata.tables["schema_version"].c.id == 1).values(version=SCHEMA_VERSION))
             else:
