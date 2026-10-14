@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import socket
 from unittest.mock import AsyncMock
 
 import aiohttp
@@ -62,6 +63,22 @@ async def service():
 
 def budget(**options):
     return ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True, **options)
+
+
+@pytest.fixture
+def loopback_http_dns(monkeypatch):
+    calls = []
+
+    async def resolve(self, host, port=0, family=socket.AF_INET):
+        assert host == 'localhost'
+        calls.append((host, port))
+        return [{'hostname': host, 'host': '127.0.0.1', 'port': port,
+                 'family': socket.AF_INET, 'proto': socket.IPPROTO_TCP, 'flags': 0}]
+
+    # Replace only native DNS, not PolicyResolver or its allowlist checks.
+    # Runner localhost may resolve ::1 even when the fixture binds IPv4 only.
+    monkeypatch.setattr(aiohttp.resolver.DefaultResolver, 'resolve', resolve)
+    return calls
 
 
 @pytest.mark.asyncio
@@ -209,7 +226,7 @@ async def test_transport_truncation_and_cap_count_once(service):
 
 
 @pytest.mark.asyncio
-async def test_real_domain_retains_host_and_does_not_expand(service, monkeypatch):
+async def test_real_domain_retains_host_and_does_not_expand(service, monkeypatch, loopback_http_dns):
     responses, calls, port = service
     responses['/v1/models'] = web.json_response(MODELS)
     scanner = NetworkScanner()
@@ -222,10 +239,11 @@ async def test_real_domain_retains_host_and_does_not_expand(service, monkeypatch
     assert 'internet_facing' not in assets[0]['metadata']
     assert all(host == f'localhost:{port}' for _, _, host in calls)
     resolver.assert_awaited_once_with('localhost')
+    assert loopback_http_dns == [('localhost', port)]
 
 
 @pytest.mark.asyncio
-async def test_multi_address_domain_probes_each_http_authority_once(service, monkeypatch):
+async def test_multi_address_domain_probes_each_http_authority_once(service, monkeypatch, loopback_http_dns):
     responses, calls, port = service
     responses['/v1/models'] = web.json_response(MODELS)
     scanner = NetworkScanner()
@@ -238,6 +256,21 @@ async def test_multi_address_domain_probes_each_http_authority_once(service, mon
     assert len(assets) == 1 and len(calls) == 3
     assert assets[0]['endpoint'] == f'http://localhost:{port}/v1/models'
     resolve.assert_awaited_once_with('localhost')
+    assert loopback_http_dns == [('localhost', port)]
+
+
+@pytest.mark.asyncio
+async def test_underlying_http_dns_still_rejects_unapproved_ipv6(service, monkeypatch):
+    _, calls, port = service
+
+    async def resolve(self, host, port=0, family=socket.AF_INET):
+        return [{'hostname': host, 'host': '::1', 'port': port,
+                 'family': socket.AF_INET6, 'proto': socket.IPPROTO_TCP, 'flags': 0}]
+
+    monkeypatch.setattr(aiohttp.resolver.DefaultResolver, 'resolve', resolve)
+    with scan_transport(budget()) as limits:
+        assets = await NetworkScanner()._identify_ai_service('localhost', port, DiscoveryEngine().ai_signatures)
+    assert not assets and not calls and limits.rejections == 1
 
 
 @pytest.mark.asyncio
