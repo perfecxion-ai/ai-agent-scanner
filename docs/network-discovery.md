@@ -31,7 +31,10 @@ seconds. Existing scan-wide request limits, response limits, cancellation, and
 server deadlines still apply.
 
 Discovery bodies are capped at 10,000 bytes in addition to the transport body
-limit. Invalid or truncated advertised inventories, duplicate/non-finite JSON,
+limit. JSON container nesting is capped at 32, counting the outer object as one;
+this bound does not depend on the Python parser's recursion limit. Non-finite
+numeric literals and overflowing numeric exponents are rejected.
+Invalid or truncated advertised inventories, duplicate/non-finite JSON,
 HTTP 408/429/5xx, DNS failures, unexpected TCP errors, and timeouts make the scan
 incomplete. Earlier successful observations remain available. Closed ports,
 missing optional routes, redirects, generic pages, and ordinary authorization

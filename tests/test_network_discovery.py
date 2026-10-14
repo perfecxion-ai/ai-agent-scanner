@@ -16,7 +16,7 @@ import pytest_asyncio
 from src.core.pipeline import run_pipeline
 from src.core.transport import ScanBudget, scan_transport
 from src.discovery.discovery_engine import DiscoveryEngine, DiscoveryScope
-from src.discovery.network_scanner import MAX_DNS_ADDRESSES, MAX_TCP_CONNECTIONS, NetworkScanner
+from src.discovery.network_scanner import MAX_DNS_ADDRESSES, MAX_JSON_DEPTH, MAX_TCP_CONNECTIONS, NetworkScanner
 
 
 OLLAMA = {'models': [{'name': 'fixture:latest', 'modified_at': '2026-01-01T00:00:00Z'}]}
@@ -492,11 +492,35 @@ async def test_non_json_io_failure_propagates_without_secret_logging():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('body', [b'{"models":[],"models":[{"name":"x","modified_at":"x"}]}',
                                b'{"models":[{"name":"x","modified_at":"x"}],"extra":NaN}',
-                               b'{"x":' + b'[' * 2000 + b'0' + b']' * 2000 + b'}'])
+                               b'{"x":' + b'[' * 2000 + b'0' + b']' * 2000 + b'}'],
+                         ids=['duplicate-keys', 'non-finite-literal', 'deep-array'])
 async def test_nonstandard_duplicate_or_deep_json_is_incomplete(body):
     with scan_transport(budget()) as limits:
         assert not await NetworkScanner()._is_ai_service(Response(body), DiscoveryEngine().ai_signatures['ollama'])
     assert limits.failures == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('depth,accepted', [(MAX_JSON_DEPTH, True), (MAX_JSON_DEPTH + 1, False)],
+                         ids=['depth-32', 'depth-33'])
+async def test_explicit_json_depth_boundary(depth, accepted):
+    extra = 0
+    for _ in range(depth - 1):
+        extra = [extra]
+    document = {**OLLAMA, 'extra': extra}
+    with scan_transport(budget()) as limits:
+        assert await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures['ollama']) is accepted
+    assert limits.failures == (0 if accepted else 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('number,accepted', [(b'1e9999', False), (b'-1e9999', False), (b'1e2', True)],
+                         ids=['positive-overflow', 'negative-overflow', 'finite-exponent'])
+async def test_json_numeric_exponents_remain_finite(number, accepted):
+    body = json.dumps(OLLAMA).encode()[:-1] + b',"extra":' + number + b'}'
+    with scan_transport(budget()) as limits:
+        assert await NetworkScanner()._is_ai_service(Response(body), DiscoveryEngine().ai_signatures['ollama']) is accepted
+    assert limits.failures == (0 if accepted else 1)
 
 
 @pytest.mark.asyncio

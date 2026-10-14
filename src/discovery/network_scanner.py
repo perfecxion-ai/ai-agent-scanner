@@ -5,6 +5,7 @@ import errno
 import ipaddress
 import json
 import logging
+import math
 import re
 import uuid
 from contextvars import ContextVar
@@ -20,6 +21,7 @@ from src.core.transport import SafeSession, TransportPolicyError, current_budget
 
 
 MAX_BODY_BYTES = 10_000
+MAX_JSON_DEPTH = 32
 MAX_DNS_ADDRESSES = 32
 MAX_TCP_CONNECTIONS = 50
 _tcp_slots = ContextVar('network_tcp_slots', default=None)
@@ -40,6 +42,27 @@ def _unique_object(pairs):
 
 def _reject_constant(value):
     raise ValueError('Non-finite JSON value')
+
+
+def _finite_float(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError('Non-finite JSON value')
+    return number
+
+
+def _bounded_json_depth(document):
+    # Container depth is explicit, not dependent on a Python parser's recursion.
+    pending = [(document, 1)]
+    while pending:
+        value, depth = pending.pop()
+        if not isinstance(value, (dict, list)):
+            continue
+        if depth > MAX_JSON_DEPTH:
+            return False
+        children = value.values() if isinstance(value, dict) else value
+        pending.extend((child, depth + 1) for child in children if isinstance(child, (dict, list)))
+    return True
 
 
 class NetworkScanner:
@@ -225,11 +248,15 @@ class NetworkScanner:
                 return None
             body.extend(chunk)
         try:
-            document = json.loads(body, object_pairs_hook=_unique_object, parse_constant=_reject_constant)
+            document = json.loads(body, object_pairs_hook=_unique_object,
+                                  parse_constant=_reject_constant, parse_float=_finite_float)
         except (ValueError, UnicodeDecodeError, RecursionError):
             # HTML/prose is a normal non-AI service; truncated JSON is incomplete.
             if body.lstrip().startswith((b'{', b'[')):
                 self._failure('malformed inventory JSON')
+            return None
+        if not _bounded_json_depth(document):
+            self._failure('inventory JSON depth limit')
             return None
         if isinstance(document, dict) and 'error' in document:
             self._failure('inventory error document')
