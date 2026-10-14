@@ -104,7 +104,7 @@ class DiscoveryEngine:
                 "domains": [],
                 "headers": [],
                 "paths": ["/info"],
-                "response_patterns": ["model_id", "max_input_length", "generated_text"]
+                "response_patterns": ["model_id", "router", "version", "max_input_tokens", "max_input_length"]
             }
         }
     
