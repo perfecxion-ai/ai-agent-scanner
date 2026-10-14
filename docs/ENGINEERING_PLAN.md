@@ -102,8 +102,12 @@ These are source-review findings, not evidence of exploitation in a deployment.
   selection, inventory/finding comparison, expiring suppressions, check evidence,
   and paginated operational audit history. Tenant-owned API templates use shared
   admission, revision checks, bounded quota, and current-policy/source revalidation.
-  Exact SQLite version 1 upgrades add the template table in schema version 2.
-  Dashboard template controls, scheduling,
+  Manual dashboard template workflows have Node and real browser acceptance.
+  Finite API schedules pin template revisions, start disabled, require restart
+  review, and atomically admit bounded occurrences through the shared queue.
+  One-slot read-only preflight preserves cancellation and rejects late results.
+  Exact version 1/2 SQLite upgrades initialize schema version 3. Schedule
+  dashboard controls,
   external integrations, and comprehensive accessibility acceptance remain pending.
 - M6 remains pending. Package and container CI are foundations, not completion of
   performance testing, deployment review, migration validation, or release sign-off.

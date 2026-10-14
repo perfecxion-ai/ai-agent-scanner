@@ -105,19 +105,36 @@ update, admission, and worker execution recheck scope and source prerequisites.
 Declared domains and unresolved absolute paths survive until worker validation;
 recipe edits/deletion do not change admitted snapshots. Exact SQLite version 1
 upgrades add the template table transactionally, preserving existing records.
-This is API-only: dashboard template controls and scheduling are pending. See
+At that checkpoint, dashboard controls and scheduling were pending. See
 [template contract](scan-templates.md).
+
+### Dashboard and finite scheduling checkpoint
+
+PR #32 adds manual dashboard template save/load/edit/run/delete, bounded paging,
+dirty-editor discard, advanced-field preservation, revision/policy errors, and
+logout/late-response guards. Real desktop/mobile Chromium fixtures use actual
+authentication, SQLite, and template APIs with synthetic scanner functions.
+
+PR #33 adds disabled-by-default finite API schedules pinned to template revisions.
+One occurrence, scan/job/audit, and admission count commit together. Each schedule
+has one outstanding scan, no catch-up burst, and no replay of admitted jobs.
+Restart and template changes require operator review. Read-only preflight runs in
+one off-thread slot; only the dispatcher admits scans after final guards. Soft
+timeout retains occupied work, rejects late results, and fails readiness without
+blocking cancellation. Schema version 3 upgrades exact version 1/2 layouts.
+No schedule was enabled against a real target. Schedule dashboard controls are
+pending; see [schedule contract and limits](scan-schedules.md).
 
 ## Next delivery sequence
 
-1. Add dashboard template controls for manual save/edit/run/delete using the
-   implemented tenant-owned API. Cover stale revisions, policy failures, source
-   selection, logout/late responses, safe text, and desktop/mobile browser flows.
-2. Add finite scheduling through the shared template admission/policy path. Pin
-   the template revision and review transactional occurrence state, bounded
-   recurrence, restart/no-catch-up behavior, cancellation, and policy revalidation.
-   Keep synchronous DNS/filesystem preflight outside the dispatcher cancellation
-   loop. Do not automatically enable schedules or scan real targets.
+1. Add schedule dashboard controls using the implemented API: reviewed template
+   pins, interval/count bounds, explicit enable/pause, occurrences, and restart
+   review. Preserve authentication/epoch guards and test revision/policy errors,
+   deletion constraints, safe text, and desktop/mobile flows. Never enable a
+   schedule merely by creating, loading, or opening it.
+2. Expand workflow acceptance and selected integrations without bypassing shared
+   admission, cancellation, or current-policy checks. Do not enable schedules or
+   scan real targets automatically as part of engineering work.
    External integrations need an explicit supported destination and secret contract.
 3. Expand representative accuracy and service-compatibility fixtures, then run
    load/soak, accessibility, and deployed backup/upgrade acceptance. Keep real

@@ -56,6 +56,8 @@ Installed-wheel smoke checks the live MCP inventory and controlled-policy comman
 and imports their implementations
 without contacting an endpoint. Network and live MCP tests use local HTTP/DNS
 fixtures; explicit parser-depth limits do not depend on Python recursion behavior.
+The installed-wheel smoke also imports and validates the finite scheduling helper
+without starting a dispatcher or enabling a schedule.
 
 A published GitHub release reruns CI and publishes the distribution artifacts
 produced by that successful run through the `pypi` environment. Configure its
