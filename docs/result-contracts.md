@@ -8,8 +8,8 @@ that a finding was resolved.
 
 Each check has `rule_id`, `probe_id`, `probe_version`, execution `status`,
 evidence `outcome`, `requests_attempted`, `responses_evaluated`, and an
-optional safe `reason`. The engine accounts for 18 planned groups: seven
-prompt injection categories, six access checks, and five privacy checks.
+optional safe `reason`. The engine accounts for 19 planned groups: seven
+prompt injection categories, seven access/exposure checks, and five privacy checks.
 Groups omitted from a configured test suite are explicitly skipped.
 
 | Execution status | Meaning |
@@ -20,15 +20,21 @@ Groups omitted from a configured test suite are explicitly skipped.
 
 Evidence outcomes are independent of execution status:
 
-- `passed`: A configured protected canary was absent from usable generated
-  output and absent from all attack requests, or protected access probes were
-  explicitly denied after a denied control.
+- `passed`: Protected access probes were explicitly denied after a valid denied
+  control. This is sampled evidence for the declared boundary, not target safety.
 - `confirmed`: A protected marker was disclosed; a failed group can retain
   confirmed evidence from interactions that succeeded.
 - `heuristic`: A sampled response matched an observation requiring review.
 - `inconclusive`: Responses were evaluated without a valid negative oracle,
   or the group failed before a reliable negative conclusion.
 - `not_evaluated`: The group was skipped.
+
+Prompt and tenant nondisclosure never produce a pass. A canary that was not
+seeded, or a stochastic target that does not leak in this finite sample, cannot
+establish absence of a vulnerability. Nondisclosure remains inconclusive even
+after an earlier confirmed leak. These rules cannot automatically resolve a
+historical disclosure, including older reports with a recorded sampled pass.
+Probe semantics and versions changed to prevent comparison across this boundary.
 
 The supported model adapters require JSON containing nonempty generated text.
 HTTP success with an HTML login page, empty model output, or an error envelope
@@ -56,23 +62,42 @@ public value. Missing, different, or redacted contexts cannot prove resolution.
 Passed sampled evidence is still recorded without a context, but it remains
 insufficient for verified report comparison.
 
-JSON and SARIF preserve the check records and summary counts. A failed required
-check makes the asset partial, retains any confirmed findings, and prevents a
-completed risk assessment for that asset. Optional checks without prerequisites
-remain skipped. Completion describes executed coverage; it is not a claim that
-every rule passed or that the asset has no vulnerabilities.
+JSON and SARIF preserve check records and summary counts. A failed required check
+makes the asset partial, but confirmed findings with matching versioned check
+evidence remain eligible for risk assessment. Such assessments carry partial
+coverage and are visible in the dashboard with that warning. Optional checks
+without prerequisites remain skipped. An active assessment where every check
+was skipped is partial, not a clean completed scan. Completion is execution
+accounting, not a claim that every rule passed or that the asset is safe.
 
-Modern completed results also require at least one completed `passed` or
-`confirmed` check before risk assessment. An execution containing only
-heuristic/inconclusive responses and skipped oracles remains completed, but
-its risk is unknown, score is null, and `risk_assessment_status` is
-`not_assessed` when no asset qualifies. Summary fields
+Modern results require a confirmed finding matched to its confirmed check, or a
+completed protected-access sampled pass, before risk assessment. An execution
+containing only heuristic/inconclusive responses and skipped oracles has unknown
+risk and a null score; it must not infer minimal risk from missing evidence.
+`risk_assessment_status` is `not_assessed` or `not_run` when none qualifies,
+and `partial` when an eligible asset has incomplete execution. Summary fields
 `agents_risk_assessed` and `agents_risk_not_assessed` expose this distinction.
 New executions, including older engine adapters, require the known check
 schema and validated conclusive records before risk assessment. Existing
 version 1.0 files remain readable with their persisted scores; reading them
 does not trigger a retrospective assessment or change their recorded values.
 Missing legacy check evidence cannot prove finding resolution.
+
+The `severity-floor-v2` policy uses a single 0-100 scale. Confirmed severity floors
+are critical 90, high 70, medium 40, low 15, and informational 1. The base is the
+highest severity, not a sum of repeated samples. Documented exposure/business
+context may raise the score, capped at 100, but cannot dilute that floor. This
+policy is not CVSS, a probability, or a safety/compliance guarantee. The agent's
+`risk_scoring_policy` identifies the assessed policy. Old persisted scores are not
+silently recalculated and do not appear as current dashboard risk verdicts.
+Anonymous inference is a reviewable exposure
+observation unless separate protected-resource evidence proves a bypass; it does
+not create a confirmed vulnerability or a zero-risk verdict.
+
+Generated response bodies and excerpts are omitted from new prompt, privacy, and
+access evidence. Reports retain rule/probe identity, status, sample counts and
+safe detection metadata rather than arbitrary target text or customer PII.
+Existing saved reports and exported copies are not retroactively sanitized.
 
 Report comparison resolves an absent finding only when the same unambiguous,
 unredacted endpoint has explicit completed, passed evidence for every earlier

@@ -8,6 +8,16 @@ finish checkpoint below is historical infrastructure acceptance, not release
 approval. Follow the [remediation gate](BETA_REMEDIATION.md) before reopening the
 beta. Keep the source lab report and raw artifacts local and private.
 
+The first remediation PR adds private atomic exports, macOS temporary-root
+canonicalization, and native macOS CI. Its PR and merged revision passed all
+eight jobs. The verdict follow-up changes stochastic nondisclosure to inconclusive,
+uses severity-floor-v2 scoring without duplicate-sample inflation, preserves
+confirmed partial risk, omits generated text, and keeps exception logs static.
+Historical scoring is not recalculated or displayed as a current verdict.
+Local acceptance is 1150 Python cases, 82 Node cases, and the synthetic Chromium
+workflow. Network, source-reuse, CLI, and deadline slices remain separate until
+their integrated acceptance and CI pass. The beta hold remains in effect.
+
 ## Original checkpoint
 
 Baseline: `b5efe3f`, main after PRs #1 through #14. The working tree was clean and
