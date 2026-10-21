@@ -61,11 +61,23 @@ SQLite, logs, audit, requests, JSON, SARIF, and inventory. Isolated subprocesses
 exercise actual startup configuration without network or database access.
 Independent reviews closed reflected-request, mixed-inventory, escaped-marker,
 and shared-canary multi-model bugs. Final combined acceptance is recorded in
-[validation](VALIDATION.md#server-evidence-reference-slice); require PR and
-post-merge CI. No cloud service or real model was exercised for this slice.
+[validation](VALIDATION.md#server-evidence-reference-slice). PR #52 and merged
+revision `ed5684d` passed all eight CI jobs. No cloud service or real model was
+exercised for this slice.
 
-The next priority is a fixed-budget baseline and repeated-run sensitivity
-comparison before changing prompts or sampling. The server input gap is separate
+The prompt-only benchmark now supplies an opt-in, fixed-budget paired baseline
+and experimental extraction-focused candidate. It uses actual adapters,
+transport, analyzer, and check contracts without changing production defaults.
+Each arm samples 35 requests; ten balanced pairs cap a target cohort at 700
+requests and 90 minutes. Partial observations and planned denominators remain
+explicit. Neither successful fixtures nor nondisclosure establish accuracy.
+See [GCP retest scope and commands](BETA_TESTING.md#next-authorized-gcp-detector-retest)
+before requesting authorized operator execution on the final pinned revision.
+Do not start cloud resources, change deployed services, or invent target-side
+canaries to obtain a positive result. Freeze setup and sample counts before runs.
+
+The next priority is reviewing those paired real-model measurements before
+adopting a candidate or increasing sampling. The server input gap is separate
 from detection yield: no stronger real-model hit rate is established here. Keep
 finding presentation grouping, raw-score schema migration, broader authorization
 controls, and enterprise readiness as separate reviewed work.
