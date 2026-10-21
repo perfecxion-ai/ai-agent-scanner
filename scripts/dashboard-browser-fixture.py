@@ -88,6 +88,19 @@ def main(directory):
                               agents=[dict(id="fixture-asset", name="<fixture>", provider="synthetic",
                                            security_status="completed", checks=checks, vulnerabilities=[])],
                               security_results=[], summary=dict(agents_tested=0, overall_risk_score=0))
+                if status == "partial":
+                    check = dict(rule_id="prompt_injection.system_prompt_extraction", probe_id="fixture-sample",
+                                 probe_version="fixture-v2", status="failed", outcome="confirmed",
+                                 requests_attempted=2, responses_evaluated=1, reason="Synthetic partial coverage")
+                    checks[0] = check
+                    report["risk_assessment_status"] = "partial"
+                    report["summary"]["overall_risk_score"] = 70
+                    report["agents"][0].update(
+                        security_status="partial", risk_score=70, risk_scoring_policy="severity-floor-v2",
+                        risk_coverage_status="partial", vulnerabilities=[dict(
+                            rule_id=check["rule_id"], probe_id=check["probe_id"], probe_version=check["probe_version"],
+                            evidence_status="confirmed", severity="high", title="Synthetic protected disclosure",
+                            description="Fixture only; no generated text or protected value is stored")])
                 app.db.session.add(app.ScanSession(id=identifier, organization_id="browser-fixture",
                     scan_name=identifier, scan_type="full", status=status, progress=20 if status == "running" else 100,
                     target_scope={}, scan_config={}))

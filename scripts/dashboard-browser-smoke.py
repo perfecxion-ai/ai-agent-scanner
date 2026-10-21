@@ -39,6 +39,7 @@ def fixture_server(log):
     fixture = Path(__file__).with_name("dashboard-browser-fixture.py")
     # Parent cleanup also covers startup failure or forced termination of the child.
     with tempfile.TemporaryDirectory(prefix="ai-scanner-browser-db-") as directory:
+        directory = str(Path(directory).resolve(strict=True))
         process = subprocess.Popen([sys.executable, str(fixture), "--directory", directory],
                                    stdout=subprocess.PIPE, stderr=log)
         try:
@@ -144,6 +145,9 @@ def acceptance(base, control_key, artifacts):
             expect(page.locator("#scanName")).to_be_focused()
             open_scan("partial")
             expect(announcement).to_contain_text("partial results")
+            expect(page.locator("#riskScore")).to_have_text("70.0 / 100 (partial coverage)")
+            expect(page.locator("#assetList")).to_contain_text("Risk: 70.0 / 100 (partial coverage)")
+            expect(page.locator("#findingList")).to_contain_text("Synthetic protected disclosure")
             details = page.locator("#assetList details").first
             details.locator("summary").click()
             more = details.locator("button")
