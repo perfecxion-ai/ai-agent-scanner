@@ -18,6 +18,8 @@ class AIAgentScanner {
         this.epoch = 0;
         this.selection = 0;
         this.scanId = null;
+        this.terminalAnnouncement = '';
+        this.noticeOwner = null;
         this.timer = null;
         this.pending = new Set();
         this.historyOffset = 0;
@@ -89,14 +91,20 @@ class AIAgentScanner {
 
     el(id) { return this.doc.getElementById(id); }
     on(id, event, handler) { this.el(id).addEventListener(event, handler); }
-    notice(message, error = false) {
+    notice(message, error = false, owner = null) {
         this.el('notice').textContent = message;
         this.el('notice').className = error ? 'notice error' : 'notice';
+        this.noticeOwner = owner;
     }
-    handleError(error) {
-        if (error.name !== 'AbortError' && error.message !== 'Session changed') this.notice(error.message, true);
+    handleError(error, owner = null) {
+        if (error.name !== 'AbortError' && error.message !== 'Session changed') this.notice(error.message, true, owner);
+    }
+    clearReportNotice() {
+        if (this.noticeOwner === 'scan-report') this.notice('');
     }
     clearReport() {
+        this.clearReportNotice();
+        this.reportState = null;
         this.el('reportView').hidden = true;
         for (const id of ['assetList', 'findingList', 'observationList']) this.el(id).replaceChildren();
         this.el('jsonBtn').disabled = this.el('sarifBtn').disabled = true;
@@ -119,6 +127,8 @@ class AIAgentScanner {
         this.selection += 1;
         this.token = null;
         this.scanId = null;
+        this.terminalAnnouncement = '';
+        this.el('scanAnnouncement').textContent = '';
         clearTimeout(this.timer);
         for (const controller of this.pending) controller.abort();
         this.pending.clear();
@@ -680,6 +690,8 @@ class AIAgentScanner {
     async selectScan(id) {
         if (!id) return;
         this.selection += 1;
+        this.terminalAnnouncement = '';
+        this.el('scanAnnouncement').textContent = '';
         clearTimeout(this.timer);
         this.scanId = id;
         this.clearReport();
@@ -699,6 +711,7 @@ class AIAgentScanner {
         if (!this.token || !this.scanId) return;
         const selection = this.selection;
         const epoch = this.epoch;
+        let reportRequest = false;
         try {
             const data = await this.request(this.path('status'));
             if (epoch !== this.epoch || selection !== this.selection) return;
@@ -708,13 +721,20 @@ class AIAgentScanner {
             const terminal = TERMINAL_STATES.has(data.status);
             this.el('cancelScanBtn').disabled = terminal;
             if (terminal) {
-                await this.loadResults(selection);
+                reportRequest = true;
+                try {
+                    const reportState = await this.loadResults(selection);
+                    if (epoch === this.epoch && selection === this.selection) this.announceTerminal(data.status, reportState);
+                } catch (error) {
+                    if (epoch === this.epoch && selection === this.selection) this.announceTerminal(data.status, 'unavailable');
+                    throw error;
+                }
             } else this.timer = setTimeout(() => this.poll(), 1500);
         } catch (error) {
             if (epoch === this.epoch && selection === this.selection) {
                 this.el('scanStatus').textContent = 'Unavailable';
                 this.el('cancelScanBtn').disabled = true;
-                this.handleError(error);
+                this.handleError(error, reportRequest ? 'scan-report' : null);
             }
         }
     }
@@ -731,16 +751,39 @@ class AIAgentScanner {
         } catch (error) { if (epoch === this.epoch && selection === this.selection) this.handleError(error); }
     }
     async loadResults(selection) {
+        if (this.reportState) return this.reportState;
         const epoch = this.epoch;
-        const data = await this.request(this.path('results'));
+        let data;
+        try { data = await this.request(this.path('results')); }
+        catch (error) {
+            if (epoch === this.epoch && selection === this.selection && this.reportState) return this.reportState;
+            throw error;
+        }
         if (epoch !== this.epoch || selection !== this.selection) return;
+        if (this.reportState) return this.reportState;
         const report = data.results.pipeline;
         if (!report) {
-            this.notice('This scan has no versioned report. Historical numeric scores may not represent completed testing.');
-            return;
+            this.notice('This scan has no versioned report. Historical numeric scores may not represent completed testing.', false, 'scan-report');
+            this.reportState = 'historical';
+            return this.reportState;
         }
         this.renderReport(report);
+        this.clearReportNotice();
         this.el('jsonBtn').disabled = this.el('sarifBtn').disabled = false;
+        this.reportState = 'available';
+        return this.reportState;
+    }
+    announceTerminal(status, reportState) {
+        if (!TERMINAL_STATES.has(status)) return;
+        const states = {completed: 'Scan completed.', partial: 'Scan finished with partial results.',
+            failed: 'Scan failed.', cancelled: 'Scan cancelled.', interrupted: 'Scan interrupted.'};
+        const reports = {available: 'Report available. Review incomplete checks and evidence.',
+            historical: 'No versioned report is available. Testing completeness is unverified.',
+            unavailable: 'Report unavailable. Testing completeness is unverified.'};
+        const message = `${states[status]} ${reports[reportState] || reports.unavailable}`;
+        if (this.terminalAnnouncement === message) return;
+        this.el('scanAnnouncement').textContent = message;
+        this.terminalAnnouncement = message;
     }
     async loadAudit(reset = false) {
         if (!this.token || !this.scanId || (!reset && this.auditCount >= AUDIT_DISPLAY_LIMIT)) return;
@@ -850,13 +893,13 @@ class AIAgentScanner {
                 this.append(details, 'summary', 'Assessment limitations');
                 for (const limitation of assessment.limitations) this.append(details, 'p', limitation);
             }
-            this.renderChecks(card, modern ? agent.checks : null);
+            this.renderChecks(card, modern ? agent.checks : null, `Check records for ${agent.name || agent.id || 'asset'}`);
             assetList.appendChild(card);
         }
         this.renderItems('findingList', findings, 'No findings recorded. Check assessment completeness before interpreting this result.');
         this.renderItems('observationList', observations, 'No observations recorded.');
     }
-    renderChecks(card, checks) {
+    renderChecks(card, checks, label = 'Check records') {
         if (!Array.isArray(checks)) {
             this.append(card, 'p', 'Check evidence unavailable for this report.');
             return;
@@ -870,6 +913,8 @@ class AIAgentScanner {
         const list = this.append(details, 'div', '');
         list.className = 'check-list';
         list.tabIndex = 0;
+        list.setAttribute('role', 'region');
+        list.setAttribute('aria-label', label);
         const more = this.append(details, 'button', 'Show more checks');
         more.type = 'button';
         more.className = 'secondary';
@@ -885,7 +930,9 @@ class AIAgentScanner {
                 if (check.reason) this.append(row, 'p', check.reason);
                 rendered += 1;
             }
+            const ownedFocus = this.doc.activeElement === more;
             more.hidden = rendered >= Math.min(checks.length, CHECK_DISPLAY_LIMIT);
+            if (more.hidden && ownedFocus) list.focus();
             if (rendered === CHECK_DISPLAY_LIMIT && checks.length > rendered) {
                 this.append(details, 'p', `Showing ${CHECK_DISPLAY_LIMIT} of ${checks.length} checks. Download JSON for the complete record.`);
             }

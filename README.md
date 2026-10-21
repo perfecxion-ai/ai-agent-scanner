@@ -126,8 +126,10 @@ The dispatcher requires one server process, file-backed SQLite, and a local POSI
 filesystem. Queued scans survive restart; interrupted active probes are not replayed.
 Stop the server before replacing it; overlapping reloads are unsupported. The
 dashboard supports scan history, cancellation, authenticated exports, and
-[check evidence and audit history](docs/dashboard-evidence.md). For
-security-only runs, select a completed source scan and [models for its assets](docs/source-model-selection.md).
+[check evidence and audit history](docs/dashboard-evidence.md). Named check/audit
+regions support keyboard scrolling and final-page focus
+recovery. Terminal feedback distinguishes scan completion from security evidence.
+For security-only runs, select a completed source scan and [models for its assets](docs/source-model-selection.md).
 The authenticated [template API](docs/scan-templates.md) saves existing scan
 definitions with revision checks and bounded tenant quotas. Manual runs share
 the scan queue and revalidate current scope and source prerequisites. Template

@@ -26,27 +26,27 @@
     <p id="notice" class="notice" role="status" aria-live="polite">Sign in to access scans.</p>
     <div class="workspace">
       <section class="panel" aria-labelledby="scopeTitle"><p class="eyebrow">01 / Configure</p><h2 id="scopeTitle">New scan</h2>
-        <p>Targets must be permitted by the server's scan policy. Cloud scans are available through the CLI.</p>
+        <p id="scopeHelp">Targets must be permitted by the server's scan policy. Cloud scans are available through the CLI.</p>
         <form id="scanForm"><fieldset id="scanControls" disabled>
           <label for="scanName">Scan name</label><input id="scanName" maxlength="255" value="Agent assessment" required>
-          <label for="scanType">Assessment mode</label><select id="scanType">
+          <label for="scanType">Assessment mode</label><select id="scanType" aria-describedby="modelProbeHelp">
             <option value="discovery_only">Discovery only</option><option value="full">Discovery and security</option>
             <option value="security_only">Security from a previous scan</option>
           </select>
-          <p class="hint">Active model probes need a selected model. Unconfigured targets are skipped. Discover first, then select models in a source scan.</p>
+          <p id="modelProbeHelp" class="hint">Active model probes need a selected model. Unconfigured targets are skipped. Discover first, then select models in a source scan.</p>
           <div id="targetFields">
-            <label for="networkRanges">Networks and domains</label><textarea id="networkRanges" rows="3" placeholder="192.0.2.0/28&#10;lab.example.test"></textarea>
-            <p class="hint">One IP address, CIDR, or domain per line.</p>
+            <label for="networkRanges">Networks and domains</label><textarea id="networkRanges" rows="3" aria-describedby="scopeHelp networkHelp" placeholder="192.0.2.0/28&#10;lab.example.test"></textarea>
+            <p id="networkHelp" class="hint">One IP address, CIDR, or domain per line.</p>
             <details><summary>Repository and traffic inputs</summary>
-              <label for="repositories">Repository paths</label><textarea id="repositories" rows="2" placeholder="/srv/scan-inputs/repository"></textarea>
-              <label for="trafficSources">Traffic file paths</label><textarea id="trafficSources" rows="2" placeholder="/srv/scan-inputs/traffic.json"></textarea>
-              <p class="hint">Use absolute paths within the server's configured roots.</p>
+              <label for="repositories">Repository paths</label><textarea id="repositories" rows="2" aria-describedby="scopeHelp pathHelp" placeholder="/srv/scan-inputs/repository"></textarea>
+              <label for="trafficSources">Traffic file paths</label><textarea id="trafficSources" rows="2" aria-describedby="scopeHelp pathHelp" placeholder="/srv/scan-inputs/traffic.json"></textarea>
+              <p id="pathHelp" class="hint">Use absolute paths within the server's configured roots.</p>
             </details>
           </div>
-          <div id="sourceFields" hidden><label for="sourceScanId">Completed source scan ID</label><input id="sourceScanId" maxlength="64">
-            <p class="hint">Uses stored assets from your organization. Redacted endpoints cannot be replayed.</p>
-            <label for="modelOverrides">Model selections (optional JSON)</label><textarea id="modelOverrides" rows="3" placeholder='{"asset-id":"operator-selected-model"}'></textarea>
-            <p class="hint">Map source asset IDs to model names. Do not include credentials or endpoints.</p></div>
+          <div id="sourceFields" hidden><label for="sourceScanId">Completed source scan ID</label><input id="sourceScanId" maxlength="64" aria-describedby="sourceHelp modelProbeHelp">
+            <p id="sourceHelp" class="hint">Uses stored assets from your organization. Redacted endpoints cannot be replayed.</p>
+            <label for="modelOverrides">Model selections (optional JSON)</label><textarea id="modelOverrides" rows="3" aria-describedby="modelSelectionHelp modelProbeHelp" placeholder='{"asset-id":"operator-selected-model"}'></textarea>
+            <p id="modelSelectionHelp" class="hint">Map source asset IDs to model names. Do not include credentials or endpoints.</p></div>
           <button id="startScanBtn" type="submit">Queue scan</button>
           <button id="saveTemplateBtn" class="secondary" type="button">Save form as new template</button>
         </fieldset></form>
@@ -109,6 +109,7 @@
         <form id="openScanForm" class="open-form"><label for="openScanId">Open a saved scan</label><div class="inline">
           <input id="openScanId" maxlength="64" placeholder="Scan ID" required><button id="openScanBtn" class="secondary" disabled>Open</button>
         </div></form>
+        <p id="scanAnnouncement" class="hint" role="status" aria-live="polite" aria-atomic="true"></p>
         <div id="scanState" hidden>
           <div class="scan-heading"><code id="selectedScanId"></code><span id="scanStatus" class="badge"></span></div>
           <label for="scanProgress">Progress</label><progress id="scanProgress" max="100" value="0"></progress>
@@ -122,7 +123,7 @@
           <div class="actions"><button id="refreshAuditBtn" type="button" class="secondary" disabled>Refresh audit</button>
             <button id="moreAuditBtn" type="button" class="secondary" disabled>More events</button></div>
           <p id="auditNotice" class="hint" role="status" aria-live="polite"></p>
-          <ol id="auditList" class="audit-list" tabindex="0"></ol>
+          <div id="auditRegion" class="audit-list" tabindex="0" role="region" aria-labelledby="auditTitle"><ol id="auditList"></ol></div>
         </section>
         <div id="reportView" hidden>
           <div class="metrics"><div><span>Assets</span><strong id="assetCount">0</strong></div><div><span>Findings</span><strong id="findingCount">0</strong></div>

@@ -48,6 +48,9 @@ These changes are engineering work on the current branch, not a published releas
   require conclusive check evidence for new risk assessments and exact passed
   provenance for verified resolution.
 - Show check evidence, cloud resource IDs, and bounded audit history in the dashboard.
+- Improve dashboard control contrast, linked scope/model hints, named scroll
+  regions, final-page keyboard focus, and conservative terminal announcements.
+  Preserve focused reports during redundant polling and concurrent fetch errors.
 - Add tenant-owned API scan templates with revision checks, bounded quotas,
   shared admission, and current-policy revalidation. Preserve queued snapshots
   after recipe edits or deletion; upgrade exact SQLite version 1 layouts to 2.

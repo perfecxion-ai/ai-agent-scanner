@@ -23,6 +23,36 @@ out of the checkout, and runs version, command help, static framework mapping,
 and offline evaluation checks.
 It requires package index access to install dependencies.
 
+## Optional Chromium dashboard checks
+
+The mandatory Node controller suite runs through pytest. A separate optional
+browser smoke test uses real Flask authentication, SQLite, and the dispatcher,
+with synthetic scanner engines and seeded scan records only. It never accepts
+an external base URL or an existing database. Playwright is not a runtime
+dependency. From the checkout, create an isolated environment:
+
+```sh
+browser_env=$(mktemp -d /tmp/ai-scanner-browser-env-XXXXXX)
+python3 -m venv "$browser_env"
+"$browser_env/bin/python" -m pip install -e '.[server]' playwright
+"$browser_env/bin/python" -m playwright install chromium
+"$browser_env/bin/python" scripts/dashboard-browser-smoke.py
+```
+
+Chromium may need operating-system libraries on a fresh machine. The smoke test
+starts an OS-assigned loopback server and owns a fresh temporary database. It
+stops the server and removes the database on success or a handled failure.
+Screenshots and fixture logs remain in the newly created artifact directory
+printed at startup. `--artifacts-dir /absolute/new-directory` selects a new
+destination; an existing destination is rejected to avoid overwrites.
+`--fail-after-start` deliberately raises an assertion after fixture startup to
+exercise server cleanup and should exit nonzero.
+
+Assertions cover linked guidance, named scroll regions, bounded check pages,
+keyboard focus ownership, terminal announcements and stale/authentication guards,
+control contrast, and 320/390/1440-pixel reflow. This is not a comprehensive
+accessibility audit, screen-reader test, or real-provider compatibility check.
+
 ## Container
 
 ```sh

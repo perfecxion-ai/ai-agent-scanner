@@ -137,13 +137,37 @@ scripts, screenshots, and disposable databases are preserved in
 `/tmp/ai-scanner-schedule-browser-rDbOYW`. This is not comprehensive accessibility
 acceptance or real-target schedule validation.
 
+### Dependency and accessibility checkpoint
+
+PR #37 requires certifi 2026.10.19 or newer following the published trust-bundle
+advisory. The local dependency audit passed after upgrading the environment.
+Existing environments and images still need their own upgrade/rebuild; no service
+was deployed. See [dependency maintenance](../SECURITY.md#dependency-maintenance).
+
+PR #38 completes the focused accessibility slice with stronger enabled-control
+borders, linked scope/model guidance, named check/audit regions, focus restoration
+at the final check page, and conservative terminal feedback. Unchanged polls keep
+the loaded report and focus intact; report recovery updates feedback and clears
+only obsolete report-owned notices. Other workflow messages remain intact.
+The optional [Chromium command](DEVELOPMENT.md#optional-chromium-dashboard-checks)
+owns a loopback fixture and temporary SQLite database, substitutes scanner engines,
+blocks external browser requests, and tests stale selection/session clearing.
+Thirteen mandatory Python tests cover its database guard, bounded startup,
+environment isolation, and cleanup. The measured suite is 1039 pytest cases and
+78 Node cases. Targeted browser acceptance is not comprehensive accessibility or
+screen-reader acceptance. Root browser artifacts are preserved in
+`/tmp/ai-scanner-browser-54ifn1sb`. The fixture was stopped and its database removed.
+
 ## Next delivery sequence
 
-1. Complete the next focused dashboard accessibility slice: stronger enabled
-   control borders, linked scope/model hints, named check/audit scroll regions,
-   focus restoration when the final Show more control disappears, and concise
-   completion announcements. Add reproducible keyboard regressions without
-   moving focus on background polling or weakening authentication/epoch guards.
+1. Add a bounded, disposable SQLite backup/restore acceptance command. Back up
+   stopped synthetic version 1/2/3 databases, restore only into absent temporary
+   files, compare logical contents and integrity, and start the real initializer
+   and dispatcher with synthetic work. Verify upgrade preservation, one-time queued
+   execution, interrupted/cancelled recovery, schedule restart review, and an
+   idempotent second restart. Reject cached/foreign engines before connecting.
+   Include failed/future upgrade and incomplete-restore cases. Do not accept
+   deployed database paths or claim deployed backup, crash durability, or M6 sign-off.
 2. Expand workflow acceptance and selected integrations without bypassing shared
    admission, cancellation, or current-policy checks. Do not enable schedules or
    scan real targets automatically as part of engineering work.
