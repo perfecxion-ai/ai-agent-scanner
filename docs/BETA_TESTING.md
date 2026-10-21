@@ -51,8 +51,13 @@ tested commit with `git rev-parse HEAD`; [validation](VALIDATION.md) records res
 and limitations. A later source change needs the relevant checks again.
 
 Server request budgets use `SCAN_MAX_REQUESTS` (default 500, maximum 10000)
-and `SCAN_TIMEOUT_SECONDS`. A request budget is a cap for the whole scan, not a
-retry count. Resource limits do not establish complete security coverage.
+and `SCAN_TIMEOUT_SECONDS` (default 300, maximum 3600). Active model requests use
+`SCAN_REQUEST_TIMEOUT_SECONDS` (integer 1-300, default 30); this does not extend
+the whole-scan deadline or trigger retries. CLI `scan`/`discover` expose bounded
+`--max-requests`, `--max-response-bytes`, `--timeout-seconds`, and
+`--request-timeout-seconds`. Loopback requires `--allow-loopback`. A request budget
+is a cap for the whole scan, not a retry count. Resource limits do not establish
+complete security coverage.
 
 ## Start an isolated, offline workspace
 

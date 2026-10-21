@@ -476,7 +476,7 @@ test('invalid source models and missing targets cannot save or scan', async () =
         const {app} = fixture(async () => { throw new Error('Unexpected network call'); });
         app.token = 'fixture-token'; app.el('scanType').value = 'security_only';
         await app[action](event);
-        assert.match(app.el('notice').textContent, /completed source scan ID/);
+        assert.match(app.el('notice').textContent, /terminal completed or partial source scan ID/);
         app.el('sourceScanId').value = 'source'; app.el('modelOverrides').value = '[]';
         await app[action](event);
         assert.match(app.el('notice').textContent, /Model selections must/);

@@ -69,7 +69,8 @@ async def test_non_replayable_source_rejected_at_admission_and_worker(api, monke
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mutation', ['missing_finalization', 'report_status', 'snapshot_endpoint',
-                                     'snapshot_id', 'redacted', 'report_invalid'])
+                                     'snapshot_id', 'redacted', 'report_invalid', 'agents_null',
+                                     'metadata_null', 'snapshot_id_list'])
 async def test_partial_source_requires_final_report_matching_inventory(api, monkeypatch, mutation):
     module, client = api
     await source_scan(module, monkeypatch)
@@ -89,6 +90,12 @@ async def test_partial_source_requires_final_report_matching_inventory(api, monk
         value['agents'][0]['endpoint_redacted'] = True
     elif mutation == 'report_invalid':
         value['summary'] = None
+    elif mutation == 'agents_null':
+        value['agents'] = None
+    elif mutation == 'metadata_null':
+        snapshot.metadata_json = None
+    elif mutation == 'snapshot_id_list':
+        snapshot.metadata_json = {'asset_id': []}
     report.result = value
     module.db.session.commit()
     response = client.post('/api/scans', headers=headers(module), json=request_body())

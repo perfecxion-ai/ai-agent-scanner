@@ -379,19 +379,21 @@ def _source_inventory(source):
     if previous is None or not isinstance(previous.result, dict):
         raise BadRequest("Source scan has no versioned results")
     report = previous.result
+    agents = report.get("agents", [])
+    if not isinstance(agents, list):
+        raise BadRequest("Source inventory must be an array")
     if source.status == "partial":
         if source.completed_at is None or report.get("status") != "partial":
             raise BadRequest("Partial source must have a finalized versioned report")
         if (not isinstance(report.get("summary"), dict)
                 or not isinstance(report.get("security_results"), list)
                 or not isinstance(report.get("risk_assessments"), list)
-                or report["summary"].get("agents_discovered") != len(report.get("agents", []))):
+                or report["summary"].get("agents_discovered") != len(agents)):
             raise BadRequest("Partial source report is incomplete")
         try:
             validate_scan_result(report)
         except (TypeError, ValueError, KeyError) as exc:
             raise BadRequest("Partial source report is invalid") from exc
-    agents = report.get("agents", [])
     try:
         apply_model_overrides(agents, {})
     except ValueError as exc:
@@ -406,7 +408,11 @@ def _source_inventory(source):
     saved = {}
     aliases = {}
     for snapshot in snapshots:
+        if not isinstance(snapshot.metadata_json, dict):
+            raise BadRequest("Source snapshot metadata is invalid")
         identifier = snapshot.metadata_json.get("asset_id", snapshot.id)
+        if not isinstance(identifier, str) or not identifier or len(identifier) > 256:
+            raise BadRequest("Source inventory identities are invalid")
         if identifier in saved:
             raise BadRequest("Source inventory identities are ambiguous")
         saved[identifier] = snapshot.endpoint_url
@@ -638,7 +644,10 @@ def _schedule_token(definition, tenant):
             raise BadRequest("Source scan prerequisites changed")
         if len(assets) > app.config["SCAN_MAX_HOSTS"]:
             raise BadRequest("Source scan exceeds host budget")
-        _source_inventory(row)
+        try:
+            _source_inventory(row)
+        except BadRequest as exc:
+            raise Conflict("Source inventory changed; review before scheduling") from exc
         source = (row.id, row.status, deepcopy(result.result), [(item.id, item.endpoint_url) for item in assets])
     return policy, source
 
