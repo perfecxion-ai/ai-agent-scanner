@@ -6,6 +6,9 @@ These changes are engineering work on the current branch, not a published releas
 
 ### Security and correctness
 
+- Apply private umasks in documented server workers and container startup; create
+  the image's state directory privately and check new state permissions before
+  and after container restart. Existing files and mounted volumes are unchanged.
 - Separate expected network negatives from incomplete AI inventory, log safe
   failure categories, normalize CIDRs, and reject CLI metadata targets before I/O.
 - Deduplicate matching Ollama inventories, honor bounded local hosts aliases,

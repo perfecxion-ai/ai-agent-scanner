@@ -19,6 +19,18 @@ initialization hook takes exclusive ownership, validates or upgrades the schema,
 recovers prior jobs, and starts the dispatcher. The development server starts the same
 service and binds to localhost. Do not launch the server with the Flask reloader.
 
+The documented Gunicorn hooks and container entrypoint set a private worker
+umask before state creation, so new SQLite databases and dispatcher locks are
+owner-only. The image's default instance directory is created with mode 0700.
+Native deployments must provision a private, service-owned parent directory
+themselves, especially when preloading application code. The
+[Gunicorn umask setting](https://docs.gunicorn.org/en/stable/settings.html#umask)
+also affects its own Unix socket permissions; it is not a substitute for the
+worker hook or a private parent directory. These defaults do not chmod existing
+databases, directories, backups, reports, or mounted volumes. Review their
+ownership and permissions separately before deploying an upgrade. Direct Flask
+development startup is not the production permission boundary.
+
 The dispatcher holds an OS lock on `<database>.dispatcher.lock` for its entire
 lifetime, including outstanding workers. Do not delete or replace this lock file
 while the server is running. A second dispatcher fails before it can recover or

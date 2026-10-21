@@ -25,6 +25,13 @@ rejected before admission; source changes preserve schedule conflict semantics.
 See validation for combined acceptance. The beta hold remains in effect until an
 explicitly authorized real-service retest and the readiness gates pass.
 
+A related storage follow-up protects new server state in actual Gunicorn worker
+hooks and container startup, without changing the importing process's umask or
+chmod on existing data. The image instance directory is private; container CI
+checks directory/database/lock modes and service ownership across restart.
+Local acceptance is now 1242 cases with seven new storage regressions. Existing
+volumes/parents and historical reports still need explicit operator review.
+
 ## Original checkpoint
 
 Baseline: `b5efe3f`, main after PRs #1 through #14. The working tree was clean and
