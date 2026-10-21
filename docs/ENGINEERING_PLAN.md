@@ -94,7 +94,10 @@ These are source-review findings, not evidence of exploitation in a deployment.
   enabled schedules pause for review and a second restart is idempotent.
   This is synthetic local acceptance, not deployed backup or crash durability.
 - M4 has passive MCP configuration/schema checks and offline replay for indirect
-  markers, RAG tenant canaries, and tool authorization requests. A scoped CLI
+  markers, RAG tenant canaries, and tool authorization requests. Replay ruleset
+  1.1.0 closes a reproduced exact-canary disclosure miss in argument property names,
+  with numeric secret-safe locations and nested positive/negative regressions.
+  Encoded disclosures remain known misses, not security passes. A scoped CLI
   adapter collects read-only MCP 2026-07-28 Streamable HTTP inventory with bounded
   JSON/SSE and schema analysis. Inventory does not test runtime authorization,
   Origin enforcement, tool behavior, or exploitability. A separate controlled

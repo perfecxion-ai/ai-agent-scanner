@@ -41,6 +41,9 @@ These changes are engineering work on the current branch, not a published releas
   budgets, and conservative JSON/SARIF evidence. No tools are invoked.
 - Add offline replay fixtures for indirect markers, foreign-tenant document
   canaries, and tool-request policies, with labeled confusion and accuracy metrics.
+- Detect exact foreign canaries in offline replay argument keys, including nested
+  objects/arrays, without copying names into evidence. Ruleset 1.1.0 changes all
+  evidence IDs; encoded disclosures remain documented false negatives.
 - Add explicit model/protocol adapters, tenant-owned scan history, and source model selection.
 - Redesign the operator dashboard with local assets, cancellation, and authenticated exports.
 - Compare saved reports and apply exact-match expiring suppressions without changing evidence.

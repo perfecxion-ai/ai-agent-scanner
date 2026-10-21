@@ -178,6 +178,25 @@ See [usage and limits](jobs.md#disposable-backuprestore-acceptance).
 Deployed backup, online procedures, old-binary compatibility, crash durability,
 and M6 sign-off remain outside this acceptance slice.
 
+### Offline replay key-disclosure checkpoint
+
+PR #41 closes a reproduced REPLAY002 false negative: exact protected foreign
+canaries in tool-argument property names were missed while values were detected.
+String keys now use numeric `/keys/N` locations at supported nesting depths;
+existing `/values/N` locations remain unchanged. Literal names never enter
+evidence. Ruleset 1.1.0 changes evidence IDs for all checks, so IDs across that
+version boundary cannot establish new/resolved findings.
+
+Twenty-five new regressions cover nested objects/arrays, multiple occurrences,
+secret-safe deterministic IDs, label independence, exact matching, and depth
+limits. Encoded disclosures remain counted false negatives. Independent acceptance
+passed all 48 replay cases on Python 3.10 and 3.12 with networking and execution
+blocked. REPLAY001/003 detection and the six built-in smoke fixtures are unchanged.
+The integrated local suite passed 1106 pytest cases and 78 Node cases at 90%
+measured line coverage. This remains synthetic offline acceptance, not
+representative production accuracy or live tool authorization. See
+[replay scope and identity](replay-evaluations.md).
+
 ## Next delivery sequence
 
 1. Expand representative offline accuracy and service-compatibility fixtures.

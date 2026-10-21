@@ -15,10 +15,11 @@ PR #35 adds reviewed-pin dashboard schedules and targeted keyboard acceptance.
 PR #37 adds the remediated certifi dependency floor. PR #38 adds focused
 accessibility improvements and a reusable optional Chromium smoke workflow.
 PR #40 adds disposable stopped-SQLite backup/restore and recovery acceptance.
+PR #41 fixes offline replay detection of protected canaries in argument keys.
 
 ## Automated checks
 
-- Local Linux/Python 3.10.20: 1081 pytest cases passed. The suite invokes 78 Node
+- Local Linux/Python 3.10.20: 1106 pytest cases passed. The suite invokes 78 Node
   controller tests, which also passed independently.
 - Line coverage across `src`, `app`, and `scanner_cli`: 90%. The shared pipeline
   is 95%, transport 99%, durable jobs 92%, schema acceptance 94%, and API 94%.
@@ -40,6 +41,14 @@ PR #40 adds disposable stopped-SQLite backup/restore and recovery acceptance.
   heuristic, inconclusive, failed, and skipped execution. New risk requires
   conclusive completed evidence; verified resolution requires exact probe,
   provider/model, and public evidence-context matches for every earlier occurrence.
+- Offline replay ruleset 1.1.0 detects exact protected foreign canaries in string
+  argument keys, including objects nested under arrays, without exposing names.
+  Twenty-five new regressions cover numeric locations, existing value paths,
+  depth limits, label independence, and versioned secret-safe IDs. All 48 replay
+  cases passed independently on Python 3.10 and 3.12 with networking/execution
+  blocked. Encoded key disclosures remain explicitly counted false negatives.
+  REPLAY001/003 detection scope and the six built-in smoke fixtures are unchanged.
+  The global version change changes IDs for every check, not just new detections.
 - Distribution build, metadata validation, isolated installed-wheel commands,
   and offline evaluation smoke pass outside the checkout.
 - Network fixtures exercise actual loopback HTTP and controlled DNS beneath the
