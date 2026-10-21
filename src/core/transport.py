@@ -148,9 +148,8 @@ class BoundedResponse:
 class SafeSession:
     """ClientSession subset used by probes, with redirects and proxies disabled."""
 
-    def __init__(self, discovery=False, **kwargs):
+    def __init__(self, **kwargs):
         self.budget = current_budget() or ScanBudget()
-        self.discovery = discovery
         self.kwargs = kwargs
         self.session = None
         self.resolver = None
@@ -169,7 +168,7 @@ class SafeSession:
             await self.resolver.close()
 
     @asynccontextmanager
-    async def request(self, method, url, **kwargs):
+    async def request(self, method, url, discovery=False, **kwargs):
         try:
             self.budget.reserve(url)
             kwargs['allow_redirects'] = False
@@ -183,7 +182,7 @@ class SafeSession:
             # A TCP banner is an expected negative when asking an unknown port
             # whether it speaks HTTP. Never ignore body truncation, TLS failures,
             # refused connections, timeouts, or errors from active security work.
-            if (self.discovery and isinstance(exc, aiohttp.ClientResponseError)
+            if (discovery and isinstance(exc, aiohttp.ClientResponseError)
                     and exc.status == 400 and exc.headers is None):
                 logging.getLogger(__name__).debug('Discovery port did not speak HTTP')
                 raise

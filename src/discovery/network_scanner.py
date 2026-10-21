@@ -207,10 +207,10 @@ class NetworkScanner:
                 routes.setdefault(path, []).append((provider, signature))
         agents = []
         model_sets = {}
-        async with SafeSession(discovery=True, timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+        async with SafeSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
             for path, signatures in routes.items():
                 try:
-                    async with session.get(base_url + path) as response:
+                    async with session.get(base_url + path, discovery=not agents) as response:
                         document = await self._read_document(response, [signature for _, signature in signatures],
                                                              established=bool(agents))
                         if document is None:
