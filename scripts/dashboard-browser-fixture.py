@@ -12,6 +12,35 @@ import tempfile
 from types import SimpleNamespace
 
 
+def prompt_report(identifier, *, large=False, distinct=False):
+    """Synthetic presentation records only, never target requests or protected seeds."""
+    categories = ["system_prompt_extraction", "instruction_bypass", "role_manipulation", "dan_jailbreak",
+                  "context_manipulation", "injection_via_encoding", "payload_injection"]
+    counts = [110] if large else [3, 3, 3, 3, 2, 2, 2]
+    checks, findings = [], []
+    for index, count in enumerate(counts):
+        rule = "prompt_injection." + categories[index]
+        check = dict(rule_id=rule, probe_id=rule + ".sample", probe_version="1:browser-fixture",
+                     evidence_context_id="browser-fixture-policy-v1", status="completed", outcome="confirmed",
+                     requests_attempted=count, responses_evaluated=count)
+        checks.append(check)
+        for sample in range(count):
+            findings.append(dict(id=f"fixture-{index}-{sample}", agent_id="finding-fixture-asset",
+                vulnerability_type="prompt_injection", category=categories[index], severity="high", evidence_status="confirmed",
+                rule_id=rule, probe_id=check["probe_id"], probe_version=check["probe_version"],
+                evidence_context_id=check["evidence_context_id"],
+                title=f"Boundary {sample}" if distinct else "<img src=x onerror=alert(1)>",
+                description="Synthetic protected disclosure, presentation fixture only",
+                payload="x" * 20000 if large and sample == 0 else f"Synthetic sample {sample}",
+                response_excerpt="[GENERATED_TEXT_OMITTED]", remediation="Review the synthetic boundary"))
+    return dict(schema_version="1.0", check_schema_version="1.0", scan_id=identifier, status="completed",
+        scan_type="full", risk_assessment_status="completed", security_results=[], risk_assessments=[],
+        agents=[dict(id="finding-fixture-asset", name="<fixture>", provider="openai-compatible", model="fixture-model",
+            security_status="completed", risk_score=70, risk_level="high", risk_scoring_policy="severity-floor-v2",
+            risk_coverage_status="sampled", checks=checks, vulnerabilities=findings)],
+        summary=dict(agents_tested=1, overall_risk_score=70, vulnerabilities_found=len(findings), checks_completed=len(checks)))
+
+
 def fixture_database(directory):
     """Accept only an empty, direct temporary fixture directory."""
     directory = Path(directory)
@@ -37,6 +66,7 @@ def main(directory):
         OPERATOR_ORGANIZATION_ID="browser-fixture", DATABASE_URL="sqlite:///" + str(database),
         SCAN_ALLOWED_NETWORKS="127.0.0.1/32", SCAN_ALLOW_LOOPBACK="true",
         SCAN_ALLOWED_PATH_ROOTS="", MAX_CONCURRENT_SCANS="1", SCAN_TIMEOUT_SECONDS="60",
+        SCAN_EVIDENCE_PROFILES_FILE="",
     )
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     import app
@@ -103,6 +133,14 @@ def main(directory):
                             description="Fixture only; no generated text or protected value is stored")])
                 app.db.session.add(app.ScanSession(id=identifier, organization_id="browser-fixture",
                     scan_name=identifier, scan_type="full", status=status, progress=20 if status == "running" else 100,
+                    target_scope={}, scan_config={}))
+                app.db.session.add(app.ScanResult(scan_id=identifier, result=report))
+            for name, large, distinct in (("finding-groups", False, False), ("finding-cap", True, True),
+                                           ("occurrence-cap", True, False)):
+                identifier = "fixture-" + name
+                report = prompt_report(identifier, large=large, distinct=distinct)
+                app.db.session.add(app.ScanSession(id=identifier, organization_id="browser-fixture",
+                    scan_name=identifier, scan_type="full", status="completed", progress=100,
                     target_scope={}, scan_config={}))
                 app.db.session.add(app.ScanResult(scan_id=identifier, result=report))
             app.db.session.commit()

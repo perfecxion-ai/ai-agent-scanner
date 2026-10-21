@@ -81,6 +81,40 @@ def test_fixture_engine_guard_precedes_any_startup(fixture_module, tmp_path, mon
     assert dict(os.environ) == previous
 
 
+def test_fixture_disables_inherited_evidence_registry_before_import(fixture_module, tmp_path, monkeypatch):
+    monkeypatch.setenv("SCAN_EVIDENCE_PROFILES_FILE", "/not-accessed/operator-registry.json")
+    monkeypatch.setattr(fixture_module, "fixture_database", lambda directory: tmp_path / "fixture.db")
+    observed = []
+
+    def context():
+        observed.append(os.environ.get("SCAN_EVIDENCE_PROFILES_FILE"))
+        return nullcontext()
+
+    fake = SimpleNamespace(app=SimpleNamespace(app_context=context), db=SimpleNamespace(engine=engine("foreign.db")))
+    monkeypatch.setitem(sys.modules, "app", fake)
+    with patch.dict(os.environ), patch.object(sys, "path", sys.path.copy()):
+        with pytest.raises(ValueError, match="owned temporary SQLite"):
+            fixture_module.main(tmp_path)
+    assert observed == [""]
+    assert os.environ["SCAN_EVIDENCE_PROFILES_FILE"] == "/not-accessed/operator-registry.json"
+
+
+@pytest.mark.parametrize("large,distinct,total,checks", [(False, False, 18, 7), (True, True, 110, 1), (True, False, 110, 1)])
+def test_presentation_fixture_records_are_bounded_and_versioned(fixture_module, large, distinct, total, checks):
+    from src.core.contracts import validate_scan_result
+    from src.core.pipeline import to_sarif
+
+    report = fixture_module.prompt_report("fixture-presentation", large=large, distinct=distinct)
+    assert validate_scan_result(report) is report
+    agent = report["agents"][0]
+    assert len(agent["vulnerabilities"]) == total
+    assert len(agent["checks"]) == checks
+    assert len({finding["id"] for finding in agent["vulnerabilities"]}) == total
+    assert len(to_sarif(report)["runs"][0]["results"]) == total
+    assert max(len(finding["payload"]) for finding in agent["vulnerabilities"]) <= 20000
+    assert report["summary"]["overall_risk_score"] == 70
+
+
 def test_startup_handshake_validates_complete_bounded_messages(smoke_module):
     messages = [(dict(port=12345, control_key="a" * 48), None),
                 (dict(port=True, control_key="a" * 48), ValueError),
