@@ -19,6 +19,7 @@ class AIAgentScanner {
         this.selection = 0;
         this.scanId = null;
         this.terminalAnnouncement = '';
+        this.noticeOwner = null;
         this.timer = null;
         this.pending = new Set();
         this.historyOffset = 0;
@@ -90,14 +91,19 @@ class AIAgentScanner {
 
     el(id) { return this.doc.getElementById(id); }
     on(id, event, handler) { this.el(id).addEventListener(event, handler); }
-    notice(message, error = false) {
+    notice(message, error = false, owner = null) {
         this.el('notice').textContent = message;
         this.el('notice').className = error ? 'notice error' : 'notice';
+        this.noticeOwner = owner;
     }
-    handleError(error) {
-        if (error.name !== 'AbortError' && error.message !== 'Session changed') this.notice(error.message, true);
+    handleError(error, owner = null) {
+        if (error.name !== 'AbortError' && error.message !== 'Session changed') this.notice(error.message, true, owner);
+    }
+    clearReportNotice() {
+        if (this.noticeOwner === 'scan-report') this.notice('');
     }
     clearReport() {
+        this.clearReportNotice();
         this.reportState = null;
         this.el('reportView').hidden = true;
         for (const id of ['assetList', 'findingList', 'observationList']) this.el(id).replaceChildren();
@@ -705,6 +711,7 @@ class AIAgentScanner {
         if (!this.token || !this.scanId) return;
         const selection = this.selection;
         const epoch = this.epoch;
+        let reportRequest = false;
         try {
             const data = await this.request(this.path('status'));
             if (epoch !== this.epoch || selection !== this.selection) return;
@@ -714,6 +721,7 @@ class AIAgentScanner {
             const terminal = TERMINAL_STATES.has(data.status);
             this.el('cancelScanBtn').disabled = terminal;
             if (terminal) {
+                reportRequest = true;
                 try {
                     const reportState = await this.loadResults(selection);
                     if (epoch === this.epoch && selection === this.selection) this.announceTerminal(data.status, reportState);
@@ -726,7 +734,7 @@ class AIAgentScanner {
             if (epoch === this.epoch && selection === this.selection) {
                 this.el('scanStatus').textContent = 'Unavailable';
                 this.el('cancelScanBtn').disabled = true;
-                this.handleError(error);
+                this.handleError(error, reportRequest ? 'scan-report' : null);
             }
         }
     }
@@ -755,11 +763,12 @@ class AIAgentScanner {
         if (this.reportState) return this.reportState;
         const report = data.results.pipeline;
         if (!report) {
-            this.notice('This scan has no versioned report. Historical numeric scores may not represent completed testing.');
+            this.notice('This scan has no versioned report. Historical numeric scores may not represent completed testing.', false, 'scan-report');
             this.reportState = 'historical';
             return this.reportState;
         }
         this.renderReport(report);
+        this.clearReportNotice();
         this.el('jsonBtn').disabled = this.el('sarifBtn').disabled = false;
         this.reportState = 'available';
         return this.reportState;

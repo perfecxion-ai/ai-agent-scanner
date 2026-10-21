@@ -159,6 +159,53 @@ test('nonterminal updates do not announce completion or move focus', async () =>
     assert.equal(doc.activeElement, app.el('operatorKey'));
 });
 
+test('selecting a different scan clears only historical report-owned notices', async () => {
+    for (const unrelated of [false, true]) {
+        const {app} = fixture(async path => {
+            if (path.includes('/audit?')) return response({events: [], next_after: 0});
+            if (path.endsWith('/status')) return response({status: path.includes('/historical/') ? 'completed' : 'partial'});
+            return response({results: {pipeline: path.includes('/historical/') ? null : {...checkedReport([]), status: 'partial'}}});
+        });
+        app.token = 'fixture-token';
+        await app.selectScan('historical');
+        assert.match(app.el('notice').textContent, /no versioned report/);
+        if (unrelated) app.notice('Template revision conflict. Reload before editing.', true);
+        await app.selectScan('partial');
+        assert.equal(app.el('notice').textContent, unrelated ? 'Template revision conflict. Reload before editing.' : '');
+        assert.equal(app.el('notice').className, unrelated ? 'notice error' : 'notice');
+        assert.match(app.el('scanAnnouncement').textContent, /partial results\. Report available/);
+    }
+});
+
+test('report recovery clears its own fetch error but preserves newer unrelated notices', async () => {
+    for (const unrelated of [false, true]) {
+        let fail = true;
+        const {app} = fixture(async path => path.endsWith('/status') ? response({status: 'completed'}) :
+            fail ? response({error: 'Report temporarily unavailable'}, 503) : response({results: {pipeline: checkedReport([])}}));
+        app.token = 'fixture-token'; app.scanId = 'fixture';
+        await app.poll();
+        assert.equal(app.el('notice').textContent, 'Report temporarily unavailable');
+        assert.equal(app.noticeOwner, 'scan-report');
+        if (unrelated) app.notice('Schedule policy review required.', true);
+        fail = false;
+        await app.poll();
+        assert.equal(app.el('notice').textContent, unrelated ? 'Schedule policy review required.' : '');
+        assert.equal(app.el('notice').className, unrelated ? 'notice error' : 'notice');
+        assert.match(app.el('scanAnnouncement').textContent, /Report available/);
+    }
+});
+
+test('report notice reset does not clear a newer unrelated message even when its text is identical', () => {
+    const {app} = fixture();
+    app.notice('Temporarily unavailable', true, 'scan-report');
+    app.notice('Temporarily unavailable', true);
+    app.clearReport();
+    assert.equal(app.el('notice').textContent, 'Temporarily unavailable');
+    app.logout();
+    assert.equal(app.el('notice').textContent, 'Signed out.');
+    assert.equal(app.noticeOwner, null);
+});
+
 test('stale terminal results and failures cannot announce or focus after selection or logout', async () => {
     for (const logout of [false, true]) {
         for (const fail of [false, true]) {
