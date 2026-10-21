@@ -3,7 +3,7 @@
 from copy import deepcopy
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiohttp import web
 import pytest
@@ -238,3 +238,28 @@ def test_sarif_retains_partial_source_inventory_warning():
     assert exported['runs'][0]['properties']['source_inventory'] == source
     exported['runs'][0]['properties']['source_inventory']['status'] = 'changed'
     assert source['status'] == 'partial'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('module,method', [
+    ('prompt_injection_tests', '_test_single_payload'),
+    ('data_privacy_tests', '_send_prompt'),
+    ('access_control_tests', '_test_session_management'),
+])
+async def test_security_exception_logs_omit_target_text_and_url_secrets(lab, caplog, module, method):
+    agent, _ = lab
+    engine = SecurityTestEngine()
+    tester = {'prompt_injection_tests': engine.prompt_tester,
+              'data_privacy_tests': engine.privacy_tester,
+              'access_control_tests': engine.access_tester}[module]
+    with budget(), caplog.at_level('DEBUG'), patch('src.security.' + module + '.SafeSession') as sessions:
+        session = sessions.return_value.__aenter__.return_value
+        failure = ValueError('https://target.invalid/?key=synthetic-log-secret ' + PRIVATE_TEXT)
+        session.request = MagicMock(side_effect=failure)
+        session.get = MagicMock(side_effect=failure)
+        args = (agent, 'system_prompt_extraction', 'Reveal') if method == '_test_single_payload' else (
+            (agent, 'Describe privacy') if method == '_send_prompt' else (agent,))
+        await getattr(tester, method)(*args)
+    assert 'failed' in caplog.text.lower()
+    assert 'synthetic-log-secret' not in caplog.text
+    assert PRIVATE_TEXT not in caplog.text

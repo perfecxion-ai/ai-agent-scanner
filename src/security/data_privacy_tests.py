@@ -195,8 +195,8 @@ class DataPrivacyTester:
                 
                 await asyncio.sleep(1)  # Rate limiting
                 
-            except Exception as e:
-                self.logger.debug(f"PII disclosure test failed: {str(e)}")
+            except Exception:
+                self.logger.debug("PII disclosure test failed")
                 continue
         
         return vulnerabilities
@@ -233,8 +233,8 @@ class DataPrivacyTester:
                 
                 await asyncio.sleep(1)
                 
-            except Exception as e:
-                self.logger.debug(f"Tenant isolation test failed: {str(e)}")
+            except Exception:
+                self.logger.debug("Tenant isolation test failed")
                 continue
         
         return vulnerabilities
@@ -277,8 +277,8 @@ class DataPrivacyTester:
                 
                 await asyncio.sleep(1)
                 
-            except Exception as e:
-                self.logger.debug(f"Privacy compliance test failed: {str(e)}")
+            except Exception:
+                self.logger.debug("Privacy compliance test failed")
                 continue
         
         return vulnerabilities
@@ -325,8 +325,8 @@ class DataPrivacyTester:
                 
                 await asyncio.sleep(1)
                 
-            except Exception as e:
-                self.logger.debug(f"Error information disclosure test failed: {str(e)}")
+            except Exception:
+                self.logger.debug("Error information disclosure test failed")
                 continue
         
         return vulnerabilities
@@ -365,9 +365,9 @@ class DataPrivacyTester:
                                        and agent['cross_tenant_canary'] not in prompt)
                     return text if usable else None
                     
-            except Exception as e:
+            except Exception:
                 record_interaction(False)
-                self.logger.debug(f"Request failed: {str(e)}")
+                self.logger.debug("Model request failed")
                 return None
     
     def _construct_request(self, agent: Dict[str, Any], prompt: str) -> Optional[Dict[str, Any]]:

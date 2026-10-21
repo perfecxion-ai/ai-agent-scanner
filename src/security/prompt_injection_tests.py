@@ -297,8 +297,8 @@ class PromptInjectionTester:
                 # Add delay between requests to be respectful
                 await asyncio.sleep(1)
                 
-            except Exception as e:
-                self.logger.warning(f"Error testing payload: {str(e)}")
+            except Exception:
+                self.logger.warning("Error testing payload")
                 continue
         
         return vulnerabilities
@@ -339,9 +339,9 @@ class PromptInjectionTester:
                     
                     return vulnerability
                     
-            except Exception as e:
+            except Exception:
                 record_interaction(False)
-                self.logger.debug(f"Request failed: {str(e)}")
+                self.logger.debug("Model request failed")
                 return None
     
     def _construct_request(self, agent: Dict[str, Any], payload: str) -> Optional[Dict[str, Any]]:

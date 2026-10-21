@@ -224,8 +224,8 @@ class AccessControlTester:
                 
                 await asyncio.sleep(0.5)  # Rate limiting
                 
-            except Exception as e:
-                self.logger.debug(f"Auth bypass test failed: {str(e)}")
+            except Exception:
+                self.logger.debug("Auth bypass test failed")
                 continue
         
         return vulnerabilities
@@ -271,9 +271,9 @@ class AccessControlTester:
                             'remediation': "Implement proper authentication checks and validate all authorization headers."
                         }
                         
-            except Exception as e:
+            except Exception:
                 record_interaction(False)
-                self.logger.debug(f"Bypass test failed: {str(e)}")
+                self.logger.debug("Bypass test failed")
                 return None
         
         return None
@@ -322,9 +322,9 @@ class AccessControlTester:
                 
                 await asyncio.sleep(1)  # Rate limiting
                 
-            except Exception as e:
+            except Exception:
                 record_interaction(False)
-                self.logger.debug(f"Credential test failed: {str(e)}")
+                self.logger.debug("Credential test failed")
                 continue
         
         return vulnerabilities
@@ -380,9 +380,9 @@ class AccessControlTester:
                     
                     await asyncio.sleep(0.3)
                 
-            except Exception as e:
+            except Exception:
                 record_interaction(False)
-                self.logger.debug(f"API key test failed: {str(e)}")
+                self.logger.debug("API key test failed")
                 continue
         
         return vulnerabilities
@@ -437,9 +437,9 @@ class AccessControlTester:
                 
                 await asyncio.sleep(0.5)
                 
-            except Exception as e:
+            except Exception:
                 record_interaction(False)
-                self.logger.debug(f"Authorization bypass test failed: {str(e)}")
+                self.logger.debug("Authorization bypass test failed")
                 continue
         
         return vulnerabilities
@@ -493,9 +493,9 @@ class AccessControlTester:
                         'remediation': "Implement rate limiting to prevent abuse and DoS attacks."
                     })
         
-        except Exception as e:
+        except Exception:
             record_interaction(False)
-            self.logger.debug(f"Rate limiting test failed: {str(e)}")
+            self.logger.debug("Rate limiting test failed")
         
         return vulnerabilities
     
@@ -546,9 +546,9 @@ class AccessControlTester:
                                     'remediation': "Set Secure, HttpOnly, and SameSite attributes on session cookies."
                                 })
         
-        except Exception as e:
+        except Exception:
             record_interaction(False)
-            self.logger.debug(f"Session management test failed: {str(e)}")
+            self.logger.debug("Session management test failed")
         
         return vulnerabilities
     
