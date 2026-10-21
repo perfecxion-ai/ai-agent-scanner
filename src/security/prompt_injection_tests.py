@@ -7,7 +7,7 @@ Prompt injection is a critical vulnerability where malicious input can manipulat
 an AI model to behave in unintended ways, bypass safety measures, or expose
 sensitive information.
 
-Author: scthornton
+Author: Scott Thornton
 Created: 2024
 License: Private - All rights reserved
 

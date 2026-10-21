@@ -34,7 +34,7 @@ Tested across lab environments and authorized enterprise assessments, the patter
 
 ## What We Built
 
-[AI Agent Scanner](https://github.com/scthornton/ai-agent-scanner) is asset inventory for AI. It does three things:
+[AI Agent Scanner](https://github.com/perfecxion-ai/ai-agent-scanner) is asset inventory for AI. It does three things:
 
 **1. Discover** — Find AI agents you didn't know about.
 
@@ -135,16 +135,16 @@ We'd rather be honest about gaps than have a security researcher discover our RE
 ## Get Started
 
 ```bash
-git clone https://github.com/scthornton/ai-agent-scanner.git
+git clone https://github.com/perfecxion-ai/ai-agent-scanner.git
 cd ai-agent-scanner
 pip install -r requirements.txt
 python scanner_cli.py scan --network YOUR_RANGE --output results.json
 ```
 
-[GPLv3 licensed](https://github.com/scthornton/ai-agent-scanner/blob/main/LICENSE). Use it. Break it. Tell us what's missing.
+[GPLv3 licensed](https://github.com/perfecxion-ai/ai-agent-scanner/blob/main/LICENSE). Use it. Break it. Tell us what's missing.
 
 The AI agents are already running in your infrastructure. The only question is whether you know where they are.
 
 ---
 
-*Scott Thornton is an AI Security Researcher at [perfecXion.ai](https://perfecxion.ai). The AI Agent Scanner is open source at [github.com/scthornton/ai-agent-scanner](https://github.com/scthornton/ai-agent-scanner).*
+*Scott Thornton is an AI Security Researcher at [perfecXion.ai](https://perfecxion.ai). The AI Agent Scanner is open source at [github.com/perfecxion-ai/ai-agent-scanner](https://github.com/perfecxion-ai/ai-agent-scanner).*

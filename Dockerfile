@@ -7,7 +7,7 @@ RUN pip wheel --no-cache-dir --wheel-dir /wheels ".[server]"
 
 FROM python:3.12-slim
 
-LABEL maintainer="Scott Thornton <pluckymon@proton.me>"
+LABEL maintainer="perfecXion.ai"
 LABEL description="AI Agent Scanner - Discover, assess, and secure AI agents"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app

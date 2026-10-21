@@ -1,0 +1,6 @@
+# Local assistant instructions and lab setup never belong in distributions.
+global-exclude AGENTS.md AGENTS.*.md CLAUDE.md claude.md
+exclude lab.toml
+exclude docs/images/scan-demo.png
+prune .codex
+prune .claude

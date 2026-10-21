@@ -15,3 +15,11 @@ build
 *.egg-info
 .venv
 ai-scanner-env
+**/AGENTS.md
+**/AGENTS.*.md
+**/CLAUDE.md
+**/claude.md
+**/.codex
+**/.claude
+lab.toml
+docs/images/scan-demo.png

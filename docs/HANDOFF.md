@@ -254,7 +254,9 @@ sh scripts/package-smoke.sh dist/*.whl
 Use the existing virtual environment when available. Independent reviewers should
 exercise regression cases and inspect failure paths. Every implementation PR must
 pass the current Python matrix, lint, dependency audit, package, and container
-checks before merge. Follow [AGENTS.md](../AGENTS.md) for Git identity and delivery.
+checks before merge. Public delivery rules are in the
+[engineering plan](ENGINEERING_PLAN.md#delivery-rules); machine-local assistant
+instructions are intentionally not distributed.
 
 Do not reuse stale implementation branches without checking their contents.
 Earlier agent worktrees remain on old branches; create a fresh worktree from the
