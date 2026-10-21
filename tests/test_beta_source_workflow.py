@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import pytest
 
-from src.core.transport import ScanBudget, scan_transport
+from src.core.transport import ScanBudget, current_budget, scan_transport
 from tests.test_api_auth import api as api, headers
 from tests.test_pipeline import asset, engines, add_scan
 
@@ -133,3 +133,14 @@ async def test_partial_source_template_and_schedule_policy_token(api, monkeypatc
     row = module.db.session.get(module.ScanTemplate, response.json['template']['id'])
     _, token = module._schedule_token(module._template_definition(row), 'tenant-a')
     assert token[1] == 'partial'
+
+
+def test_server_request_timeout_is_owned_by_global_policy(api, monkeypatch):
+    module, _ = api
+    monkeypatch.setitem(module.app.config, 'SCAN_REQUEST_TIMEOUT_SECONDS', 75)
+    observed = []
+    async def execute(*args):
+        observed.append(current_budget().request_timeout_seconds)
+    monkeypatch.setattr(module, '_execute_scan', execute)
+    module._run_scan_in_thread('fixture', 'discovery_only', {}, {})
+    assert observed == [75]

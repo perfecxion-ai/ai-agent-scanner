@@ -81,6 +81,7 @@ for _setting, _default, _maximum in (
     ("SCAN_MAX_HOSTS", 1024, 65536), ("SCAN_MAX_FILES", 10000, 100000),
     ("SCAN_TIMEOUT_SECONDS", 300, 3600), ("MAX_CONCURRENT_SCANS", 2, 32),
     ("SCAN_MAX_REQUESTS", 500, 10000), ("SCAN_MAX_RESPONSE_BYTES", 1048576, 16777216),
+    ("SCAN_REQUEST_TIMEOUT_SECONDS", 30, 300),
     ("SCAN_MAX_QUEUED", 32, 10000),
     ("SCAN_MAX_TEMPLATES", 64, 1024),
     ("SCAN_MAX_SCHEDULES", 64, 1024), ("SCAN_MAX_SCHEDULES_GLOBAL", 256, 4096),
@@ -1143,6 +1144,7 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
             allow_loopback=app.config["SCAN_ALLOW_LOOPBACK"],
             max_requests=app.config["SCAN_MAX_REQUESTS"],
             max_response_bytes=app.config["SCAN_MAX_RESPONSE_BYTES"],
+            request_timeout_seconds=app.config["SCAN_REQUEST_TIMEOUT_SECONDS"],
         )
         with scan_transport(budget):
             loop.run_until_complete(

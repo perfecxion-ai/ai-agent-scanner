@@ -42,7 +42,9 @@ A missing service can produce an empty inventory.
 The shared scan budget defaults to 500 DNS/TCP/HTTP attempts and a 1 MiB
 response limit; exhausted budgets produce incomplete results. `discover` and
 `scan` expose `--max-requests` (1-10000), `--max-response-bytes` (1-16777216),
-and `--timeout-seconds` (1-3600, default 300). Loopback requires
+`--timeout-seconds` (1-3600, default 300), and `--request-timeout-seconds`
+(1-300, default 30). The overall deadline still bounds the scan, and no active
+request is retried automatically. Loopback requires
 `--allow-loopback`; metadata and reserved address classes remain forbidden.
 Local CLI targets are operator-selected. Server scans additionally require
 explicit allowlists and enforce their own configured budgets.

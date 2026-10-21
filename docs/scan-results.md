@@ -49,7 +49,10 @@ Targets support repeated `--network`, `--domain`, `--repository`, and `--traffic
 discovery. CLI targets are explicitly authorized local inputs; API server allowlists do not apply.
 Reserved and metadata addresses remain forbidden, and loopback requires
 `--allow-loopback`. Shared limits are `--max-requests`, `--max-response-bytes`, and
-`--timeout-seconds`; see [CLI bounds](../README.md#supported-workflows).
+`--timeout-seconds`, and `--request-timeout-seconds` (default 30, maximum 300);
+see [CLI bounds](../README.md#supported-workflows). Server requests instead obey
+the configured `SCAN_REQUEST_TIMEOUT_SECONDS` and hard scan deadline. Timeout
+configuration does not enable retries or additional security controls.
 After discovery, select models with repeatable `--model-override ASSET_ID=MODEL`
 using exact stable IDs from `agents[].id`. Unknown or ambiguous selections stop
 before active probes, and never assign models to unrelated providers.

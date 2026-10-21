@@ -50,6 +50,8 @@ def budget_options(function):
                      show_default=True, help='Maximum bytes per HTTP response'),
         click.option('--timeout-seconds', type=click.IntRange(1, 3600), default=300,
                      show_default=True, help='Overall scan deadline'),
+        click.option('--request-timeout-seconds', type=click.FloatRange(1, 300), default=30,
+                     show_default=True, help='Maximum duration of each HTTP request'),
         click.option('--allow-loopback', is_flag=True, help='Explicitly permit local loopback targets'),
     ]):
         function = option(function)
@@ -144,13 +146,14 @@ def load_targets(network, domain, repository=(), traffic=(), config=None, allow_
 @click.option('--output', '-o', help='JSON output file')
 @click.option('--verbose', '-v', is_flag=True, help='Show completion details')
 def discover(network, domain, repository, traffic, config, output, verbose,
-             max_requests, max_response_bytes, timeout_seconds, allow_loopback):
+             max_requests, max_response_bytes, timeout_seconds, allow_loopback, request_timeout_seconds):
     """Discover agents across network, repositories, cloud, and traffic sources."""
     scope, agents = load_targets(network, domain, repository, traffic, config, allow_loopback)
     if agents is not None:
         raise click.ClickException("Explicit agents are supported by scan only")
     asyncio.run(_execute(scope, None, output, 'json', 'discovery_only', verbose,
-                         max_requests, max_response_bytes, timeout_seconds, allow_loopback))
+                         max_requests, max_response_bytes, timeout_seconds, allow_loopback,
+                         request_timeout_seconds=request_timeout_seconds))
 
 
 @cli.command()
@@ -163,7 +166,8 @@ def discover(network, domain, repository, traffic, config, output, verbose,
 @click.option('--verbose', '-v', is_flag=True, help='Show completion details')
 @click.option('--skip-security', is_flag=True, help='Discovery only')
 def scan(network, domain, repository, traffic, config, output, fmt, verbose, skip_security,
-         model_override, max_requests, max_response_bytes, timeout_seconds, allow_loopback):
+         model_override, max_requests, max_response_bytes, timeout_seconds, allow_loopback,
+         request_timeout_seconds):
     """Run shared discovery, security, risk, and report pipeline."""
     scope, agents = load_targets(network, domain, repository, traffic, config, allow_loopback)
     if agents is not None and skip_security:
@@ -182,15 +186,17 @@ def scan(network, domain, repository, traffic, config, output, fmt, verbose, ski
         raise click.UsageError('--model-override requires security testing')
     mode = 'security_only' if agents is not None else ('discovery_only' if skip_security else 'full')
     asyncio.run(_execute(scope, agents, output, fmt, mode, verbose,
-                         max_requests, max_response_bytes, timeout_seconds, allow_loopback, selections))
+                         max_requests, max_response_bytes, timeout_seconds, allow_loopback, selections,
+                         request_timeout_seconds))
 
 
 async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
                    max_response_bytes=1048576, timeout_seconds=300, allow_loopback=False,
-                   selections=None):
+                   selections=None, request_timeout_seconds=30):
     try:
         with scan_transport(ScanBudget(max_requests=max_requests, max_response_bytes=max_response_bytes,
-                                       allow_loopback=allow_loopback)):
+                                       allow_loopback=allow_loopback,
+                                       request_timeout_seconds=request_timeout_seconds)):
             result = await asyncio.wait_for(
                 run_pipeline(DiscoveryEngine(), SecurityTestEngine(), RiskAssessment(),
                              scope, mode, agents=agents,
@@ -209,7 +215,7 @@ async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
     if output:
         try:
             write_private_text(output, serialized + '\n')
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             raise click.ClickException("Unable to write report") from exc
         click.echo(f"Report saved to {output}")
     else:
@@ -384,7 +390,7 @@ def _write_derived_report(document, output, sources):
             raise click.ClickException("Output must be a different file from the inputs")
     try:
         write_private_text(destination, json.dumps(document, indent=2) + '\n')
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         raise click.ClickException("Unable to write derived report") from exc
 
 
