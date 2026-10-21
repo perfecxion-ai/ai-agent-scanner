@@ -6,6 +6,9 @@ These changes are engineering work on the current branch, not a published releas
 
 ### Security and correctness
 
+- Require certifi 2026.10.19 or newer to exclude the affected emSign trust roots
+  described in GHSA-6q48-6c7w-9gw2. Existing environments need a dependency
+  upgrade; already built images need rebuilding before this change takes effect.
 - Require configured operator authentication and scope scan access to its organization.
 - Add server-owned network and filesystem boundaries, bounded admission, scan
   deadlines, connection-time address checks, and request/response budgets.
