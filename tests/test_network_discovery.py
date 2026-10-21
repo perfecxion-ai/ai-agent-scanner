@@ -539,12 +539,15 @@ async def test_http_timeout_marks_incomplete(service):
     responses['/api/tags'] = slow
     scanner = NetworkScanner()
     scanner.timeout = 0.01
+    # Isolate one request so unrelated inventory routes cannot also time out.
+    signatures = {'ollama': DiscoveryEngine().ai_signatures['ollama']}
     try:
         with scan_transport(budget()) as limits:
-            assert not await scanner._identify_ai_service('127.0.0.1', port, DiscoveryEngine().ai_signatures)
+            assert not await scanner._identify_ai_service('127.0.0.1', port, signatures)
     finally:
         release.set()
-    assert limits.failures == 1
+    assert limits.requests == limits.failures == 1
+    assert limits.rejections == 0
 
 
 @pytest.mark.asyncio
