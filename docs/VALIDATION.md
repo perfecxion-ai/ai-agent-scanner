@@ -1,6 +1,6 @@
 # Engineering validation checkpoint
 
-Date: 2026-10-13. This records the beta build-out, not a release certification.
+Date: 2026-10-20. This records the beta build-out, not a release certification.
 The first checkpoint followed PRs #1 through #14. PRs #15 through #22 add
 discovery, check contracts, SQLite upgrades/audit history, local queue acceptance,
 and dashboard evidence views. None of these merges publishes a package.
@@ -12,15 +12,17 @@ API templates with an exact SQLite version 1 to 2 upgrade.
 PRs #32 and #33 add manual dashboard template controls and finite API schedules
 with exact SQLite upgrades to schema version 3.
 PR #35 adds reviewed-pin dashboard schedules and targeted keyboard acceptance.
+PR #37 adds the remediated certifi dependency floor. PR #38 adds focused
+accessibility improvements and a reusable optional Chromium smoke workflow.
 
 ## Automated checks
 
-- Local Linux/Python 3.10.20: 1026 pytest cases passed. The suite invokes 64 Node
+- Local Linux/Python 3.10.20: 1039 pytest cases passed. The suite invokes 78 Node
   controller tests, which also passed independently.
 - Line coverage across `src`, `app`, and `scanner_cli`: 90%. The shared pipeline
   is 95%, transport 99%, durable jobs 92%, schema acceptance 94%, and API 94%.
   Mocked cloud inventory is 92%, traffic parsing 89%, and network discovery 97%.
-  The live MCP client and controlled policy module are each 96%; the small strict
+  The live MCP client is 95% and the controlled policy module 96%; the small strict
   template projection helper is 100%; the schedule service is 96%. This measures executed
   source lines, not attack coverage or security effectiveness.
 - Ruff and the configured medium/high-severity Bandit gate pass, including API
@@ -75,6 +77,12 @@ PR #35 adds reviewed-pin dashboard schedules and targeted keyboard acceptance.
   3.12 environment. Network exponent overflow is rejected. Request and streamed
   body timeouts each record one failure, including Python 3.10's distinct exception.
 - Container build, readiness, and readiness after restart pass.
+- Thirteen mandatory tests cover the optional browser fixture's temporary-path
+  and effective-engine guards, environment restoration, bounded startup messages,
+  and parent-owned process/database cleanup. They do not require Playwright.
+- Local pip check and dependency audit pass after upgrading certifi to 2026.10.19.
+  The wheel carries the corresponding minimum requirement. This is not remediation
+  of already deployed environments, images, or system trust stores.
 
 CI repeats tests and wheel checks on Python 3.10 through 3.13, audits installed
 dependencies including cloud/server extras, runs lint/source security checks,
@@ -125,9 +133,26 @@ operator key after sign-out. Background list/occurrence refresh does not move
 focus. Labels, linked pin/bounds hints, polite notices, and 320/390/1440 layouts
 were inspected. Stronger baseline control borders, linked scope/model hints,
 named check/audit regions, final Show more focus, and completion announcements
-remain the next focused acceptance slice. Screen-reader workflows and comprehensive
+were the next focused slice at that checkpoint. Screen-reader workflows and comprehensive
 accessibility conformance were not evaluated. All fixture servers stopped;
 the browser artifacts remain in `/tmp/ai-scanner-schedule-browser-rDbOYW`.
+
+The accessibility continuation checks linked scope/model guidance, named scroll
+regions, focus ownership at 36-record final pages and the 100-of-110 display cap,
+unchanged terminal polling without report replacement or duplicate announcements,
+all five terminal states, unavailable/historical reports, report recovery, stale
+selection/logout/401, and unrelated notice preservation. Real Chromium reflow at
+320/390/1440 pixels passes without horizontal overflow. Enabled borders measure
+4.226:1 against white; the existing focus outline measures 3.407:1. No external
+browser requests, CSP violations, page errors, or browser storage were observed.
+
+The checked-in optional [browser workflow](DEVELOPMENT.md#optional-chromium-dashboard-checks)
+uses actual Flask/authentication/SQLite with seeded synthetic reports, no real
+provider calls, and no enabled schedules. Parent-owned temporary database cleanup
+and fixture reaping passed on success, deliberate assertion failure, and browser
+launch failure. Mandatory tests separately cover startup and forced cleanup paths.
+Screenshots/logs are retained; fixture databases are removed. This is targeted
+keyboard/DOM acceptance, not screen-reader interoperability or full WCAG conformance.
 
 ## Local queue acceptance
 

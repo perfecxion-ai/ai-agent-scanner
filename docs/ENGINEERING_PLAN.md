@@ -109,6 +109,10 @@ These are source-review findings, not evidence of exploitation in a deployment.
   Exact version 1/2 SQLite upgrades initialize schema version 3. Schedule
   dashboard controls have independent controller, browser, and targeted keyboard
   acceptance. Explicit review gates creation and enablement; loading never enables.
+  Focused accessibility acceptance now covers control contrast, linked guidance,
+  named scroll regions, focus ownership, terminal feedback, and stale report notices.
+  An optional synthetic Chromium harness and mandatory isolation/cleanup tests
+  make those regressions reproducible without contacting real targets.
   External integrations and comprehensive accessibility acceptance remain pending.
 - M6 remains pending. Package and container CI are foundations, not completion of
   performance testing, deployment review, migration validation, or release sign-off.
