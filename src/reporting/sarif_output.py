@@ -8,6 +8,8 @@ Reference: https://sarifweb.azurewebsites.net/
 """
 
 import json
+
+from src.core.files import write_private_text
 from typing import Dict, List, Any
 from datetime import datetime, timezone
 
@@ -132,6 +134,5 @@ def write_sarif(
 ) -> str:
     """Generate SARIF and write to file. Returns the output path."""
     sarif = generate_sarif(vulnerabilities, scan_metadata)
-    with open(output_path, 'w') as f:
-        json.dump(sarif, f, indent=2)
+    write_private_text(output_path, json.dumps(sarif, indent=2))
     return output_path
