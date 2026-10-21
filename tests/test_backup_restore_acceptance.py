@@ -1,0 +1,273 @@
+"""The acceptance command never accepts an operator database path."""
+
+from contextlib import contextmanager
+import importlib.util
+import io
+import json
+import os
+from pathlib import Path
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+from types import SimpleNamespace
+from unittest.mock import Mock
+from unittest.mock import patch
+
+import pytest
+from sqlalchemy import create_engine
+
+
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "acceptance-backup-restore.py"
+spec = importlib.util.spec_from_file_location("backup_acceptance", SCRIPT)
+acceptance = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(acceptance)
+
+
+@contextmanager
+def owned_directory(case="v1"):
+    with tempfile.TemporaryDirectory(prefix="ai-scanner-backup-") as root:
+        directory = Path(root) / case
+        directory.mkdir(mode=0o700)
+        yield directory
+
+
+@pytest.mark.parametrize("optimized", [False, True])
+def test_complete_disposable_command(optimized, monkeypatch, tmp_path):
+    deployed = tmp_path / "must-not-open.sqlite"
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///" + str(deployed))
+    monkeypatch.setenv("SCAN_MAX_HOSTS", "invalid inherited setting")
+    monkeypatch.setenv("MAX_CONCURRENT_SCANS", "invalid inherited setting")
+    result = subprocess.run([sys.executable, *(["-O"] if optimized else []), str(SCRIPT),
+                             "--timeout-seconds", "5"], capture_output=True, text=True, timeout=90)
+    output = json.loads(result.stdout)
+    assert result.returncode == 0 and output["accepted"] is True, result.stdout
+    assert [item["case"] for item in output["cases"]] == list(acceptance.CASES)
+    assert all(item["accepted"] and len(item["assertions"]) >= 3 for item in output["cases"])
+    assert not deployed.exists()
+
+
+@pytest.mark.parametrize("value", ["0", "61", "nan", "inf"])
+def test_timeout_bounds(value):
+    result = subprocess.run([sys.executable, str(SCRIPT), "--timeout-seconds", value],
+                            capture_output=True, text=True, timeout=5)
+    assert result.returncode == 2
+
+
+def test_cli_has_no_source_or_destination_paths(tmp_path):
+    result = subprocess.run([sys.executable, str(SCRIPT), "--source", str(tmp_path / "deployed.sqlite")],
+                            capture_output=True, text=True, timeout=5)
+    assert result.returncode == 2 and not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("url", ["sqlite:///:memory:", "sqlite:///file:fixture?mode=memory&uri=true",
+                                 "sqlite:////tmp/other.sqlite", "sqlite:///relative.sqlite"])
+def test_engine_guard_rejects_before_connect(url):
+    with owned_directory() as directory:
+        database = acceptance.owned_path(directory, "source.sqlite")
+        engine = create_engine(url)
+        engine.connect = Mock(side_effect=AssertionError("Must not connect"))
+        try:
+            with pytest.raises(RuntimeError, match="owned temporary"):
+                acceptance.guard_database(engine, database)
+            engine.connect.assert_not_called()
+            assert not database.exists()
+        finally:
+            engine.dispose()
+
+
+def test_foreign_dialect_and_cached_app_rejected_before_seed(monkeypatch):
+    with owned_directory() as directory:
+        cached = create_engine("sqlite:///:memory:")
+        cached.connect = Mock(side_effect=AssertionError("Must not connect"))
+        context = Mock()
+        context.__enter__ = Mock(return_value=None)
+        context.__exit__ = Mock(return_value=False)
+        server = SimpleNamespace(app=SimpleNamespace(app_context=lambda: context), db=SimpleNamespace(engine=cached))
+        monkeypatch.setitem(sys.modules, "app", server)
+        seeded = Mock(side_effect=AssertionError("Must not seed"))
+        monkeypatch.setattr(acceptance, "seed", seeded)
+        environment, search_path = os.environ.copy(), sys.path.copy()
+        with patch.dict(os.environ), patch.object(sys, "path", sys.path.copy()):
+            with pytest.raises(RuntimeError, match="owned temporary"):
+                acceptance.run_case(directory, "v1", 5)
+        assert os.environ == environment and sys.path == search_path
+        seeded.assert_not_called()
+        cached.connect.assert_not_called()
+        foreign = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"),
+                                  url=SimpleNamespace(database=str(directory / "source.sqlite"), query={}))
+        with pytest.raises(RuntimeError, match="owned temporary"):
+            acceptance.guard_database(foreign, directory / "source.sqlite")
+        cached.dispose()
+
+
+def test_owned_paths_reject_foreign_nested_names_and_symlinks(tmp_path):
+    with pytest.raises(RuntimeError, match="owned acceptance"):
+        acceptance.owned_path(tmp_path, "source.sqlite")
+    with owned_directory() as directory:
+        for name in ("../source.sqlite", "operator.sqlite"):
+            with pytest.raises(RuntimeError):
+                acceptance.owned_path(directory, name)
+        (directory / "source.sqlite").symlink_to(tmp_path / "absent.sqlite")
+        with pytest.raises(RuntimeError, match="symlinks"):
+            acceptance.owned_path(directory, "source.sqlite")
+
+
+def test_readonly_copy_no_clobber_and_expired_deadline():
+    with owned_directory() as directory:
+        source = directory / "source.sqlite"
+        with sqlite3.connect(source) as connection:
+            connection.execute("CREATE TABLE fixture (id INTEGER)")
+            connection.execute("INSERT INTO fixture VALUES (42)")
+        destination = directory / "backup.sqlite"
+        destination.write_bytes(b"do not replace")
+        with pytest.raises(FileExistsError):
+            acceptance.copy_database(source, destination, time.monotonic() + 2)
+        assert destination.read_bytes() == b"do not replace"
+        restored = directory / "restore.sqlite"
+        with pytest.raises(RuntimeError, match="deadline"):
+            acceptance.copy_database(source, restored, time.monotonic() - 1)
+        assert acceptance.snapshot(source)["rows"] == {"fixture": [(42,)]}
+
+
+def test_missing_and_foreign_sources_do_not_create_destinations(tmp_path):
+    with owned_directory() as directory:
+        with pytest.raises(RuntimeError, match="Missing regular"):
+            acceptance.copy_database(directory / "source.sqlite", directory / "backup.sqlite", time.monotonic() + 1)
+        assert not list(directory.iterdir())
+    with pytest.raises(RuntimeError, match="owned acceptance"):
+        acceptance.copy_database(tmp_path / "source.sqlite", tmp_path / "backup.sqlite", time.monotonic() + 1)
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("body", ["print('not json')", "print('{}')", "print('x' * 20000)",
+                                "import time; time.sleep(5)", "raise SystemExit(3)"])
+def test_bounded_child_output_and_reaping(body):
+    started = time.monotonic()
+    try:
+        returncode, output = acceptance.child_output([sys.executable, "-c", body], {}, os.environ.copy(), 0.2)
+        assert returncode != 0 or len(output) <= 16384
+    except RuntimeError as exc:
+        assert "timeout" in str(exc) or "exceeded" in str(exc)
+    assert time.monotonic() - started < 3
+
+
+@pytest.mark.parametrize("returncode,payload", [
+    (0, {}), (0, {"case": "v1", "accepted": False, "assertions": ["a"] * 3}),
+    (1, {"case": "v1", "accepted": True, "assertions": ["a"] * 3}),
+    (0, {"case": "v2", "accepted": True, "assertions": ["a"] * 3}),
+    (0, {"case": "v1", "accepted": True, "assertions": []}),
+    (0, {"case": "v1", "accepted": True, "assertions": ["a"] * 7}),
+])
+def test_parent_rejects_false_positive_results(monkeypatch, returncode, payload):
+    monkeypatch.setattr(acceptance, "child_output", lambda *_: (returncode, json.dumps(payload)))
+    with owned_directory() as directory:
+        assert acceptance.invoke_case(directory, "v1", 1)["accepted"] is False
+
+
+@pytest.mark.parametrize("failure", [OSError("spawn failed"), RuntimeError("Child process timeout")])
+def test_parent_cleans_directory_on_child_failure(monkeypatch, failure, capsys):
+    paths = []
+    def failed(directory, case, timeout):
+        paths.append(Path(directory).parent)
+        (Path(directory) / "source.sqlite").touch()
+        return {"case": case, "accepted": False, "failure": str(failure)}
+    monkeypatch.setattr(acceptance, "invoke_case", failed)
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT)])
+    assert acceptance.main() == 1
+    assert json.loads(capsys.readouterr().out)["accepted"] is False
+    assert paths and all(not path.exists() for path in paths)
+
+
+@pytest.mark.parametrize("mutation,accepted", [("normal", True), ("bypass_verification", False)])
+def test_incomplete_restore_fails_before_initializer_and_dispatcher(mutation, accepted):
+    code = ("import json, runpy, sys; m = runpy.run_path(" + repr(str(SCRIPT)) + "); "
+            "g = m['run_case'].__globals__; "
+            "g['exercise'] = lambda *a: (_ for _ in ()).throw(RuntimeError('Startup must not run')); ")
+    if mutation == "bypass_verification":
+        code += "g['verify_restored'] = lambda *a: None; "
+    code += "raise SystemExit(m['child_main']())"
+    with owned_directory("incomplete") as directory:
+        returncode, stdout = acceptance.child_output([sys.executable, "-c", code],
+            {"directory": str(directory), "case": "incomplete", "timeout": 5}, os.environ.copy(), 10)
+        output = json.loads(stdout)
+        assert output["accepted"] is accepted and returncode == (0 if accepted else 1), output
+        original = acceptance.snapshot(directory / "source.sqlite")
+        assert acceptance.snapshot(directory / "backup.sqlite") == original
+        if accepted:
+            assert acceptance.snapshot(directory / "old-copy.sqlite") == original
+
+
+def test_actual_spawn_failure_reports_failed_case(monkeypatch):
+    monkeypatch.setattr(acceptance.subprocess, "Popen", Mock(side_effect=OSError("spawn failed")))
+    with owned_directory() as directory:
+        assert acceptance.invoke_case(directory, "v1", 1) == {"case": "v1", "accepted": False, "failure": "OSError: spawn failed"}
+
+
+@pytest.mark.parametrize("stdout", ["not-json", "{", "[]", "null"])
+def test_parent_rejects_malformed_results(monkeypatch, stdout):
+    monkeypatch.setattr(acceptance, "child_output", lambda *_: (0, stdout))
+    with owned_directory() as directory:
+        assert acceptance.invoke_case(directory, "v1", 1)["accepted"] is False
+
+
+def test_child_failure_reason_is_preserved_but_bounded(monkeypatch):
+    monkeypatch.setattr(acceptance, "child_output", lambda *_: (1, json.dumps(
+        {"case": "v1", "accepted": False, "failure": "useful diagnostic " + "x" * 1000})))
+    with owned_directory() as directory:
+        output = acceptance.invoke_case(directory, "v1", 1)
+        assert output["accepted"] is False and output["failure"].startswith("useful diagnostic")
+        assert len(output["failure"]) == 512
+
+
+def test_query_engine_rejected_even_for_exact_owned_filename():
+    with owned_directory() as directory:
+        database = directory / "source.sqlite"
+        engine = create_engine("sqlite:///" + str(database) + "?mode=ro")
+        try:
+            with pytest.raises(RuntimeError, match="owned temporary"):
+                acceptance.guard_database(engine, database)
+            assert not database.exists()
+        finally:
+            engine.dispose()
+
+
+@pytest.mark.parametrize("payload", ["not-json", "[]", "{}"])
+def test_invalid_private_protocol_returns_failure_without_importing_app(monkeypatch, capsys, payload):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
+    assert acceptance.child_main() == 1
+    output = json.loads(capsys.readouterr().out)
+    assert output["accepted"] is False
+
+
+def test_real_timeout_reaped_before_parent_removes_directory(monkeypatch, capsys):
+    actual_child_output = acceptance.child_output
+    actual_popen = subprocess.Popen
+    processes, directories = [], []
+
+    def popen(*args, **kwargs):
+        process = actual_popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    def timeout(command, payload, environment, limit):
+        directories.append(Path(payload["directory"]).parent)
+        return actual_child_output([sys.executable, "-c", "import time; time.sleep(5)"], payload, environment, 0.05)
+
+    monkeypatch.setattr(acceptance.subprocess, "Popen", popen)
+    monkeypatch.setattr(acceptance, "child_output", timeout)
+    monkeypatch.setattr(acceptance, "CASES", ("v1",))
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT)])
+    assert acceptance.main() == 1
+    assert json.loads(capsys.readouterr().out)["accepted"] is False
+    assert processes and all(process.poll() is not None for process in processes)
+    assert directories and all(not directory.exists() for directory in directories)
+
+
+def test_temporary_directory_failure_still_reports_json(monkeypatch, capsys):
+    monkeypatch.setattr(acceptance.tempfile, "TemporaryDirectory", Mock(side_effect=OSError("fixture failure")))
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT)])
+    assert acceptance.main() == 1
+    output = json.loads(capsys.readouterr().out)
+    assert output["accepted"] is False and "fixture failure" in output["failure"]
