@@ -13,7 +13,7 @@ from yarl import URL
 
 from src.core.contracts import CHECK_SCHEMA_VERSION, CheckRecord, validate_checks
 from src.core.redaction import redact_secrets
-from src.core.scope import ScopeValidationError
+from src.core.scope import ScopeResolutionError, ScopeValidationError
 from src.core.transport import SafeSession, TransportPolicyError, scan_transport
 from src.mcp import live
 
@@ -332,6 +332,12 @@ async def check(endpoint, allowed_networks, policy, allow_loopback=False, api_ke
 
     try:
         await asyncio.wait_for(run(), timeout=live.OVERALL_TIMEOUT)
+    except ScopeResolutionError:
+        reason = "MCP endpoint hostname could not be resolved"
+    except aiohttp.ClientConnectorCertificateError:
+        reason = "MCP TLS certificate verification failed"
+    except aiohttp.ClientSSLError:
+        reason = "MCP TLS negotiation failed"
     except (live.LiveError, ScopeValidationError, TransportPolicyError, aiohttp.ClientError,
             TimeoutError, asyncio.TimeoutError, ValueError, TypeError, RecursionError):
         reason = _TEXT["baseline_failed"]
