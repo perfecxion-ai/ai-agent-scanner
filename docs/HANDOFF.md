@@ -197,19 +197,40 @@ measured line coverage. This remains synthetic offline acceptance, not
 representative production accuracy or live tool authorization. See
 [replay scope and identity](replay-evaluations.md).
 
+### Local-beta finish checkpoint
+
+PR #42 adds a real offline operator workflow regression without scanner-function
+substitution: authentication, current-policy template admission, repository
+discovery/pipeline, SQLite dispatch, conservative skipped security, JSON/SARIF,
+audit, and one explicitly enabled finite schedule occurrence. Independent Python
+3.10/3.12 acceptance passed. Container CI now checks authenticated access before
+and after restart; the local real-Docker run passed with no scans or deployed DB.
+Container setup includes its missing operator key, and authentication docs now
+correctly describe self-hosted scripts.
+
+The integrated suite passed 1107 Python cases and 78 Node cases at 91% measured
+line coverage. Normal Chromium and normal/optimized backup acceptance passed.
+Five bounded queue runs passed 1600 jobs with no duplicate claims or state
+mismatches; the deliberately insufficient deadline correctly failed. Disposable
+processes/databases/containers were cleaned up. See [validation](VALIDATION.md)
+for exact measurements, artifacts, and limits.
+
+The [beta test guide](BETA_TESTING.md) supplies a static offline fixture and a
+fresh private-database walkthrough. Its finite gate is the stopping point for
+this beta after independent review and all required CI. It is not M6 completion,
+security certification, representative model accuracy, or deployment authority.
+
 ## Next delivery sequence
 
-1. Expand representative offline accuracy and service-compatibility fixtures.
-   Select a narrow evidence boundary with positive and negative synthetic cases;
-   preserve the distinction between heuristic observations and confirmed findings.
-   Keep real provider compatibility separate from mocked SDK/protocol fixtures.
-2. Expand workflow acceptance and selected integrations without bypassing shared
-   admission, cancellation, or current-policy checks. Do not enable schedules or
-   scan real targets automatically as part of engineering work.
-   External integrations need an explicit supported destination and secret contract.
-3. Run representative load/soak, accessibility, and separately authorized deployed
-   backup/upgrade acceptance. Do not require paid calls or claim complete coverage
-   from line percentages.
+1. Freeze the reviewed local-beta revision after all seven PR and post-merge CI
+   jobs pass. Do not add more features to this acceptance slice.
+2. Hand off the offline walkthrough for operator testing and collect concrete,
+   redacted failures before selecting further work. Real targets and enabled
+   schedules require deliberate authorized scope; do not run them automatically.
+3. Treat representative accuracy/compatibility, long-duration load/soak,
+   comprehensive accessibility, deployed backup/upgrade, and integrations as
+   separate follow-up work. External integrations need an explicit destination
+   and secret contract. Keep real-provider measurements separate from fixtures.
 
 Broader live MCP and any legacy adapter need separate versioned designs. Do not
 silently downgrade the current client or equate fixture inventory checks with

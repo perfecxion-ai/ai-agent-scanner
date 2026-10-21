@@ -57,10 +57,23 @@ accessibility audit, screen-reader test, or real-provider compatibility check.
 
 ```sh
 docker build -t ai-agent-scanner .
+export SECRET_KEY="$(openssl rand -hex 32)"
+export OPERATOR_API_KEY="$(openssl rand -hex 32)"
+export OPERATOR_ORGANIZATION_ID=local-lab
+export SCAN_ALLOWED_NETWORKS=127.0.0.1/32
+export SCAN_ALLOW_LOOPBACK=true
 docker run --rm -p 127.0.0.1:5000:5000 \
-  -e SECRET_KEY="$(openssl rand -hex 32)" \
+  -e SECRET_KEY -e OPERATOR_API_KEY -e OPERATOR_ORGANIZATION_ID \
+  -e SCAN_ALLOWED_NETWORKS -e SCAN_ALLOW_LOOPBACK \
   -v scanner-data:/app/instance ai-agent-scanner
 ```
+
+Enter the operator key at `http://127.0.0.1:5000`. These exports explicitly allow
+only container loopback targets; host services are not container loopback.
+Choose only authorized scope, and leave filesystem roots unset to deny file scans.
+The application does not load `.env` automatically. Keep keys outside version
+control and reuse them only for the same intended local deployment. An unset
+operator key disables login and protected API routes.
 
 The container initializes missing database tables and starts Gunicorn as an
 unprivileged user. Keep one worker and one server instance per database. Queued

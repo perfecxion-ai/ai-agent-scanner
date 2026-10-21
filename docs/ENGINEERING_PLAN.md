@@ -124,6 +124,11 @@ These are source-review findings, not evidence of exploitation in a deployment.
   External integrations and comprehensive accessibility acceptance remain pending.
 - M6 remains pending. Package and container CI are foundations, not completion of
   performance testing, deployment review, migration validation, or release sign-off.
+  A finite [local-beta gate](BETA_TESTING.md) now adds actual offline operator
+  workflow acceptance, authenticated container restart checks, repeated bounded
+  queue runs, and isolated setup instructions. After review and green CI, freeze
+  that beta for operator feedback instead of continuing open-ended feature work.
+  This scoped handoff does not complete M6 or the deferred roadmap.
 
 Discovery now has bounded traffic-format and mocked cloud SDK acceptance,
 resource-specific cloud identity, typed read-only network inventories, and

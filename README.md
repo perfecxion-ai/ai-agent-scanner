@@ -150,6 +150,10 @@ Review [persistent jobs](docs/jobs.md), [authentication](docs/authentication.md)
 before deployment. Startup upgrades only [known SQLite layouts](docs/jobs.md#schema-upgrades);
 it is not a general schema migration system.
 
+For a fresh private database and an offline fixture walkthrough, use the
+[local beta test guide](docs/BETA_TESTING.md). It defines the finite acceptance
+gate and keeps production/deployment gaps separate from supported beta testing.
+
 ## Interpreting results
 
 A refusal is not a successful injection. Generated example PII is not proven

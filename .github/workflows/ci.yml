@@ -86,10 +86,67 @@ jobs:
       - name: Build container
         run: docker build -t ai-agent-scanner:ci .
       - name: Smoke test HTTP server
+        timeout-minutes: 5
         run: |
-          docker run -d --name scanner -p 127.0.0.1:5000:5000 -e SECRET_KEY="$(openssl rand -hex 32)" ai-agent-scanner:ci
+          export SECRET_KEY="$(openssl rand -hex 32)"
+          export OPERATOR_API_KEY="$(openssl rand -hex 32)"
+          export OPERATOR_ORGANIZATION_ID=container-ci
+          docker run -d --name scanner -p 127.0.0.1:5000:5000 -e SECRET_KEY -e OPERATOR_API_KEY -e OPERATOR_ORGANIZATION_ID ai-agent-scanner:ci
           trap 'docker logs scanner; docker rm -f scanner' EXIT
-          curl --fail --retry 15 --retry-all-errors --retry-delay 2 http://127.0.0.1:5000/
-          curl --fail --retry 15 --retry-all-errors --retry-delay 2 http://127.0.0.1:5000/health/ready
-          docker restart scanner
-          curl --fail --retry 15 --retry-all-errors --retry-delay 2 http://127.0.0.1:5000/health/ready
+          for phase in initial restart; do
+            if [ "$phase" = restart ]; then docker restart scanner; fi
+            curl --fail --output /dev/null --connect-timeout 2 --max-time 3 --retry 15 --retry-all-errors --retry-delay 2 --retry-max-time 45 http://127.0.0.1:5000/
+            curl --fail --output /dev/null --connect-timeout 2 --max-time 3 --retry 15 --retry-all-errors --retry-delay 2 --retry-max-time 45 http://127.0.0.1:5000/health/ready
+            python3 - <<'PY'
+          import base64
+          import http.client
+          import json
+          import os
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def request(method, path, status, payload=None, token=None):
+              connection = http.client.HTTPConnection("127.0.0.1", 5000, timeout=3)
+              headers = {"Content-Type": "application/json"}
+              if token is not None:
+                  headers["Authorization"] = "Bearer " + token
+              try:
+                  connection.request(method, path, body=json.dumps(payload) if payload is not None else None,
+                                     headers=headers)
+                  response = connection.getresponse()
+                  body = response.read(65537)
+                  require(response.status == status, "Unexpected authentication response status")
+                  require(len(body) <= 65536, "Authentication response exceeded bound")
+                  require(response.getheader("Content-Type", "").startswith("application/json"),
+                          "Expected JSON authentication response")
+                  data = json.loads(body)
+                  require(isinstance(data, dict), "Expected authentication response object")
+                  return data, response.getheader("Cache-Control")
+              finally:
+                  connection.close()
+
+          request("POST", "/api/auth/token", 401, {})
+          request("POST", "/api/auth/token", 401, {"api_key": "invalid-key"})
+          request("GET", "/api/scans?limit=1", 401)
+          request("GET", "/api/scans?limit=1", 401, token="invalid-token")
+          login, cache_control = request("POST", "/api/auth/token", 200,
+                                        {"api_key": os.environ["OPERATOR_API_KEY"]})
+          token = login.get("token")
+          require(login.get("success") is True and isinstance(token, str) and 0 < len(token) <= 4096,
+                  "Operator login did not issue a bounded token")
+          require(cache_control == "no-store", "Login response must not be cached")
+          parts = token.split(".")
+          require(len(parts) == 3, "Expected JWT token")
+          claims = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+          require(claims.get("user_id") == "operator"
+                  and claims.get("organization_id") == os.environ["OPERATOR_ORGANIZATION_ID"],
+                  "Token identity did not match configured operator organization")
+          history, _ = request("GET", "/api/scans?limit=1", 200, token=token)
+          require(history.get("success") is True and isinstance(history.get("scans"), list)
+                  and history.get("total") == 0 and history["scans"] == [],
+                  "Protected history did not return an empty scan list")
+          print("Authenticated container smoke passed")
+          PY
+          done
