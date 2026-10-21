@@ -22,5 +22,5 @@ without the required issuer, audience, identity, and expiry claims are rejected.
 Use HTTPS for remote access. Restrict access to trusted operators behind a private network
 or authenticated reverse proxy, and enforce login rate limits there. The application does
 not currently provide login throttling. Do not expose the development server to the internet.
-The dashboard loads third-party scripts, so use only trusted hosting and browser environments.
+The dashboard serves its scripts locally; its content security policy restricts scripts to that origin.
 Scan status, results, and agent listings are scoped to the token's organization.
