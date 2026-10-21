@@ -7,7 +7,7 @@ Personally Identifiable Information (PII) protection in AI agents. It tests
 for PII disclosure, cross-tenant data leakage, privacy policy compliance,
 and sensitive information exposure.
 
-Author: scthornton
+Author: Scott Thornton
 Created: 2024
 License: Private - All rights reserved
 

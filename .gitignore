@@ -1,5 +1,4 @@
 # AI Agent Scanner - Git Ignore
-# Author: scthornton
 
 # Python
 __pycache__/
@@ -96,6 +95,9 @@ config/local/
 local_config.py
 
 # AI tool artifacts
+AGENTS.md
+AGENTS.*.md
+.codex/
 .claude/
 CLAUDE.md
 claude.md
@@ -105,3 +107,9 @@ notes.md
 todo.md
 *.chat
 *.conversation
+
+# Machine-local lab orchestration
+/lab.toml
+
+# Legacy local screenshot with embedded device metadata
+/docs/images/scan-demo.png

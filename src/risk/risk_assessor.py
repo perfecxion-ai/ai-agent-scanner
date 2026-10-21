@@ -6,7 +6,7 @@ This module implements comprehensive risk assessment for AI agents based on
 discovered security vulnerabilities. It provides CVSS-inspired scoring,
 business impact analysis, and prioritized remediation recommendations.
 
-Author: scthornton
+Author: Scott Thornton
 Created: 2024
 License: Private - All rights reserved
 

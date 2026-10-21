@@ -6,7 +6,7 @@ This module implements comprehensive testing for access control vulnerabilities
 in AI agents and their supporting infrastructure. It tests for authentication
 bypass, weak credentials, authorization flaws, and session management issues.
 
-Author: scthornton
+Author: Scott Thornton
 Created: 2024
 License: Private - All rights reserved
 

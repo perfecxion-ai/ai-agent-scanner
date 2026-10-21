@@ -222,6 +222,15 @@ security certification, representative model accuracy, or deployment authority.
 
 ## Next delivery sequence
 
+The privacy follow-up keeps machine-local assistant instructions and lab assets
+out of the public index and build inputs while retaining local copies. Package
+and image contact metadata no longer exposes private account emails. Public
+professional attribution and the security-reporting contact remain. Two privacy
+regressions bring the local suite to 1109 cases. This is prospective cleanup;
+historical Git blobs, commit metadata, and previously distributed artifacts remain.
+New commits use the account's approved repository-local noreply email without
+changing global identity. Do not rewrite history or erase local files implicitly.
+
 1. Freeze the reviewed local-beta revision after all seven PR and post-merge CI
    jobs pass. Do not add more features to this acceptance slice.
 2. Hand off the offline walkthrough for operator testing and collect concrete,
@@ -254,7 +263,9 @@ sh scripts/package-smoke.sh dist/*.whl
 Use the existing virtual environment when available. Independent reviewers should
 exercise regression cases and inspect failure paths. Every implementation PR must
 pass the current Python matrix, lint, dependency audit, package, and container
-checks before merge. Follow [AGENTS.md](../AGENTS.md) for Git identity and delivery.
+checks before merge. Public delivery rules are in the
+[engineering plan](ENGINEERING_PLAN.md#delivery-rules); machine-local assistant
+instructions are intentionally not distributed.
 
 Do not reuse stale implementation branches without checking their contents.
 Earlier agent worktrees remain on old branches; create a fresh worktree from the
