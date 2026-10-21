@@ -2,6 +2,10 @@
 
 ## Product direction
 
+The beta is held after external lab validation found verdict and workflow defects.
+The [remediation gate](BETA_REMEDIATION.md) supersedes the earlier freeze/reopen
+sequence. Closing the reported defects is necessary but not enterprise sign-off.
+
 Build a defensible AI asset inventory and security assessment tool for security
 engineers. Preserve local CLI use and add a reliable single-operator server.
 Enterprise identity, distributed execution, and additional attack surfaces follow

@@ -12,6 +12,8 @@ from typing import Dict, Any, List
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.core.files import write_private_text
+
 
 class ReportGenerator:
     """Generate security and compliance reports."""
@@ -213,10 +215,9 @@ class ReportGenerator:
 
         if fmt == 'txt':
             content = self.generate_executive_summary(report)
-            path.write_text(content)
         else:
-            with open(path, 'w') as f:
-                json.dump(report, f, indent=2, default=str)
+            content = json.dumps(report, indent=2, default=str)
+        write_private_text(path, content)
 
         self.logger.info(f"Report saved to {path}")
         return str(path)

@@ -6,6 +6,8 @@ These changes are engineering work on the current branch, not a published releas
 
 ### Security and correctness
 
+- Write local report exports atomically with owner-only permissions and reject
+  destination symlinks, including replacements of previously public-readable files.
 - Require certifi 2026.10.19 or newer to exclude the affected emSign trust roots
   described in GHSA-6q48-6c7w-9gw2. Existing environments need a dependency
   upgrade; already built images need rebuilding before this change takes effect.
@@ -68,6 +70,10 @@ These changes are engineering work on the current branch, not a published releas
 
 ### Delivery and documentation
 
+- Hold the beta after external lab failures and track 22 generalized findings with
+  explicit reopening and enterprise-readiness boundaries. Keep raw lab details local.
+- Canonicalize the owned backup-acceptance temporary root for macOS aliases while
+  retaining child/database symlink rejection; add native macOS CI acceptance.
 - Keep workstation instructions, local lab setup, and the legacy device-tagged
   screenshot out of Git, distributions, and Docker build contexts. Preserve local
   copies and professional attribution; remove personal contact metadata from new

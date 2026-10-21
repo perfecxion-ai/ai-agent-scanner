@@ -1,5 +1,13 @@
 # Continuation handoff
 
+## Current hold
+
+External lab validation found verdict accuracy, evidence privacy, mixed-network
+workflow, and macOS acceptance defects in the prior beta. The earlier local-beta
+finish checkpoint below is historical infrastructure acceptance, not release
+approval. Follow the [remediation gate](BETA_REMEDIATION.md) before reopening the
+beta. Keep the source lab report and raw artifacts local and private.
+
 ## Original checkpoint
 
 Baseline: `b5efe3f`, main after PRs #1 through #14. The working tree was clean and

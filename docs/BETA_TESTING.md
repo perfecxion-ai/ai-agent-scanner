@@ -1,5 +1,9 @@
 # Local beta testing
 
+Status: held following external lab validation. Infrastructure acceptance is not
+verdict-accuracy acceptance. Do not recommend this revision for operational risk
+decisions. See the [remediation gate](BETA_REMEDIATION.md) for reopening criteria.
+
 This is a finite acceptance gate for the documented single-operator beta, not
 completion of every engineering milestone. The supported server is one process
 on POSIX with local file-backed SQLite. Start with the offline fixture below;
@@ -11,6 +15,7 @@ Activate the checkout's Python 3.10-3.13 environment and install `.[dev,server]`
 Run from the repository root:
 
 ```sh
+python -m pip install --upgrade pip setuptools
 python -m pytest tests/
 ruff check .
 bandit -r src app.py scanner_cli.py cli.py -ll
@@ -23,6 +28,13 @@ python scripts/acceptance-backup-restore.py --timeout-seconds 5
 python -O scripts/acceptance-backup-restore.py --timeout-seconds 5
 ```
 
+`pip-audit` includes installed environment tooling, not only project requirements.
+Use a fresh environment with current pip and setuptools; record and investigate
+any advisory rather than excluding tooling to obtain a green result.
+The backup commands canonicalize their created temporary root, so the default
+macOS `/var` alias needs no `TMPDIR` workaround. Database and child-directory
+symlinks are still rejected.
+
 The optional [Chromium check](DEVELOPMENT.md#optional-chromium-dashboard-checks)
 needs Playwright and Chromium. Run it with ordinary Python and `PYTHONOPTIMIZE`
 unset: its browser assertions are not valid acceptance under optimized Python.
@@ -32,11 +44,15 @@ The [queue workload](performance.md) checks terminal consistency, audit history,
 unique claims, and concurrency bounds. Repeated finite runs are a regression
 profile, not a long-duration soak or production throughput measurement.
 
-Before calling a revision test-ready, require independent review, all seven CI
+Before calling a revision test-ready, require independent review, all required CI
 jobs green on its PR and merged commit, current full-suite/package/security checks,
 the browser check, both backup checks, and the recorded queue profile. Record the
 tested commit with `git rev-parse HEAD`; [validation](VALIDATION.md) records results
 and limitations. A later source change needs the relevant checks again.
+
+Server request budgets use `SCAN_MAX_REQUESTS` (default 500, maximum 10000)
+and `SCAN_TIMEOUT_SECONDS`. A request budget is a cap for the whole scan, not a
+retry count. Resource limits do not establish complete security coverage.
 
 ## Start an isolated, offline workspace
 
