@@ -82,8 +82,10 @@ These are source-review findings, not evidence of exploitation in a deployment.
   readiness declaration.
 - M2 has a shared CLI/API pipeline, typed scan/asset/finding/evidence contracts,
   versioned result snapshots and check records, bounded transport, and server
-  scope enforcement. Eighteen existing probe groups record execution and evidence
-  outcomes. New risk assessment requires conclusive completed check evidence;
+  scope enforcement. Nineteen probe groups record execution and evidence
+  outcomes. New risk assessment requires matching confirmed check/finding evidence
+  or a completed protected-access sampled pass; confirmed partial execution retains
+  its observed risk with a coverage warning. Prompt/tenant nondisclosure cannot pass;
   exact versioned evidence is required for verified finding resolution. This
   accounts for implemented sampled groups, not every possible attack surface.
 - M3 has a durable SQLite queue, exclusive startup recovery, bounded workers,
@@ -128,11 +130,13 @@ These are source-review findings, not evidence of exploitation in a deployment.
   External integrations and comprehensive accessibility acceptance remain pending.
 - M6 remains pending. Package and container CI are foundations, not completion of
   performance testing, deployment review, migration validation, or release sign-off.
-  A finite [local-beta gate](BETA_TESTING.md) now adds actual offline operator
+  A finite [local-beta gate](BETA_TESTING.md) adds actual offline operator
   workflow acceptance, authenticated container restart checks, repeated bounded
-  queue runs, and isolated setup instructions. After review and green CI, freeze
-  that beta for operator feedback instead of continuing open-ended feature work.
-  This scoped handoff does not complete M6 or the deferred roadmap.
+  queue runs, and isolated setup instructions. External lab feedback exposed gaps
+  beyond that infrastructure gate. The [remediation gate](BETA_REMEDIATION.md)
+  now requires verdict/privacy fixes, mixed-network/source/CLI regressions, native
+  macOS acceptance, and exact-revision real-service retesting before reopening.
+  This does not complete M6 or the deferred enterprise-readiness roadmap.
 
 Discovery now has bounded traffic-format and mocked cloud SDK acceptance,
 resource-specific cloud identity, typed read-only network inventories, and

@@ -23,6 +23,10 @@ model and never enable evidence or authentication controls.
 Canary provenance is an operator assertion. The scanner verifies returned text,
 not how the secret was originally seeded. Canaries included in attack prompts
 cannot confirm disclosure. Configure synthetic test secrets, not real credentials.
+Nondisclosure is inconclusive, even with a configured canary: an unseeded secret
+or a finite stochastic sample cannot prove safety or resolve an earlier leak.
+Generated response text is omitted from new evidence rather than persisted as
+an excerpt; older saved reports are not retroactively sanitized.
 Confirmed access checks do not follow redirects. Provider adapters preserve
 deployment prefixes and inspect generated content separately from JSON metadata.
 
