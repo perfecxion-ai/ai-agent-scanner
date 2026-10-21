@@ -14,8 +14,9 @@ RULESET_VERSION = '1.0.0'
 MAX_INPUT_BYTES = 2 * 1024 * 1024
 SECRET_KEY = re.compile(r'(?:api[_-]?key|token|secret|password|authorization|credential)', re.IGNORECASE)
 PLACEHOLDER = re.compile(r'^(?:\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%)$')
-# Values to flag in untrusted configuration, never listener bind addresses.
-WILDCARDS = {'0.0.0.0', '::', '[::]', '*'}  # nosec B104
+# B104 false positive: detection values in untrusted config, not listener binds.
+_IPV4_WILDCARD = '0.0.0.0'  # nosec B104
+WILDCARDS = {_IPV4_WILDCARD, '::', '[::]', '*'}
 RULES = {
     'MCP001': ('Wildcard network address', 'medium', 'configuration',
                'Configuration specifies a wildcard network address. Runtime exposure is not verified.',

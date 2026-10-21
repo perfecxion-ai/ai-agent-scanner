@@ -25,7 +25,7 @@ _FIELDS = {"version", "endpoint", "evidence_context_id", "fixture_provenance",
            "protected_tool_name_env", "authorization_required"}
 _TEXT = {
     "baseline_missing": "Protected fixture tool was absent from baseline",
-    "baseline_valid": "Authorized protected inventory baseline observed",
+    "baseline_valid": "Authorized protected inventory baseline observed across all returned pages; controls sample the first page only",
     "control_unusable": "MCP policy control was unusable",
     "control_sample": "Sampled protected inventory policy control only",
     "sample_missing": "Protected tool not on sampled page; later pages were not tested",
@@ -339,14 +339,21 @@ async def check(endpoint, allowed_networks, policy, allow_loopback=False, api_ke
 
     try:
         await asyncio.wait_for(run(), timeout=live.OVERALL_TIMEOUT)
+    except live.LiveError as exc:
+        reason = str(exc)
     except ScopeResolutionError:
         reason = "MCP endpoint hostname could not be resolved"
+    except ScopeValidationError:
+        reason = "MCP endpoint is outside the allowed scope"
+    except TransportPolicyError:
+        reason = "MCP transport policy rejected inventory"
     except aiohttp.ClientConnectorCertificateError:
         reason = "MCP TLS certificate verification failed"
     except aiohttp.ClientSSLError:
         reason = "MCP TLS negotiation failed"
-    except (live.LiveError, ScopeValidationError, TransportPolicyError, aiohttp.ClientError,
-            TimeoutError, asyncio.TimeoutError, ValueError, TypeError, RecursionError):
+    except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError):
+        reason = "MCP transport failed or timed out"
+    except (ValueError, TypeError, RecursionError):
         reason = _TEXT["baseline_failed"]
     if active_control:
         rule, before = active_control

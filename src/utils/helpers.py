@@ -2,8 +2,12 @@
 
 import ipaddress
 import re
+import socket
 import uuid
 from typing import Dict, Any, Tuple
+from urllib.parse import urlsplit
+
+from src.core.scope import ScopePolicy, ScopeValidationError, local_host_addresses
 
 
 def generate_scan_id() -> str:
@@ -18,6 +22,46 @@ MAX_HOSTS_PER_RANGE = 1024
 _HOSTNAME_RE = re.compile(
     r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*\.[A-Za-z]{2,}$"
 )
+
+
+def validate_cli_target_classes(scope, agents=(), *, allow_loopback=False):
+    """Reject statically known forbidden targets before any scan or DNS work.
+
+    Hostnames still receive connection-time address enforcement. Only literals,
+    metadata aliases, and the bounded local hosts file are inspected here.
+    """
+    policy = ScopePolicy((ipaddress.ip_network('0.0.0.0/0'), ipaddress.ip_network('::/0')),
+                         (), allow_loopback=allow_loopback)
+    forbidden_names = {'metadata.google.internal', 'metadata.goog', 'instance-data.ec2.internal'}
+    try:
+        for value in scope.get('network_ranges') or []:
+            policy.network(value)
+        hosts = list(scope.get('domains') or [])
+        hosts.extend(urlsplit(agent['endpoint']).hostname for agent in agents or ())
+        for host in hosts:
+            host = host.lower().rstrip('.')
+            if host in forbidden_names:
+                return False, 'Forbidden target: cloud metadata services are not permitted'
+            if (host == 'localhost' or host.endswith('.localhost')) and not allow_loopback:
+                return False, 'Forbidden loopback target; use --allow-loopback for explicit opt-in'
+            try:
+                address = ipaddress.ip_address(host)
+            except ValueError:
+                try:
+                    # inet_aton parses legacy numeric IPv4 forms without DNS.
+                    address = ipaddress.IPv4Address(socket.inet_aton(host))
+                except OSError:
+                    addresses = local_host_addresses(host)
+                else:
+                    addresses = [str(address)]
+            else:
+                addresses = [str(address)]
+            for address in addresses:
+                policy.network(address)
+    except ScopeValidationError:
+        return False, ('Forbidden target address class; metadata, reserved, link-local, multicast, '
+                       'and unspecified addresses are not permitted. Loopback requires --allow-loopback')
+    return True, ''
 
 
 def validate_scan_scope(scope: Dict[str, Any], *, allow_loopback: bool = False) -> Tuple[bool, str]:

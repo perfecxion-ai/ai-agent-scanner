@@ -99,7 +99,7 @@ def _bounded_timeout(value, maximum):
     raise TransportPolicyError('Invalid HTTP timeout configuration')
 
 
-def record_response_failure():
+def record_response_failure(status_code=None):
     """Record a required model interaction rejected at the HTTP layer.
 
     Intentional denied controls in authentication probes do not call this helper.
@@ -107,7 +107,10 @@ def record_response_failure():
     budget = current_budget()
     if budget is not None:
         budget.failures += 1
-        logging.getLogger(__name__).warning('Required HTTP interaction failed')
+    reason = ('authorization denied (HTTP 401)' if status_code == 401 else
+              'authorization denied (HTTP 403)' if status_code == 403 else
+              'HTTP response rejected')
+    logging.getLogger(__name__).warning('Required model interaction failed: %s', reason)
 
 
 @contextmanager

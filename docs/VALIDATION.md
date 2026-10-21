@@ -150,6 +150,35 @@ runtime and need no additional cloud run.
 
 ## Automated checks
 
+### Operator feedback diagnostics
+
+The combined diagnostic slice passes 1408 local Linux/Python 3.10 cases, Ruff,
+and the configured whole-source Bandit gate. Independent reviews passed 409
+network/contract cases and 299 MCP cases with warnings treated as errors.
+
+Static CLI preflight rejects known metadata names, forbidden address classes,
+legacy numeric IPv4 representations, and unsafe local-host aliases before the
+pipeline, DNS, or sockets run. All declared networks/domains/explicit agents are
+checked before scanning begins, while ordinary documentation/private networks,
+host-bit normalization, and explicit loopback opt-in remain available. Existing
+DNS and connection-time enforcement is unchanged. Refusal does not overwrite an
+existing output report.
+
+Missing declared/provider credentials and required model 401/403 responses have
+specific static reasons without endpoint, environment-reference, header, body,
+or marker leakage. Denied model requests remain incomplete/inconclusive; valid
+denials in intentional authentication/session controls keep their prior behavior.
+CLI MCP failures print only allowlisted fixed report reasons, with a generic
+fallback for unknown text. Paginated authorized baselines and first-page-only
+controls are explicitly distinguished without changing findings or probe IDs.
+The wildcard detection constant retains its justified B104 suppression, isolated
+so the installed Bandit reports no stale suppression warnings.
+
+These are local synthetic diagnostics/privacy regressions, not another cloud
+retest or a detection-sensitivity improvement. Repeated finding presentation,
+supported server canary configuration, sampling/latency work, and enterprise
+acceptance remain separate. The PR and merged revision must pass current CI.
+
 The slice checkpoints below are chronological records. Their historical hold
 and pending-retest statements are superseded by the targeted acceptance above;
 enterprise and unsupported-deployment limitations remain in effect.

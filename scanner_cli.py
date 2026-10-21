@@ -17,7 +17,7 @@ from src.core.pipeline import run_pipeline, to_sarif
 from src.core.model_selection import apply_model_overrides, validate_model_overrides
 from src.core.transport import ScanBudget, scan_transport
 from src.core.files import write_private_text
-from src.utils.helpers import validate_scan_scope
+from src.utils.helpers import validate_cli_target_classes, validate_scan_scope
 
 VERSION = "1.1.0"
 BANNER = "AI Agent Scanner"
@@ -133,7 +133,10 @@ def load_targets(network, domain, repository=(), traffic=(), config=None, allow_
             agent.setdefault('type', 'assistant')
             agent.setdefault('discovery_method', 'explicit')
             agent.setdefault('metadata', {})
-    else:
+    valid, error = validate_cli_target_classes(scope, agents, allow_loopback=allow_loopback)
+    if not valid:
+        raise click.ClickException(error)
+    if agents is None:
         valid, error = validate_scan_scope(scope, allow_loopback=allow_loopback)
         if not valid:
             raise click.ClickException(error)
@@ -305,6 +308,7 @@ def mcp_command(config, tools_path, fmt, output):
 def mcp_live_command(endpoint, allow_network, allow_loopback, api_key_env, fmt, output):
     """Collect read-only live MCP inventory; never start servers or invoke tools."""
     from src.mcp.live import inventory
+    from src.mcp.diagnostics import public_failure_reason
     from src.mcp import to_sarif
 
     try:
@@ -317,7 +321,9 @@ def mcp_live_command(endpoint, allow_network, allow_loopback, api_key_env, fmt, 
     except (OSError, ValueError) as exc:
         raise click.ClickException('Unable to collect or write MCP inventory; check target scope and credential configuration') from exc
     if report['status'] != 'completed':
-        raise click.ClickException('MCP inventory is incomplete; inspect report')
+        reason = public_failure_reason(report)
+        detail = f': {reason}' if reason else ''
+        raise click.ClickException(f'MCP inventory is incomplete{detail}; inspect report')
 
 
 @cli.command('mcp-check')
@@ -331,6 +337,7 @@ def mcp_live_command(endpoint, allow_network, allow_loopback, api_key_env, fmt, 
 def mcp_check_command(endpoint, allow_network, allow_loopback, api_key_env, policy, fmt, output):
     """Check declared protected inventory controls without invoking tools."""
     from src.mcp.policy import check, load_policy
+    from src.mcp.diagnostics import public_failure_reason
     from src.mcp import to_sarif
 
     try:
@@ -348,7 +355,9 @@ def mcp_check_command(endpoint, allow_network, allow_loopback, api_key_env, poli
     except (OSError, ValueError) as exc:
         raise click.ClickException('Unable to check MCP policy; verify local policy, scope, credentials, and output') from exc
     if report['status'] != 'completed':
-        raise click.ClickException('MCP policy check is incomplete; inspect report')
+        reason = public_failure_reason(report)
+        detail = f': {reason}' if reason else ''
+        raise click.ClickException(f'MCP policy check is incomplete{detail}; inspect report')
 
 
 @cli.command('evaluate')

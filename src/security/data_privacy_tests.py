@@ -353,8 +353,8 @@ class DataPrivacyTester:
                 ) as response:
                     
                     if not 200 <= response.status < 300:
-                        record_interaction(False)
-                        record_response_failure()
+                        record_interaction(False, status_code=response.status)
+                        record_response_failure(response.status)
                         return None
                     raw = await response.text()
                     text = extract_response_text(raw)
