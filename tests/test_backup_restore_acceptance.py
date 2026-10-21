@@ -28,7 +28,7 @@ spec.loader.exec_module(acceptance)
 @contextmanager
 def owned_directory(case="v1"):
     with tempfile.TemporaryDirectory(prefix="ai-scanner-backup-") as root:
-        directory = Path(root) / case
+        directory = Path(root).resolve(strict=True) / case
         directory.mkdir(mode=0o700)
         yield directory
 
@@ -46,6 +46,31 @@ def test_complete_disposable_command(optimized, monkeypatch, tmp_path):
     assert [item["case"] for item in output["cases"]] == list(acceptance.CASES)
     assert all(item["accepted"] and len(item["assertions"]) >= 3 for item in output["cases"])
     assert not deployed.exists()
+
+
+@pytest.mark.parametrize("optimized", [False, True])
+def test_complete_command_with_symlinked_temp_ancestor(optimized, tmp_path):
+    real_temp = tmp_path / "real-temp"
+    real_temp.mkdir()
+    alias = tmp_path / "temp-alias"
+    alias.symlink_to(real_temp, target_is_directory=True)
+    environment = dict(os.environ, TMPDIR=str(alias))
+    result = subprocess.run([sys.executable, *(["-O"] if optimized else []), str(SCRIPT),
+                             "--timeout-seconds", "5"], env=environment,
+                            capture_output=True, text=True, timeout=90)
+    output = json.loads(result.stdout)
+    assert result.returncode == 0 and output["accepted"] is True, result.stdout
+    assert len(output["cases"]) == len(acceptance.CASES)
+    assert alias.is_symlink() and real_temp.is_dir()
+    assert not list(real_temp.iterdir())
+
+
+def test_owned_directory_alias_is_still_rejected(tmp_path):
+    with owned_directory() as directory:
+        alias = tmp_path / "case-alias"
+        alias.symlink_to(directory, target_is_directory=True)
+        with pytest.raises(RuntimeError, match="owned acceptance"):
+            acceptance.owned_path(alias, "source.sqlite")
 
 
 @pytest.mark.parametrize("value", ["0", "61", "nan", "inf"])

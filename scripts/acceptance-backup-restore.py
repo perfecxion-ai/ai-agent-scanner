@@ -456,8 +456,11 @@ def main():
     failure = None
     try:
         with tempfile.TemporaryDirectory(prefix="ai-scanner-backup-") as root:
+            # macOS temporary ancestors may be aliases (/var -> /private/var).
+            # Canonicalize the parent we created, not untrusted child paths.
+            root = Path(root).resolve(strict=True)
             for case in CASES:
-                directory = Path(root) / case
+                directory = root / case
                 directory.mkdir(mode=0o700)
                 cases.append(invoke_case(directory, case, args.timeout_seconds))
     except Exception as exc:
