@@ -95,6 +95,13 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
             risk_status = "failed"
     tests_by_id = {result["agent_id"]: result for result in security_results}
     risks_by_id = {result["agent_id"]: result for result in risks}
+    # The risk phase is authoritative; do not retain conflicting engine estimates.
+    for result in security_results:
+        assessment = risks_by_id.get(result["agent_id"], {})
+        result["overall_risk_score"] = assessment.get("overall_risk_score")
+        result["risk_level"] = assessment.get("risk_level", "unknown")
+        result["risk_coverage_status"] = assessment.get("coverage_status", "not_assessed")
+        result["risk_scoring_policy"] = assessment.get("scoring_policy")
     public_agents = []
     for original in observations:
         agent = {key: original[key] for key in ("id", "name", "type", "provider", "model", "endpoint", "discovery_method", "confidence") if key in original}
@@ -116,6 +123,7 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         agent["risk_score"] = assessment.get("overall_risk_score")
         agent["risk_level"] = assessment.get("risk_level", "unknown")
         agent["risk_coverage_status"] = assessment.get("coverage_status", "not_assessed")
+        agent["risk_scoring_policy"] = assessment.get("scoring_policy")
         public_agents.append(agent)
     observations = public_agents
     findings = [finding for agent in observations for finding in agent["vulnerabilities"]]

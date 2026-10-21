@@ -162,6 +162,11 @@ async def test_confirmed_finding_survives_another_failed_interaction_and_safe_re
     assert report['agents'][0]['risk_score'] >= 70
     assert report['agents'][0]['risk_level'] in ('high', 'critical')
     assert report['agents'][0]['risk_coverage_status'] == 'partial'
+    assert report['security_results'][0]['overall_risk_score'] == report['agents'][0]['risk_score']
+    assert report['security_results'][0]['risk_level'] == report['agents'][0]['risk_level']
+    assert report['security_results'][0]['risk_coverage_status'] == 'partial'
+    assert report['agents'][0]['risk_scoring_policy'] == 'severity-floor-v2'
+    assert report['security_results'][0]['risk_scoring_policy'] == 'severity-floor-v2'
     assert not to_sarif(report)['runs'][0]['invocations'][0]['executionSuccessful']
     serialized = json.dumps(report) + json.dumps(to_sarif(report))
     for value in (CANARY, '123-45-6789', '4111111111111111', 'patient-name-unknown-format'):
@@ -217,6 +222,9 @@ async def test_all_skipped_active_scan_is_partial_and_unassessed(lab, configurat
     assert report['summary']['checks_completed'] == 0
     assert report['summary']['checks_skipped'] == 19
     assert report['agents'][0]['risk_score'] is None
+    assert report['security_results'][0]['overall_risk_score'] is None
+    assert report['security_results'][0]['risk_level'] == 'unknown'
+    assert report['agents'][0]['risk_scoring_policy'] is None
     assert not state['calls']
 
 
