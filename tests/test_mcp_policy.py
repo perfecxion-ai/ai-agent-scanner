@@ -124,12 +124,17 @@ def test_protected_tool_on_later_page_reports_sample_coverage_warning(server):
     server[1]["dispatch"] = dispatch
     report = collect(server)
     assert report["findings"] == []
+    baseline = record(report, "MCP.policy_baseline")
+    assert baseline["reason"] == checks._TEXT["baseline_valid"]
+    assert "all returned pages" in baseline["reason"]
+    assert "controls sample the first page only" in baseline["reason"]
     for name in ("MCP.authorization", "MCP.origin"):
         assert record(report, name)["outcome"] == "inconclusive"
         assert record(report, name)["reason"] == checks._TEXT["sample_missing"]
     assert len(server[2]) == 5
     assert sum(bool(request.get("params", {}).get("cursor")) for request, _ in server[2]) == 1
     assert MARKER not in json.dumps(report)
+    assert "page-two" not in json.dumps(report)
 
 
 def test_origin_401_is_not_origin_enforcement_pass(server):
