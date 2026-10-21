@@ -1,34 +1,39 @@
 # Continuation handoff
 
-## Current hold
+## Current limited-beta checkpoint
 
-External lab validation found verdict accuracy, evidence privacy, mixed-network
-workflow, and macOS acceptance defects in the prior beta. The earlier local-beta
-finish checkpoint below is historical infrastructure acceptance, not release
-approval. Follow the [remediation gate](BETA_REMEDIATION.md) before reopening the
-beta. Keep the source lab report and raw artifacts local and private.
+The [remediation hold](BETA_REMEDIATION.md) is closed for limited single-operator
+beta testing on runtime revision `82ee7d5e8d1a0183fe5344b41da90f60b49c5f91`.
+This is not publication, deployment, production, or enterprise approval. Private
+lab reports, drivers, secrets, database inputs, and captures remain outside Git.
 
-The operator's exact-revision live retest of `1507625` supports the core fixes:
-Linux 1241 passed/one skipped, native macOS 1242 passed, both backup modes,
-mixed-service discovery, active source reuse, real inference/MCP compatibility,
-and conservative repeated-leak outcomes. Two independent artifact reviews found
-a remaining API blocker that the report missed: compatibility summary and agent
-fields return zero scores where the authoritative pipeline reports null and
-`not_assessed`. Keep the hold until that projection is fixed and validated on
-the new merged revision. Private marker/database sweep claims are operator
-attestations because those inputs were intentionally omitted. One confirmed leak
-in five runs demonstrates uncertainty handling, not high detection sensitivity.
-See [external retest validation](VALIDATION.md#exact-revision-external-retest)
-and the [current blocker](BETA_REMEDIATION.md#exact-revision-external-retest-review).
+The earlier operator retest of `1507625` supports the core verdict, mixed-network,
+source-reuse, privacy-omission, MCP, and native macOS fixes. Independent review
+found one remaining API defect, corrected in PR #49: storage placeholder zeros
+must not become public verdicts when saved pipeline scores are null. The fix
+passes 1279 local cases, independent review, and all eight PR/post-merge CI jobs.
 
-The scoped API follow-up now passes 1279 local tests and independent review,
-including 37 new projection cases and the actual dispatcher/protocol workflow.
-Offline replay of the supplied live pipelines preserves null unknown scores and
-70/high confirmed partial scores without changing stored reports or schema.
-Ruff, configured Bandit, build/Twine, and installed-wheel smoke pass. Require the
-new PR/merged CI and targeted API retest before lifting the hold. Inventory risk
-filters now explicitly apply to a bounded newest-100 tenant/type window; inspect
-the additive coverage warning rather than treating an empty list as exhaustive.
+The targeted live server retest of `82ee7d5` now closes that API blocker. Two
+independent artifact reviews verified ten scans and 31 agent snapshots across
+saved pipelines, results, inventory, and restart inventory. All 29 unassessed
+snapshots remain null; both confirmed snapshots remain 70/high with the correct
+sampled or partial coverage. The archived checks record 78 passes and no failures.
+All 324 response excerpts are omission sentinels. Final database privacy/mode
+checks are operator attestations because the database and secrets were excluded.
+
+Positive cases used deterministic fixtures and canary/context input seeding while
+the server was stopped; no finding or score was fabricated. The server still has
+no supported canary-configuration input. Editing reports or the database is not
+an operator setup method. Three real-model attempts remained inconclusive, not
+passed; this does not establish detection sensitivity. Restart per-scan result
+and high-filter bodies were not separately saved, so those assertions rely on
+driver checks; archived restart inventory independently contains all 31 entries.
+
+Inventory filters explicitly apply to a newest-100 tenant/type window. Keep the
+six lower-priority observations, server evidence-configuration gap, representative
+accuracy, and broader enterprise work visible. Documentation-only updates do not
+change the tested runtime or require another cloud run. See [targeted acceptance
+and qualifications](VALIDATION.md#targeted-live-api-acceptance).
 
 The following slice descriptions record earlier local remediation checkpoints.
 
@@ -46,8 +51,8 @@ The operator slice adds finalized partial-source reuse with matching snapshots,
 canonical/snapshot model IDs, actual CLI model calls, bounded CLI/server budgets,
 and an explicit MCP sampled-page warning. Corrupt source arrays/metadata are
 rejected before admission; source changes preserve schedule conflict semantics.
-See validation for combined acceptance. The beta hold remains in effect until an
-explicitly authorized real-service retest and the readiness gates pass.
+See validation for combined acceptance. At that checkpoint the beta remained
+held pending an authorized real-service retest and the readiness gates above.
 
 A related storage follow-up protects new server state in actual Gunicorn worker
 hooks and container startup, without changing the importing process's umask or
@@ -287,13 +292,14 @@ historical Git blobs, commit metadata, and previously distributed artifacts rema
 New commits use the account's approved repository-local noreply email without
 changing global identity. Do not rewrite history or erase local files implicitly.
 
-1. Finish the reported remediation slices and require independent review plus
-   every PR and post-merge CI job, including native macOS, to pass.
-2. Retest the exact merged revision in an explicitly authorized real-service lab
-   before reopening the beta. The supplied `1507625` retest is reviewed; the API
-   projection follow-up needs validation on its new revision. Starting cloud VMs,
-   changing deployments, and
-   enabling real schedules require authorization; do not infer it from this plan.
+1. Preserve the reviewed remediation checkpoint and require scoped independent
+   review plus PR/post-merge CI for changes. Runtime changes need relevant
+   revalidation; documentation-only changes do not require another cloud run.
+2. Address the six lower-priority observations and design a safe server evidence
+   input/secret-reference contract before claiming normal API canary workflows.
+   Do not use report/database modification as a product feature. Starting cloud
+   VMs, changing deployments, and enabling real schedules require authorization;
+   do not infer it from this plan.
 3. Treat representative accuracy/compatibility, long-duration load/soak,
    comprehensive accessibility, deployed backup/upgrade, and integrations as
    separate follow-up work. External integrations need an explicit destination

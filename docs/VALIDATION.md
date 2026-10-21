@@ -1,10 +1,11 @@
 # Engineering validation checkpoint
 
 Date: 2026-10-21. This records the beta build-out, not a release certification.
-The beta is now held following external lab validation of verdict accuracy,
-mixed-network workflows, evidence privacy, and macOS temporary-path handling.
-The historical green results below do not overrule those reproductions. Follow
-the [remediation gate](BETA_REMEDIATION.md) for current acceptance requirements.
+The remediation hold is closed for limited single-operator beta testing on
+runtime revision `82ee7d5`, following reviewed core and targeted API retests.
+This is not production or enterprise approval and does not establish detection
+sensitivity. Historical infrastructure results alone did not close the original
+defects. Follow the [remediation gate](BETA_REMEDIATION.md) for scope and limits.
 The first checkpoint followed PRs #1 through #14. PRs #15 through #22 add
 discovery, check contracts, SQLite upgrades/audit history, local queue acceptance,
 and dashboard evidence views. None of these merges publishes a package.
@@ -66,10 +67,10 @@ with two items verified by source/documentation rather than live execution.
 Independent review found a further API contract defect: public compatibility
 summary and agent scores are zero where the saved pipeline says null and
 `not_assessed`. History exposes no risk fields and SARIF retains the correct
-nulls. This is a release blocker, not one of the six low-priority observations.
-The beta remains held pending a scoped fix, independent review, current CI, and
-new-revision API validation. Do not transfer the old retest's acceptance to new
-code or label the supported local beta enterprise-ready.
+nulls. This was a release blocker, not one of the six low-priority observations.
+The beta remained held pending the scoped fix and new-revision API validation
+recorded below. The earlier retest alone did not cover the changed API code or
+establish enterprise readiness.
 
 ### API projection follow-up
 
@@ -89,10 +90,69 @@ Bandit, build, Twine, and installed-wheel smoke pass. Replaying four supplied
 private pipelines through actual Flask routes and fresh in-memory storage keeps
 both unassessed server cases null and both confirmed cases at 70, including
 partial coverage. Raw pipelines remain unchanged. This is offline API-adapter
-replay, not a new live-cloud run. The PR and merged revision still require their
-own complete CI and targeted API retest before the hold can be lifted.
+replay, not a new live-cloud run. PR #49 and merged revision `82ee7d5` subsequently
+passed all eight CI jobs; targeted live API acceptance is recorded below.
+
+### Targeted live API acceptance
+
+An operator-supplied private follow-up covers exact merged runtime revision
+`82ee7d5e8d1a0183fe5344b41da90f60b49c5f91` on Linux/Python 3.11, actual
+Gunicorn, the real dispatcher, and fresh private SQLite storage. Both job logs
+verify the checkout; the setup log records 37 passing API projection tests.
+Two independent reviews inspected archived responses, check records, logs, and
+driver source without executing the supplied drivers or independently rerunning
+cloud jobs.
+
+- Ten scan captures and 31 agent snapshots agree across outer summaries,
+  per-agent results, inventory entries, and saved pipelines. All 29 unassessed
+  snapshots retain null scores, unknown levels, and not-assessed coverage.
+  Discovery summary assessment status remains `not_run`, not an assessed zero.
+- The two deterministic positive snapshots retain 70/high: one completed with
+  sampled coverage and one partial with partial coverage. Their outer summary
+  assessment statuses are `completed` and `partial`, respectively.
+- Archived restart inventory independently retains all 31 matching snapshots,
+  including exactly two high entries. Driver records report identical outer and
+  per-agent projections for all ten scans after restart, and positive inclusion
+  in the high-risk filter. Those per-scan restart and high-filter response bodies
+  were not separately retained; do not claim an independent exact-set comparison
+  of those missing bodies. The inventory window was not truncated.
+- The archived check file contains 78 passing checks, zero failures, and 16
+  informational entries. The harness records failures without failing its
+  process, so exit zero is not acceptance evidence by itself. Independent
+  comparisons and the actual zero-failure check record support this run.
+- All 324 response excerpts in the supplied JSON captures are omission sentinels.
+  Exact-secret/PII sweeps and final database/lock modes of 0600 are operator
+  attestations; the database and protected values were intentionally excluded.
+  Driver-created captures are 0644, not scanner-written private exports.
+
+For positive paths, the driver stopped the server and added only
+`system_prompt_canary` and public `evidence_context_id` inputs to genuine
+server-produced discovery records. The real scanner generated the findings,
+scores, persisted results, and projections. Original serialized records were
+restored afterward; API document equality and final cleanup were recorded.
+Temporary input seeding stored canaries in those private lab records, so final
+zero-marker sweeps do not establish that canaries were never persisted during
+the experiment. This test technique is not a supported operator workflow.
+
+The server API still has no supported protected-canary configuration input.
+Deterministic fixtures establish the confirmed projection path, not ordinary API
+setup or real-model sensitivity. All three vulnerable-bot attempts were
+inconclusive with null scores, not passed. Do not combine this small follow-up
+with earlier runs into a representative accuracy estimate.
+
+Together with the earlier core lab retest, local acceptance, independent reviews,
+and eight green PR/post-merge CI jobs, this closes the scoped API blocker and
+remediation hold for limited operator beta testing. Six lower-priority
+observations, safe server evidence configuration, representative accuracy, and
+the enterprise validation gaps below remain. No package publication or service
+deployment is implied. Documentation-only changes do not alter this tested
+runtime and need no additional cloud run.
 
 ## Automated checks
+
+The slice checkpoints below are chronological records. Their historical hold
+and pending-retest statements are superseded by the targeted acceptance above;
+enterprise and unsupported-deployment limitations remain in effect.
 
 ### Remediation infrastructure slice
 
@@ -182,8 +242,8 @@ The insufficient one-second deadline case correctly exited 1 at 1.080374 seconds
 All disposable databases were removed; logs remain in
 `/tmp/ai-scanner-beta-queue-review-llvm6a`. This is not a load/soak or throughput
 certification. No cloud VM was started, real target scanned, package published,
-or remote service deployed. The beta stays held for exact-revision lab retesting
-and the separate enterprise-readiness contract.
+or remote service deployed. At that checkpoint the beta stayed held for
+exact-revision lab retesting and the separate enterprise-readiness contract.
 
 ### New server-state permission defaults
 
@@ -202,7 +262,9 @@ after authenticated readiness and again after restart. The new PR and merged
 revision must pass this actual-container assertion before claiming it. Existing
 mounted volumes and retained historical reports need their own operator review;
 these defaults do not repair their permissions or sanitize old report contents.
-The real-service lab retest and enterprise sign-off remain outstanding.
+At that checkpoint the real-service lab retest and enterprise sign-off were
+outstanding. The reviewed retests above close the scoped beta remediation gate,
+not the separate enterprise sign-off.
 
 ### Historical local-beta checkpoint
 

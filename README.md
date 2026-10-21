@@ -5,9 +5,12 @@ single-operator web application. Findings carry evidence; uncertain indicators
 remain observations. This project is a beta, not a compliance certification or
 a comprehensive test of every AI attack surface.
 
-Beta release is held while the [lab findings are remediated](docs/BETA_REMEDIATION.md).
-Earlier infrastructure acceptance does not establish risk-verdict accuracy or
-production readiness. Do not interpret zero findings as a clean security verdict.
+The [lab remediation gate](docs/BETA_REMEDIATION.md) is closed for limited
+single-operator beta testing on runtime revision `82ee7d5`. This is not
+production or enterprise approval. Detection sensitivity remains unvalidated;
+zero findings and inconclusive results are not clean security verdicts. The
+server has no supported protected-canary configuration input; see
+[evidence setup and limits](docs/detection-evidence.md).
 
 ## Install and try locally
 

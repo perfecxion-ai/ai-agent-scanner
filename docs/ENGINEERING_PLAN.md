@@ -2,13 +2,13 @@
 
 ## Product direction
 
-The beta is held after external lab validation found verdict and workflow defects.
-The [remediation gate](BETA_REMEDIATION.md) supersedes the earlier freeze/reopen
-sequence. Closing the reported defects is necessary but not enterprise sign-off.
-The exact-revision external retest supports the core fixes, but independent
-artifact review found that API compatibility fields still convert unknown risk
-to zero. Correct and validate that projection before reopening. Conservative
-nondisclosure reporting does not establish representative detection sensitivity.
+The [remediation gate](BETA_REMEDIATION.md) is closed for limited single-operator
+beta testing on runtime revision `82ee7d5`. Reviewed lab evidence and the targeted
+API retest support the core fixes, including unknown-risk projection. This is not
+enterprise sign-off. Conservative nondisclosure reporting does not establish
+representative detection sensitivity. A supported server protected-canary input
+or secret-reference contract remains a capability gap, separate from API score
+correctness; direct modification of stored reports is not a supported workflow.
 
 Build a defensible AI asset inventory and security assessment tool for security
 engineers. Preserve local CLI use and add a reliable single-operator server.
@@ -138,8 +138,9 @@ These are source-review findings, not evidence of exploitation in a deployment.
   workflow acceptance, authenticated container restart checks, repeated bounded
   queue runs, and isolated setup instructions. External lab feedback exposed gaps
   beyond that infrastructure gate. The [remediation gate](BETA_REMEDIATION.md)
-  now requires verdict/privacy fixes, mixed-network/source/CLI regressions, native
-  macOS acceptance, and exact-revision real-service retesting before reopening.
+  records reviewed verdict/privacy fixes, mixed-network/source/CLI regressions,
+  native macOS acceptance, and exact-revision API projection retesting. Its
+  limited-beta acceptance retains explicit fixture and accuracy qualifications.
   This does not complete M6 or the deferred enterprise-readiness roadmap.
 
 Discovery now has bounded traffic-format and mocked cloud SDK acceptance,
