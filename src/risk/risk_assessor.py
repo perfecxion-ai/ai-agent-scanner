@@ -16,11 +16,11 @@ and understand the business impact of AI security vulnerabilities.
 """
 
 import logging
-import math
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime, timezone
 import statistics
 from collections import Counter
+from src.core.contracts import confirmed_findings
 
 from src.frameworks.owasp_llm_top10 import (
     generate_owasp_coverage_report,
@@ -28,6 +28,8 @@ from src.frameworks.owasp_llm_top10 import (
 from src.frameworks.mitre_atlas import (
     generate_atlas_coverage_report,
 )
+
+SEVERITY_SCORES = {'critical': 90.0, 'high': 70.0, 'medium': 40.0, 'low': 15.0, 'info': 1.0}
 
 class RiskAssessment:
     """
@@ -47,14 +49,8 @@ class RiskAssessment:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         
-        # CVSS-inspired severity scoring weights
-        self.severity_weights = {
-            'critical': 10.0,
-            'high': 7.5,
-            'medium': 5.0,
-            'low': 2.5,
-            'info': 1.0
-        }
+        # Policy v2 uses one 0-100 scale, not CVSS or an exploitation probability.
+        self.severity_weights = SEVERITY_SCORES.copy()
         
         # Vulnerability type impact multipliers
         self.vulnerability_impact = {
@@ -139,6 +135,8 @@ class RiskAssessment:
         agent_id = agent_results.get('agent_id')
         agent_name = agent_results.get('agent_name')
         vulnerabilities = agent_results.get('vulnerabilities', [])
+        if 'check_schema_version' in agent_results:
+            vulnerabilities = confirmed_findings(agent_results)
         
         # Calculate base vulnerability score
         vulnerability_score = self._calculate_vulnerability_score(vulnerabilities)
@@ -150,7 +148,9 @@ class RiskAssessment:
         business_impact = self._calculate_business_impact(agent_results)
         
         # Calculate overall risk score (0-100 scale)
-        overall_risk_score = min(100, vulnerability_score * exposure_score * business_impact)
+        severity_floor = max((self.severity_weights.get(v.get('severity'), 1.0)
+                              for v in vulnerabilities), default=0.0)
+        overall_risk_score = min(100, max(severity_floor, vulnerability_score * exposure_score * business_impact))
         
         # Determine risk level
         risk_level = self._determine_risk_level(overall_risk_score)
@@ -170,6 +170,9 @@ class RiskAssessment:
             'assessment_timestamp': datetime.now(timezone.utc).isoformat(),
             'overall_risk_score': round(overall_risk_score, 2),
             'risk_level': risk_level,
+            'scoring_policy': 'severity-floor-v2',
+            'score_basis': 'Observed confirmed findings, not the probability that the target is safe',
+            'coverage_status': 'partial' if agent_results.get('status') != 'completed' else 'sampled',
             'vulnerability_score': round(vulnerability_score, 2),
             'exposure_score': round(exposure_score, 2),
             'business_impact_score': round(business_impact, 2),
@@ -190,42 +193,9 @@ class RiskAssessment:
         }
     
     def _calculate_vulnerability_score(self, vulnerabilities: List[Dict[str, Any]]) -> float:
-        """Calculate vulnerability score based on severity and type"""
-        if not vulnerabilities:
-            return 0.0
-        
-        total_score = 0.0
-        
-        for vuln in vulnerabilities:
-            severity = vuln.get('severity', 'low')
-            vuln_type = vuln.get('vulnerability_type', '')
-            confidence = vuln.get('confidence', 0.5)
-            
-            # Base severity score
-            base_score = self.severity_weights.get(severity, 1.0)
-            
-            # Apply vulnerability type multiplier
-            # Handle nested prompt_injection categories
-            impact_entry = self.vulnerability_impact.get(vuln_type, 0.5)
-            if isinstance(impact_entry, dict):
-                # For prompt_injection, look up the specific category
-                category = vuln.get('category', '')
-                type_multiplier = impact_entry.get(category, 0.7)  # Default 0.7 for unknown subcategory
-            else:
-                type_multiplier = impact_entry
-
-            # Apply confidence factor
-            confidence_factor = 0.5 + (confidence * 0.5)  # Scale from 0.5 to 1.0
-            
-            vuln_score = base_score * type_multiplier * confidence_factor
-            total_score += vuln_score
-        
-        # Normalize to reasonable scale (diminishing returns for many vulnerabilities)
-        # Use logarithmic dampening instead of linear to avoid going negative
-        dampening = 1.0 / (1.0 + math.log1p(len(vulnerabilities) - 1) * 0.15)
-        normalized_score = min(100, total_score * dampening)
-
-        return max(0.0, normalized_score)
+        """Use maximum severity, not request count or repeated sample findings."""
+        return max((self.severity_weights.get(v.get('severity'), 1.0)
+                    for v in vulnerabilities), default=0.0)
     
     def _calculate_exposure_risk(self, agent_results: Dict[str, Any]) -> float:
         """Calculate exposure risk multiplier based on agent accessibility"""
@@ -319,7 +289,7 @@ class RiskAssessment:
     def _generate_risk_summary(self, vulnerabilities: List[Dict[str, Any]], risk_score: float) -> str:
         """Generate human-readable risk summary"""
         if not vulnerabilities:
-            return "No security vulnerabilities detected."
+            return "No confirmed vulnerabilities in the evaluated checks; this is not evidence of target safety."
         
         vuln_counts = Counter([v.get('severity', 'unknown') for v in vulnerabilities])
         vuln_types = list(set([v.get('vulnerability_type', 'unknown') for v in vulnerabilities]))

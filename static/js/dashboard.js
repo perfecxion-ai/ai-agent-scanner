@@ -862,18 +862,32 @@ class AIAgentScanner {
         this.el('findingCount').textContent = String(findings.length);
         const score = report.summary && report.summary.overall_risk_score;
         const modern = report.check_schema_version === '1.0';
-        const riskEligible = agent => agent.security_status === 'completed' && Array.isArray(agent.checks) && agent.checks.some(check =>
-            check.status === 'completed' && ['passed', 'confirmed'].includes(check.outcome) &&
-            Number.isSafeInteger(check.responses_evaluated) && check.responses_evaluated > 0 &&
-            Number.isSafeInteger(check.requests_attempted) && check.requests_attempted >= check.responses_evaluated);
-        const riskCompleted = modern && report.risk_assessment_status === 'completed' && agents.some(riskEligible);
-        this.el('riskScore').textContent = riskCompleted && Number.isFinite(score) ? `${score.toFixed(1)} / 100` : 'Not assessed';
+        const riskEligible = agent => agent.risk_scoring_policy === 'severity-floor-v2' &&
+            ['completed', 'partial', 'failed'].includes(agent.security_status) &&
+            Array.isArray(agent.checks) && agent.checks.some(check => {
+            if (!Number.isSafeInteger(check.responses_evaluated) || check.responses_evaluated < 1 ||
+                !Number.isSafeInteger(check.requests_attempted) || check.requests_attempted < check.responses_evaluated) return false;
+            if (check.outcome === 'confirmed' && ['completed', 'failed'].includes(check.status)) {
+                return (agent.vulnerabilities || []).some(finding => finding.evidence_status === 'confirmed' &&
+                    ['rule_id', 'probe_id', 'probe_version'].every(key => typeof check[key] === 'string' && finding[key] === check[key]));
+            }
+            return agent.security_status === 'completed' && check.status === 'completed' && check.outcome === 'passed' &&
+                typeof check.rule_id === 'string' && !check.rule_id.startsWith('prompt_injection') &&
+                check.rule_id !== 'tenant_isolation_violation';
+        });
+        const riskAvailable = modern && ['completed', 'partial'].includes(report.risk_assessment_status) && agents.some(riskEligible);
+        const partialRisk = report.status === 'partial' || report.risk_assessment_status === 'partial';
+        this.el('riskScore').textContent = riskAvailable && Number.isFinite(score) ?
+            `${score.toFixed(1)} / 100${partialRisk ? ' (partial coverage)' : ''}` : 'Not assessed';
         const checks = agents.flatMap(agent => Array.isArray(agent.checks) ? agent.checks : []);
         this.el('checkSummary').textContent = modern ?
             `Checks: ${checks.filter(check => check.status === 'completed').length} completed / ${checks.filter(check => check.status === 'skipped').length} skipped / ${checks.filter(check => check.status === 'failed').length} failed. Completion is separate from evidence outcome.` :
             'Check evidence unavailable for this historical report. Existing numeric scores remain in the export.';
         this.el('reportNote').textContent = report.error ||
             `${report.status}. ${report.summary?.agents_tested || 0} assets completed security testing. Review skipped and incomplete states below.`;
+        if (report.source_inventory?.coverage_complete === false) {
+            this.el('reportNote').textContent += ' Source inventory coverage is incomplete; only saved validated assets were tested.';
+        }
         const assetList = this.el('assetList');
         assetList.replaceChildren();
         if (!agents.length) this.append(assetList, 'p', 'No assets recorded.');
@@ -885,7 +899,9 @@ class AIAgentScanner {
             this.append(card, 'p', `${agent.provider || 'Unknown provider'} / ${agent.security_status || 'unknown'}`);
             this.append(card, 'p', agent.endpoint || 'No endpoint');
             if (agent.metadata?.resource_id) this.append(card, 'p', `Cloud resource: ${agent.metadata.resource_id}`);
-            this.append(card, 'p', riskCompleted && riskEligible(agent) && Number.isFinite(agent.risk_score) ? `Risk: ${agent.risk_score.toFixed(1)} / 100` : 'Risk: Not assessed');
+            const partialAsset = agent.risk_coverage_status === 'partial' || ['partial', 'failed'].includes(agent.security_status);
+            this.append(card, 'p', riskAvailable && riskEligible(agent) && Number.isFinite(agent.risk_score) ?
+                `Risk: ${agent.risk_score.toFixed(1)} / 100${partialAsset ? ' (partial coverage)' : ''}` : 'Risk: Not assessed');
             const assessment = (report.security_results || []).find(result => result.agent_id === agent.id);
             if (assessment && (assessment.reason || assessment.error)) this.append(card, 'p', assessment.reason || assessment.error);
             if (assessment?.limitations?.length) {

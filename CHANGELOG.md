@@ -6,6 +6,12 @@ These changes are engineering work on the current branch, not a published releas
 
 ### Security and correctness
 
+- Use one severity-floor 0-100 risk policy without repeated-sample inflation.
+  Preserve confirmed risk during partial execution and show coverage warnings.
+- Treat prompt/tenant nondisclosure as inconclusive, never a safety pass or proof
+  that an earlier disclosure was resolved. All-skipped active scans remain partial.
+- Omit generated text from model/access evidence and record anonymous inference
+  as an exposure observation, separate from confirmed authorization bypass.
 - Write local report exports atomically with owner-only permissions and reject
   destination symlinks, including replacements of previously public-readable files.
 - Require certifi 2026.10.19 or newer to exclude the affected emSign trust roots

@@ -4,6 +4,7 @@ import logging
 from src.core.transport import current_budget
 from src.utils.request_builder import construct_agent_request
 from src.core.contracts import CHECK_SCHEMA_VERSION, collect_checks, missing_checks, risk_assessment_eligible
+from src.risk.risk_assessor import SEVERITY_SCORES
 
 # Import test modules from guardrail tester
 from .prompt_injection_tests import PromptInjectionTester
@@ -54,7 +55,8 @@ class SecurityTestEngine:
             'vulnerabilities': [],
             'observations': [],
             'limitations': ['Data retention requires verified expiry/deletion and session boundaries.',
-                            'Prompt and tenant disclosure require operator-seeded protected canaries.',
+                            'Prompt and tenant disclosure require operator-seeded protected canaries; nondisclosure is inconclusive.',
+                            'Anonymous inference is an exposure observation, not proof of authorization bypass.',
                             'Authentication checks require a protected response marker and denied control.'],
             'overall_risk_score': None
         }
@@ -138,19 +140,4 @@ class SecurityTestEngine:
         if not vulnerabilities:
             return 0.0
         
-        severity_weights = {
-            'critical': 10,
-            'high': 7,
-            'medium': 4,
-            'low': 2,
-            'info': 1
-        }
-        
-        total_score = sum(
-            severity_weights.get(vuln.get('severity', 'low'), 2)
-            for vuln in vulnerabilities
-        )
-        
-        # Normalize to 0-100 scale
-        max_possible = len(vulnerabilities) * 10
-        return (total_score / max_possible) * 100 if max_possible > 0 else 0
+        return max(SEVERITY_SCORES.get(vuln.get('severity'), 1.0) for vuln in vulnerabilities)

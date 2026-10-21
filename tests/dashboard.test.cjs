@@ -26,7 +26,8 @@ const event = {preventDefault() {}};
 const texts = node => [node.textContent, ...node.children.flatMap(texts)];
 const checkedReport = (checks, score = null) => ({status: 'completed', check_schema_version: '1.0',
     risk_assessment_status: score === null ? 'not_assessed' : 'completed',
-    agents: [{id: 'asset', name: 'Fixture', security_status: 'completed', risk_score: score, checks, vulnerabilities: []}],
+    agents: [{id: 'asset', name: 'Fixture', security_status: 'completed', risk_score: score,
+        risk_scoring_policy: 'severity-floor-v2', checks, vulnerabilities: []}],
     security_results: [], summary: {overall_risk_score: score}});
 const auditEvent = id => ({id, event: 'claim', previous_status: 'queued', status: 'running', created_at: '2026-10-13T10:00:00'});
 const savedTemplate = (changes = {}) => ({id: 'recipe', revision: 3, scan_name: 'Lab recipe', scan_type: 'discovery_only',
@@ -1077,6 +1078,54 @@ test('inconclusive checks cannot make zero risk look assessed', () => {
     app.renderReport(checkedReport([{rule_id: 'prompt', status: 'completed', outcome: 'inconclusive', responses_evaluated: 1, requests_attempted: 1}], 0));
     assert.equal(app.el('riskScore').textContent, 'Not assessed');
     assert.ok(texts(app.el('assetList')).includes('Risk: Not assessed'));
+});
+
+test('partial confirmed evidence retains risk with an explicit coverage warning', () => {
+    const {app} = fixture();
+    const check = {rule_id: 'prompt_injection.system_prompt_extraction', probe_id: 'sample', probe_version: 'v2',
+        status: 'failed', outcome: 'confirmed', responses_evaluated: 1, requests_attempted: 2};
+    const report = checkedReport([check], 70);
+    report.status = 'partial';
+    report.risk_assessment_status = 'partial';
+    report.agents[0].security_status = 'partial';
+    report.agents[0].vulnerabilities = [{...check, evidence_status: 'confirmed', severity: 'high'}];
+    report.source_inventory = {coverage_complete: false};
+    app.renderReport(report);
+    assert.equal(app.el('riskScore').textContent, '70.0 / 100 (partial coverage)');
+    assert.ok(texts(app.el('assetList')).includes('Risk: 70.0 / 100 (partial coverage)'));
+    assert.match(app.el('reportNote').textContent, /Source inventory coverage is incomplete/);
+});
+
+test('stale prompt nondisclosure passes cannot display a zero risk verdict', () => {
+    const {app} = fixture();
+    for (const rule of ['prompt_injection.system_prompt_extraction', 'tenant_isolation_violation']) {
+        app.renderReport(checkedReport([{rule_id: rule, status: 'completed', outcome: 'passed',
+            responses_evaluated: 5, requests_attempted: 5}], 0));
+        assert.equal(app.el('riskScore').textContent, 'Not assessed');
+    }
+});
+
+test('a confirmed check without matching versioned finding cannot display risk', () => {
+    const {app} = fixture();
+    app.renderReport(checkedReport([{rule_id: 'prompt_injection.system_prompt_extraction', probe_id: 'sample',
+        probe_version: 'v2', status: 'completed', outcome: 'confirmed', responses_evaluated: 1, requests_attempted: 1}], 70));
+    assert.equal(app.el('riskScore').textContent, 'Not assessed');
+});
+
+test('old scoring policies and skipped assets cannot display a current risk verdict', () => {
+    const {app} = fixture();
+    const check = {rule_id: 'prompt_injection.system_prompt_extraction', probe_id: 'sample', probe_version: 'v2',
+        status: 'completed', outcome: 'confirmed', responses_evaluated: 1, requests_attempted: 1};
+    const report = checkedReport([check], 6.58);
+    report.agents[0].vulnerabilities = [{...check, evidence_status: 'confirmed', severity: 'high'}];
+    delete report.agents[0].risk_scoring_policy;
+    app.renderReport(report);
+    assert.equal(app.el('riskScore').textContent, 'Not assessed');
+    report.agents[0].risk_scoring_policy = 'severity-floor-v2';
+    report.agents[0].security_status = 'skipped';
+    report.agents[0].risk_score = report.summary.overall_risk_score = 70;
+    app.renderReport(report);
+    assert.equal(app.el('riskScore').textContent, 'Not assessed');
 });
 
 test('large check lists render in bounded pages with the complete export still available', () => {

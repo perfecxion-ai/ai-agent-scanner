@@ -187,7 +187,7 @@ class DataPrivacyTester:
                             'prompt': prompt,
                             'detected_pii_types': list(detected_pii.keys()),
                             'detected_patterns': {key: len(value) for key, value in detected_pii.items()},
-                            'response_excerpt': self._sanitize_response(response_text)[:300],
+                            'response_excerpt': '[GENERATED_TEXT_OMITTED]',
                             'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.2,
                             'remediation': "Implement PII detection and filtering in AI responses. Avoid generating real PII data."
@@ -195,16 +195,16 @@ class DataPrivacyTester:
                 
                 await asyncio.sleep(1)  # Rate limiting
                 
-            except Exception as e:
-                self.logger.debug(f"PII disclosure test failed: {str(e)}")
+            except Exception:
+                self.logger.debug("PII disclosure test failed")
                 continue
         
         return vulnerabilities
     
-    @checked("tenant_isolation_violation", lambda self: self.tenant_isolation_prompts[:5],
+    @checked("tenant_isolation_violation", lambda self: {"semantics": "nondisclosure-inconclusive-v2", "prompts": self.tenant_isolation_prompts[:5]},
              prerequisite=lambda agent: None if has_canary(agent, 'cross_tenant_canary')
              else "A protected foreign-tenant canary is required",
-             oracle=lambda agent: has_canary(agent, 'cross_tenant_canary'))
+             absence_reason="No foreign canary observed in this finite sample; isolation and canary seeding are not established")
     async def _test_tenant_isolation(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for cross-tenant data leakage"""
         vulnerabilities = []
@@ -225,7 +225,7 @@ class DataPrivacyTester:
                             'title': "Cross-Tenant Data Leakage",
                             'description': "Response includes the configured foreign-tenant canary absent from the request.",
                             'prompt': prompt,
-                            'response_excerpt': self._sanitize_response(response_text.replace(agent['cross_tenant_canary'], '[CANARY_REDACTED]'))[:300],
+                            'response_excerpt': '[GENERATED_TEXT_OMITTED]',
                             'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.95,
                             'remediation': "Implement proper tenant isolation and access controls."
@@ -233,8 +233,8 @@ class DataPrivacyTester:
                 
                 await asyncio.sleep(1)
                 
-            except Exception as e:
-                self.logger.debug(f"Tenant isolation test failed: {str(e)}")
+            except Exception:
+                self.logger.debug("Tenant isolation test failed")
                 continue
         
         return vulnerabilities
@@ -269,7 +269,7 @@ class DataPrivacyTester:
                             'title': "Lack of Privacy Transparency",
                             'description': "Agent does not provide clear information about data practices",
                             'prompt': prompt,
-                            'response_excerpt': response_text[:300],
+                            'response_excerpt': '[GENERATED_TEXT_OMITTED]',
                             'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.5,
                             'remediation': "Provide clear privacy information and data handling practices."
@@ -277,8 +277,8 @@ class DataPrivacyTester:
                 
                 await asyncio.sleep(1)
                 
-            except Exception as e:
-                self.logger.debug(f"Privacy compliance test failed: {str(e)}")
+            except Exception:
+                self.logger.debug("Privacy compliance test failed")
                 continue
         
         return vulnerabilities
@@ -317,7 +317,7 @@ class DataPrivacyTester:
                             'description': "Error messages contain sensitive system information",
                             'trigger': trigger,
                             'sensitive_info_detected': sensitive_info,
-                            'response_excerpt': response_text[:300],
+                            'response_excerpt': '[GENERATED_TEXT_OMITTED]',
                             'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.7,
                             'remediation': "Sanitize error messages to avoid information disclosure."
@@ -325,8 +325,8 @@ class DataPrivacyTester:
                 
                 await asyncio.sleep(1)
                 
-            except Exception as e:
-                self.logger.debug(f"Error information disclosure test failed: {str(e)}")
+            except Exception:
+                self.logger.debug("Error information disclosure test failed")
                 continue
         
         return vulnerabilities
@@ -365,9 +365,9 @@ class DataPrivacyTester:
                                        and agent['cross_tenant_canary'] not in prompt)
                     return text if usable else None
                     
-            except Exception as e:
+            except Exception:
                 record_interaction(False)
-                self.logger.debug(f"Request failed: {str(e)}")
+                self.logger.debug("Model request failed")
                 return None
     
     def _construct_request(self, agent: Dict[str, Any], prompt: str) -> Optional[Dict[str, Any]]:

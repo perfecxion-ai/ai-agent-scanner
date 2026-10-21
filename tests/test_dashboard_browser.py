@@ -176,3 +176,30 @@ def test_fixture_parent_cleans_after_handshake_eof(smoke_module, monkeypatch):
             pytest.fail("An incomplete startup cannot yield a server")
     assert len(processes) == 1 and processes[0].reaped and processes[0].stdout.closed
     assert not processes[0].directory.exists()
+
+
+def test_browser_parent_canonicalizes_temporary_ancestor(smoke_module, fixture_module, tmp_path, monkeypatch):
+    real_temp = tmp_path / "real-temp"
+    real_temp.mkdir()
+    alias = tmp_path / "temp-alias"
+    alias.symlink_to(real_temp, target_is_directory=True)
+    monkeypatch.setattr(smoke_module.tempfile, "gettempdir", lambda: str(alias))
+
+    class Process:
+        def __init__(self, arguments, **kwargs):
+            self.directory = Path(arguments[-1])
+            assert self.directory.parent == real_temp
+            fixture_module.fixture_database(self.directory)
+            self.stdout = io.BytesIO()
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout):
+            pass
+
+    monkeypatch.setattr(smoke_module.subprocess, "Popen", Process)
+    monkeypatch.setattr(smoke_module, "read_startup", lambda stream: dict(port=1, control_key="a" * 48))
+    with smoke_module.fixture_server(io.StringIO()) as (_, _, directory):
+        assert Path(directory).parent == real_temp
+    assert alias.is_symlink() and not list(real_temp.iterdir())

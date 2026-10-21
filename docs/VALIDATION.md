@@ -36,6 +36,25 @@ owned child/database symlinks remain rejected. A new native macOS CI job must
 pass before claiming macOS acceptance. This slice alone does not repair risk
 verdicts or lift the beta hold.
 
+### Verdict remediation slice
+
+The integrated verdict slice passes 1150 local Linux/Python 3.10 tests, including
+82 Node controller cases, Ruff, and the configured Bandit gate. Twenty-nine new
+verdict regressions cover severity floors, repeated leak samples, unseeded and
+stochastic nondisclosure, historical resolution, private evidence/logging, partial
+confirmed risk, anonymous inference, denied cookies, and all-skipped execution.
+Independent reviews accepted the runtime changes and corrected dashboard policy
+gating so historical low scores do not appear current. The authoritative policy
+and scores agree across agent, security-result, assessment, and summary fields.
+
+The real synthetic Chromium workflow passed at 320/390/1440 pixels, including
+visible confirmed high risk with partial-coverage warnings and unchanged focus
+and session protections. Artifacts remain in `/tmp/ai-scanner-browser-82s862s_`;
+the fixture process stopped and its private database directory was removed.
+The browser parent also canonicalizes its created temporary root; the mandatory
+symlink-ancestor regression and existing guard/cleanup cases pass. These fixtures
+do not rerun the external lab or reopen the beta.
+
 ### Historical local-beta checkpoint
 
 - Local Linux/Python 3.10.20: 1109 pytest cases passed. The suite invokes 78 Node

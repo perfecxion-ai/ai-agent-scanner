@@ -571,7 +571,8 @@ class TestRiskAssessment:
         """Test risk summary with no vulnerabilities"""
         summary = self.risk_assessor._generate_risk_summary([], 0.0)
 
-        assert 'No security vulnerabilities' in summary
+        assert 'No confirmed vulnerabilities' in summary
+        assert 'not evidence of target safety' in summary
 
     def test_remediation_priority_generation(self):
         """Test remediation priority generation"""

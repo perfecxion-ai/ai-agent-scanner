@@ -26,6 +26,8 @@ async def test_local_provider_to_redacted_report(provider, discovery_path, reque
     async def handler(request):
         if request.method != 'POST':
             return web.Response(status=404)
+        if 'Authorization' not in request.headers:
+            return web.Response(status=401)
         assert request.path == request_path
         body = await request.json()
         observed.append(body)
@@ -62,12 +64,12 @@ async def test_local_provider_to_redacted_report(provider, discovery_path, reque
     assert observed
     # The fixture rejects GET access/session probes while serving valid model calls.
     assert report['status'] == 'partial'
-    assert report['agents'][0]['risk_score'] is None
+    assert (report['agents'][0]['risk_score'] >= 70) if disclose else (report['agents'][0]['risk_score'] is None)
     assert any(check['status'] == 'failed' for check in report['agents'][0]['checks'])
     prompt_check = next(check for check in report['agents'][0]['checks']
                         if check['rule_id'] == 'prompt_injection.system_prompt_extraction')
     assert prompt_check['status'] == 'completed'
-    assert prompt_check['outcome'] == ('confirmed' if disclose else 'passed')
+    assert prompt_check['outcome'] == ('confirmed' if disclose else 'inconclusive')
     assert report['summary']['agents_tested'] == 0
     assert report['summary']['agents_partial'] == 1
     findings = report['agents'][0]['vulnerabilities']
