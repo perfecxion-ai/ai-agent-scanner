@@ -42,7 +42,8 @@ static secret-safe diagnostics; baseline/control pagination wording is explicit.
 The wildcard detector keeps a justified narrowly scoped suppression without stale
 warnings. No security pass, scope boundary, retry behavior, or MCP control coverage
 was broadened. PR #51 and its merged revision passed all eight CI jobs. This is not a
-new cloud retest. O3 grouping and the larger product gaps remain.
+new cloud retest. O3 presentation is addressed in the later checkpoint below;
+the larger product gaps remain.
 
 The server evidence-reference slice adds an opt-in supported API workflow for
 system-prompt canaries. A private startup-only registry binds a named profile to
@@ -68,7 +69,7 @@ exercised for this slice.
 The prompt-only benchmark now supplies an opt-in, fixed-budget paired baseline
 and experimental extraction-focused candidate. It uses actual adapters,
 transport, analyzer, and check contracts without changing production defaults.
-Each arm samples 35 requests; ten balanced pairs cap a target cohort at 700
+Each arm is capped at 35 requests; ten balanced pairs cap a target cohort at 700
 requests and 90 minutes. Partial observations and planned denominators remain
 explicit. Neither successful fixtures nor nondisclosure establish accuracy.
 See [GCP retest scope and commands](BETA_TESTING.md#next-authorized-gcp-detector-retest)
@@ -79,8 +80,20 @@ canaries to obtain a positive result. Freeze setup and sample counts before runs
 The next priority is reviewing those paired real-model measurements before
 adopting a candidate or increasing sampling. The server input gap is separate
 from detection yield: no stronger real-model hit rate is established here. Keep
-finding presentation grouping, raw-score schema migration, broader authorization
-controls, and enterprise readiness as separate reviewed work.
+raw-score schema migration, broader authorization controls, and enterprise
+readiness as separate reviewed work.
+
+O3 now has conservative dashboard-only finding groups: 18 sample occurrences
+can display as seven groups while original JSON/SARIF, score 70, all occurrence
+IDs, check counts, suppression keys, and resolution behavior remain unchanged.
+Grouping requires exact modern confirmed provenance and a matching check within
+one asset entry; malformed/historical/ambiguous records stay separate. Details
+and pagination are bounded, text is literal, and final-page keyboard focus is
+preserved. The checked-in Chromium fixture exercises this at 320/390/1440 pixels.
+It uses synthetic reports and private temporary SQLite, not real models. The
+fixture also excludes inherited operator evidence-registry configuration.
+See [presentation contract](dashboard-evidence.md#finding-groups-and-original-occurrences)
+and [acceptance](VALIDATION.md#finding-presentation-grouping).
 
 The following slice descriptions record earlier local remediation checkpoints.
 
