@@ -430,13 +430,22 @@ def test_real_app_startup_registry_wiring_is_isolated_and_secret_safe(private_fi
     program = '''
 import socket
 import sqlite3
+import sqlite3.dbapi2
+import dns.resolver
 def forbidden_io(*args, **kwargs):
     raise AssertionError("Startup must not connect or bind sockets or open a database")
 sqlite3.connect = forbidden_io
+sqlite3.dbapi2.connect = forbidden_io
 socket.socket.connect = forbidden_io
 socket.socket.connect_ex = forbidden_io
 socket.socket.bind = forbidden_io
+socket.socket.sendto = forbidden_io
 socket.getaddrinfo = forbidden_io
+socket.gethostbyname = forbidden_io
+socket.gethostbyname_ex = forbidden_io
+socket.gethostbyaddr = forbidden_io
+socket.getnameinfo = forbidden_io
+dns.resolver.resolve = forbidden_io
 try:
     import app
 except Exception as error:
@@ -519,10 +528,11 @@ def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch,
     assert CANARY not in json.dumps(public) and ENV not in json.dumps(public)
     assert CANARY not in caplog.text and ENV not in caplog.text
     posts = [body for method, _, body in calls if method == "POST"]
-    assert posts and CANARY not in json.dumps(posts)
+    assert posts and CANARY not in json.dumps(posts) and ENV not in json.dumps(posts)
     module.db.session.remove()
     scans = module.ScanSession.query.all()
     definitions = [scan.scan_config for scan in scans] + [row.scan_config for row in module.ScanTemplate.query.all()]
     assert CANARY not in json.dumps(definitions) and ENV not in json.dumps(definitions)
-    assert CANARY.encode() not in Path(module.db.engine.url.database).read_bytes()
+    database_bytes = Path(module.db.engine.url.database).read_bytes()
+    assert CANARY.encode() not in database_bytes and ENV.encode() not in database_bytes
     assert PIN_FIELD in next(scan for scan in scans if scan.id == scan_id).scan_config
