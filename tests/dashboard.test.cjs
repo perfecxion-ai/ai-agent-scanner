@@ -4,19 +4,20 @@ const fs = require('node:fs');
 const {AIAgentScanner, TERMINAL_STATES} = require('../static/js/dashboard.js');
 
 class Element {
-    constructor(tag = 'div') { this.tagName = tag; this.children = []; this.value = ''; this.textContent = ''; this.disabled = false; this.hidden = false; this.handlers = {}; }
+    constructor(tag = 'div', ownerDocument = null) { this.tagName = tag; this.ownerDocument = ownerDocument; this.children = []; this.value = ''; this.textContent = ''; this.disabled = false; this.hidden = false; this.handlers = {}; this.attributes = {}; }
     addEventListener(event, handler) { this.handlers[event] = handler; }
     appendChild(child) { this.children.push(child); return child; }
     replaceChildren(...children) { this.children = children; }
     click() { this.clicked = true; if (this.handlers.click) this.handlers.click(); }
-    focus() { if (!this.disabled) this.focused = true; }
+    focus() { if (!this.disabled) { this.focused = true; if (this.ownerDocument) this.ownerDocument.activeElement = this; } }
+    setAttribute(name, value) { this.attributes[name] = value; }
     set innerHTML(value) { throw new Error('Unsafe HTML rendering'); }
 }
 
 function fixture(fetcher) {
     const elements = new Map();
-    const doc = {getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
-                 createElement(tag) { return new Element(tag); }};
+    const doc = {activeElement: null, getElementById(id) { if (!elements.has(id)) elements.set(id, new Element('div', doc)); return elements.get(id); },
+                 createElement(tag) { return new Element(tag, doc); }};
     const app = new AIAgentScanner(doc, fetcher);
     return {app, doc};
 }
@@ -89,6 +90,159 @@ test('terminal states load results without scheduling another poll', async () =>
         assert.equal(app.el('riskScore').textContent, 'Not assessed');
         assert.equal(app.el('jsonBtn').disabled, false);
     }
+});
+
+test('terminal announcements are concise, conservative, and do not repeat or rerender on polling', async () => {
+    for (const status of TERMINAL_STATES) {
+        let reports = 0;
+        const {app, doc} = fixture(async path => {
+            if (path.endsWith('/status')) return response({status, progress: 100});
+            reports += 1;
+            return response({results: {pipeline: checkedReport([{rule_id: 'fixture', status: 'skipped', outcome: 'not_evaluated'}])}});
+        });
+        app.token = 'fixture-token'; app.scanId = 'fixture';
+        app.el('openScanId').focus();
+        await app.poll();
+        const announcement = app.el('scanAnnouncement').textContent;
+        assert.match(announcement, /Report available\. Review incomplete checks and evidence\./);
+        assert.ok(announcement.length < 150);
+        assert.equal(doc.activeElement, app.el('openScanId'));
+        const card = app.el('assetList').children[0];
+        const region = card.children.find(child => child.tagName === 'details').children[1];
+        region.focus();
+        await app.poll();
+        assert.equal(reports, 1);
+        assert.equal(app.el('assetList').children[0], card);
+        assert.equal(doc.activeElement, region);
+        assert.equal(app.el('scanAnnouncement').textContent, announcement);
+        app.notice('Another operator action.');
+        await app.poll();
+        assert.equal(app.el('notice').textContent, 'Another operator action.');
+    }
+});
+
+test('all terminal states announce unavailable or historical evidence without claiming assessment', async () => {
+    for (const status of TERMINAL_STATES) {
+        for (const historical of [false, true]) {
+            let failed = !historical;
+            const {app} = fixture(async path => path.endsWith('/status') ? response({status}) :
+                failed ? response({error: 'Results unavailable'}, 503) : response({results: {pipeline: historical ? null : checkedReport([])}}));
+            app.token = 'fixture-token'; app.scanId = 'fixture';
+            app.clearReport();
+            await app.poll();
+            const announcement = app.el('scanAnnouncement').textContent;
+            assert.match(announcement, /Testing completeness is unverified\./);
+            assert.match(announcement, historical ? /No versioned report/ : /Report unavailable/);
+            assert.equal(app.el('jsonBtn').disabled, true);
+            failed = false;
+            await app.poll();
+            assert.equal(app.el('scanAnnouncement').textContent, announcement);
+            if (!historical) assert.equal(app.el('jsonBtn').disabled, false);
+        }
+    }
+});
+
+test('nonterminal updates do not announce completion or move focus', async () => {
+    const {app, doc} = fixture(async () => response({status: 'running', progress: 50}));
+    app.token = 'fixture-token'; app.scanId = 'fixture';
+    app.el('operatorKey').focus();
+    await app.poll();
+    clearTimeout(app.timer);
+    assert.equal(app.el('scanAnnouncement').textContent, '');
+    assert.equal(doc.activeElement, app.el('operatorKey'));
+});
+
+test('stale terminal results and failures cannot announce or focus after selection or logout', async () => {
+    for (const logout of [false, true]) {
+        for (const fail of [false, true]) {
+            let reply;
+            const {app, doc} = fixture(path => path.endsWith('/status') ? Promise.resolve(response({status: 'completed'})) :
+                new Promise(done => { reply = done; }));
+            app.token = 'fixture-token'; app.scanId = 'first';
+            const pending = app.poll();
+            for (let attempt = 0; attempt < 5 && !reply; attempt += 1) await Promise.resolve();
+            assert.ok(reply);
+            if (logout) app.logout();
+            else { app.selection += 1; app.scanId = 'second'; app.clearReport(); app.el('scanAnnouncement').textContent = ''; app.el('openScanId').focus(); }
+            const focused = doc.activeElement;
+            reply(fail ? response({error: 'Old result error'}, 503) : response({results: {pipeline: checkedReport([])}}));
+            await pending;
+            assert.equal(app.el('scanAnnouncement').textContent, '');
+            assert.equal(doc.activeElement, focused);
+            assert.equal(app.el('assetList').children.length, 0);
+        }
+    }
+});
+
+test('401 results clear terminal announcements and protected report state', async () => {
+    const {app, doc} = fixture(async path => path.endsWith('/status') ? response({status: 'completed'}) : response({error: 'Expired'}, 401));
+    app.token = 'fixture-token'; app.scanId = 'fixture';
+    app.el('scanAnnouncement').textContent = 'Old terminal state';
+    await app.poll();
+    assert.equal(app.token, null);
+    assert.equal(app.el('scanAnnouncement').textContent, '');
+    assert.equal(app.el('assetList').children.length, 0);
+    assert.equal(doc.activeElement, app.el('operatorKey'));
+});
+
+test('selecting another scan resets report cache and permits its own terminal announcement', async () => {
+    let reports = 0;
+    const {app} = fixture(async path => {
+        if (path.includes('/audit?')) return response({events: [], next_after: 0});
+        if (path.endsWith('/status')) return response({status: path.includes('/first/') ? 'cancelled' : 'interrupted'});
+        reports += 1;
+        return response({results: {pipeline: checkedReport([])}});
+    });
+    app.token = 'fixture-token';
+    await app.selectScan('first');
+    assert.match(app.el('scanAnnouncement').textContent, /Scan cancelled/);
+    await app.selectScan('second');
+    assert.match(app.el('scanAnnouncement').textContent, /Scan interrupted/);
+    assert.equal(reports, 2);
+    app.logout();
+    assert.equal(app.el('scanAnnouncement').textContent, '');
+});
+
+test('concurrent terminal result responses render and announce once without replacing focused records', async () => {
+    const replies = [];
+    const {app, doc} = fixture(path => path.endsWith('/status') ? Promise.resolve(response({status: 'completed'})) :
+        new Promise(done => replies.push(done)));
+    app.token = 'fixture-token'; app.scanId = 'fixture';
+    const first = app.poll();
+    const second = app.poll();
+    for (let attempt = 0; attempt < 5 && replies.length < 2; attempt += 1) await Promise.resolve();
+    assert.equal(replies.length, 2);
+    replies[1](response({results: {pipeline: checkedReport([{rule_id: 'current'}])}}));
+    await second;
+    const card = app.el('assetList').children[0];
+    const region = card.children.find(child => child.tagName === 'details').children[1];
+    region.focus();
+    const announcement = app.el('scanAnnouncement').textContent;
+    replies[0](response({results: {pipeline: checkedReport([{rule_id: 'earlier'}])}}));
+    await first;
+    assert.equal(app.el('assetList').children[0], card);
+    assert.equal(doc.activeElement, region);
+    assert.equal(app.el('scanAnnouncement').textContent, announcement);
+    assert.ok(texts(region).includes('current'));
+    assert.ok(!texts(region).includes('earlier'));
+});
+
+test('direct result loading caches only current successful responses and retries errors', async () => {
+    let fail = true;
+    let calls = 0;
+    const {app} = fixture(async () => { calls += 1; return fail ? response({error: 'Unavailable'}, 503) :
+        response({results: {pipeline: checkedReport([])}}); });
+    app.token = 'fixture-token'; app.scanId = 'fixture'; app.clearReport();
+    await assert.rejects(app.loadResults(app.selection), /Unavailable/);
+    assert.equal(app.reportState, null);
+    fail = false;
+    assert.equal(await app.loadResults(app.selection), 'available');
+    assert.equal(await app.loadResults(app.selection), 'available');
+    assert.equal(calls, 2);
+    app.clearReport();
+    assert.equal(app.reportState, null);
+    await app.loadResults(app.selection);
+    assert.equal(calls, 3);
 });
 
 test('queued 202 response selects scan and sends IPv6 as a network target', async () => {
@@ -881,6 +1035,51 @@ test('large check lists render in bounded pages with the complete export still a
     assert.equal(list.children.length, 100);
     assert.equal(more.hidden, true);
     assert.ok(texts(details).some(text => text.includes('Showing 100 of 140 checks')));
+});
+
+test('final check page restores focus only when its disappearing button owns focus', () => {
+    for (const count of [18, 36, 110]) {
+        for (const focused of [false, true]) {
+            const {app, doc} = fixture();
+            const card = new Element();
+            app.el('openScanId').focus();
+            app.renderChecks(card, Array.from({length: count}, () => ({rule_id: '<fixture>'})), 'Check records for <fixture>');
+            const [details] = card.children;
+            const [, list, more] = details.children;
+            assert.equal(list.attributes.role, 'region');
+            assert.equal(list.attributes['aria-label'], 'Check records for <fixture>');
+            assert.equal(doc.activeElement, app.el('openScanId'));
+            for (let page = 0; page < 6 && !more.hidden; page += 1) {
+                if (focused) more.focus();
+                more.click();
+            }
+            assert.equal(more.hidden, true);
+            assert.equal(list.children.length, Math.min(count, 100));
+            assert.equal(doc.activeElement, focused && count > 18 ? list : app.el('openScanId'));
+        }
+    }
+});
+
+test('dashboard associates scope and model guidance and names persistent audit and status regions', () => {
+    const html = fs.readFileSync(require.resolve('../templates/dashboard.html'), 'utf8');
+    const descriptions = {scanType: 'modelProbeHelp', networkRanges: 'scopeHelp networkHelp', repositories: 'scopeHelp pathHelp',
+        trafficSources: 'scopeHelp pathHelp', sourceScanId: 'sourceHelp modelProbeHelp', modelOverrides: 'modelSelectionHelp modelProbeHelp'};
+    for (const [id, describedby] of Object.entries(descriptions)) {
+        assert.match(html, new RegExp(`id="${id}"[^>]*aria-describedby="${describedby}"`));
+        for (const hint of describedby.split(' ')) assert.equal((html.match(new RegExp(`id="${hint}"`, 'g')) || []).length, 1);
+    }
+    assert.match(html, /id="auditRegion"[^>]*tabindex="0"[^>]*role="region"[^>]*aria-labelledby="auditTitle"/);
+    assert.match(html, /id="scanAnnouncement"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/);
+});
+
+test('enabled control border contrast exceeds three to one against adjacent white', () => {
+    const css = fs.readFileSync(require.resolve('../static/css/dashboard.css'), 'utf8');
+    assert.match(css, /input,textarea,select\{[^}]*border:1px solid #6e7d8b/);
+    assert.match(css, /\.secondary\{[^}]*border-color:#6e7d8b/);
+    const channels = [0x6e, 0x7d, 0x8b].map(channel => channel / 255).map(channel =>
+        channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+    const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    assert.ok(1.05 / (luminance + 0.05) >= 3);
 });
 
 test('audit uses authenticated cursor pagination, ordered safe text, and refresh', async () => {
