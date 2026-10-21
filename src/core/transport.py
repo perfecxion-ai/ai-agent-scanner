@@ -4,6 +4,7 @@ import asyncio
 import ipaddress
 import json
 import logging
+import math
 import socket
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
@@ -24,6 +25,7 @@ class ScanBudget:
     allow_loopback: bool = False
     max_requests: int = 500
     max_response_bytes: int = 1_048_576
+    request_timeout_seconds: float = 30
     requests: int = 0
     failures: int = 0
     rejections: int = 0
@@ -32,6 +34,10 @@ class ScanBudget:
     def __post_init__(self):
         if self.max_requests < 1 or self.max_response_bytes < 1:
             raise ValueError('Transport limits must be positive')
+        if (type(self.request_timeout_seconds) not in (int, float)
+                or not math.isfinite(self.request_timeout_seconds)
+                or not 1 <= self.request_timeout_seconds <= 300):
+            raise ValueError('Request timeout must be from 1 to 300 seconds')
         self.networks = tuple(ipaddress.ip_network(value, strict=False) for value in self.allowed_networks or ())
 
     def check_address(self, address):
@@ -70,6 +76,27 @@ _budget: ContextVar[ScanBudget | None] = ContextVar('scan_budget', default=None)
 
 def current_budget():
     return _budget.get()
+
+
+def model_request_timeout():
+    """Use the operator's bounded request deadline for active model probes."""
+    budget = current_budget()
+    return aiohttp.ClientTimeout(total=budget.request_timeout_seconds if budget else 30)
+
+
+def _bounded_timeout(value, maximum):
+    if isinstance(value, aiohttp.ClientTimeout):
+        total = value.total
+        if type(total) not in (int, float) or not math.isfinite(total) or total <= 0:
+            total = maximum
+        return aiohttp.ClientTimeout(total=min(total, maximum),
+                                     connect=value.connect, sock_read=value.sock_read,
+                                     sock_connect=value.sock_connect, ceil_threshold=value.ceil_threshold)
+    if value is None:
+        return aiohttp.ClientTimeout(total=maximum)
+    if type(value) in (int, float) and math.isfinite(value):
+        return aiohttp.ClientTimeout(total=min(value, maximum) if value > 0 else maximum)
+    raise TransportPolicyError('Invalid HTTP timeout configuration')
 
 
 def record_response_failure():
@@ -157,7 +184,9 @@ class SafeSession:
     async def __aenter__(self):
         self.resolver = PolicyResolver(self.budget)
         connector = aiohttp.TCPConnector(resolver=self.resolver, limit=20)
-        self.session = aiohttp.ClientSession(connector=connector, trust_env=False, **self.kwargs)
+        options = dict(self.kwargs)
+        options['timeout'] = _bounded_timeout(options.get('timeout'), self.budget.request_timeout_seconds)
+        self.session = aiohttp.ClientSession(connector=connector, trust_env=False, **options)
         await self.session.__aenter__()
         return self
 
@@ -171,6 +200,8 @@ class SafeSession:
     async def request(self, method, url, discovery=False, **kwargs):
         try:
             self.budget.reserve(url)
+            if 'timeout' in kwargs:
+                kwargs['timeout'] = _bounded_timeout(kwargs['timeout'], self.budget.request_timeout_seconds)
             kwargs['allow_redirects'] = False
             async with self.session.request(method, url, **kwargs) as response:
                 yield BoundedResponse(response, self.budget)

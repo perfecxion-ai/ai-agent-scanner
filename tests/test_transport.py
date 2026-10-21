@@ -7,7 +7,8 @@ import aiohttp
 from aiohttp import web
 import pytest
 
-from src.core.transport import PolicyResolver, SafeSession, ScanBudget, TransportPolicyError, scan_transport
+from src.core.transport import (PolicyResolver, SafeSession, ScanBudget, TransportPolicyError,
+                                model_request_timeout, scan_transport)
 
 
 @pytest.fixture
@@ -195,3 +196,33 @@ async def test_transport_failures_log_fixed_reason_without_exception_secrets(tar
     assert budget.failures == 1
     assert 'HTTP transport failed' in caplog.text
     assert 'synthetic-credential-value' not in caplog.text
+
+
+@pytest.mark.parametrize('value', [0, -1, 301, float('inf'), float('nan'), True, '30', None])
+def test_request_timeout_rejects_invalid_limits(value):
+    with pytest.raises(ValueError, match='timeout'):
+        ScanBudget(request_timeout_seconds=value)
+
+
+def test_model_request_timeout_uses_bounded_operator_choice():
+    assert model_request_timeout().total == 30
+    with scan_transport(ScanBudget(request_timeout_seconds=120)):
+        assert model_request_timeout().total == 120
+
+
+@pytest.mark.asyncio
+async def test_session_and_individual_timeout_cannot_expand_budget(target_server):
+    url, _ = target_server
+    with scan_transport(ScanBudget(allow_loopback=True, request_timeout_seconds=2)):
+        async with SafeSession(timeout=aiohttp.ClientTimeout(total=200, sock_read=1)) as session:
+            assert session.session.timeout.total == 2
+            assert session.session.timeout.sock_read == 1
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=None)) as response:
+                assert response.status == 200
+            async with session.get(url, timeout=0.5) as response:
+                assert response.status == 200
+        async with SafeSession(timeout=aiohttp.ClientTimeout(total=0.2)) as session:
+            assert session.session.timeout.total == 0.2
+        for disabled in (0, -1, float('nan'), float('inf')):
+            async with SafeSession(timeout=aiohttp.ClientTimeout(total=disabled)) as session:
+                assert session.session.timeout.total == 2

@@ -387,6 +387,7 @@ class NetworkScanner:
         except TransportPolicyError:
             if current_budget():
                 current_budget().rejections += 1
+            self.logger.warning('Network discovery policy rejected DNS addresses')
             return []
         except (dns.exception.DNSException, TimeoutError, asyncio.TimeoutError, ValueError, UnicodeError):
             self._failure('DNS resolution')
