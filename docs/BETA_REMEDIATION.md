@@ -70,6 +70,18 @@ wildcard-detection constant, not a listener; it was not removed or used to weake
 the static gate. O3 finding presentation remains follow-up work. No diagnostic
 change expands MCP control sampling, retries, or security passes.
 
+The subsequent server evidence-reference slice supplies supported named
+system-prompt canary input for security-only API scans, templates, and schedules.
+Private startup configuration and environment values replace the earlier lab's
+input-seeding workaround. Local fixtures exercise real HTTP, API, dispatcher,
+SQLite, and output projections without editing source reports. Bindings and
+public pins are revalidated before execution; canaries are memory-only inputs.
+See [configuration and limits](detection-evidence.md#server-system-prompt-canary-profiles)
+and [local acceptance](VALIDATION.md#server-evidence-reference-slice).
+This does not improve or validate real-model hit rates. No cloud retest, broader
+server authorization inputs, raw-score schema migration, or enterprise approval
+is implied. Finding presentation and measured sensitivity remain priorities.
+
 ## Targeted API acceptance
 
 The operator supplied a second private bundle for exact runtime revision

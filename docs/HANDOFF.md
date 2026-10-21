@@ -22,15 +22,15 @@ All 324 response excerpts are omission sentinels. Final database privacy/mode
 checks are operator attestations because the database and secrets were excluded.
 
 Positive cases used deterministic fixtures and canary/context input seeding while
-the server was stopped; no finding or score was fabricated. The server still has
-no supported canary-configuration input. Editing reports or the database is not
-an operator setup method. Three real-model attempts remained inconclusive, not
+the server was stopped; no finding or score was fabricated. That tested revision
+had no supported canary-configuration input. Editing reports or the database is
+not an operator setup method. Three real-model attempts remained inconclusive, not
 passed; this does not establish detection sensitivity. Restart per-scan result
 and high-filter bodies were not separately saved, so those assertions rely on
 driver checks; archived restart inventory independently contains all 31 entries.
 
 Inventory filters explicitly apply to a newest-100 tenant/type window. Keep the
-six lower-priority observations, server evidence-configuration gap, representative
+remaining observations, representative
 accuracy, and broader enterprise work visible. Documentation-only updates do not
 change the tested runtime or require another cloud run. See [targeted acceptance
 and qualifications](VALIDATION.md#targeted-live-api-acceptance).
@@ -41,8 +41,34 @@ CLI classes fail before scanning; required model denials and MCP failures have
 static secret-safe diagnostics; baseline/control pagination wording is explicit.
 The wildcard detector keeps a justified narrowly scoped suppression without stale
 warnings. No security pass, scope boundary, retry behavior, or MCP control coverage
-was broadened. Require current PR/post-merge CI. This local acceptance is not a
+was broadened. PR #51 and its merged revision passed all eight CI jobs. This is not a
 new cloud retest. O3 grouping and the larger product gaps remain.
+
+The server evidence-reference slice adds an opt-in supported API workflow for
+system-prompt canaries. A private startup-only registry binds a named profile to
+the operator organization and exact endpoint/provider/model/context. API jobs,
+templates, and schedules contain public references and binding pins, not secret
+values. Admission and execution revalidate; injection is into fresh in-memory
+source copies before secret collection. Source reports are unchanged. See
+[setup and rotation limits](detection-evidence.md#server-system-prompt-canary-profiles).
+Cross-tenant/authentication/path evidence inputs remain CLI/Python-only. The
+database's historical unknown-score placeholders are unchanged; canonical saved
+pipeline results and API projections are authoritative, not raw score columns.
+
+Local HTTP/API/dispatcher fixtures cover supported profile input, confirmed
+70/high versus inconclusive/null, source immutability, and privacy across
+SQLite, logs, audit, requests, JSON, SARIF, and inventory. Isolated subprocesses
+exercise actual startup configuration without network or database access.
+Independent reviews closed reflected-request, mixed-inventory, escaped-marker,
+and shared-canary multi-model bugs. Final combined acceptance is recorded in
+[validation](VALIDATION.md#server-evidence-reference-slice); require PR and
+post-merge CI. No cloud service or real model was exercised for this slice.
+
+The next priority is a fixed-budget baseline and repeated-run sensitivity
+comparison before changing prompts or sampling. The server input gap is separate
+from detection yield: no stronger real-model hit rate is established here. Keep
+finding presentation grouping, raw-score schema migration, broader authorization
+controls, and enterprise readiness as separate reviewed work.
 
 The following slice descriptions record earlier local remediation checkpoints.
 
@@ -304,10 +330,12 @@ changing global identity. Do not rewrite history or erase local files implicitly
 1. Preserve the reviewed remediation checkpoint and require scoped independent
    review plus PR/post-merge CI for changes. Runtime changes need relevant
    revalidation; documentation-only changes do not require another cloud run.
-2. Prioritize safe server evidence references and measured detection sensitivity.
-   The diagnostic observations have a parallel scoped fix; presentation grouping
-   remains separate. Validate the server input/secret-reference contract before
-   claiming normal API canary workflows.
+2. Measure fixed-budget detection sensitivity before increasing prompts/sampling.
+   Preserve exact-canary confirmation, inconclusive nondisclosure, existing scan
+   deadlines, source uncertainty, and response omission. Compare the same protected
+   fixture/context and model configuration across baseline and candidate runs;
+   synthetic contract fixtures cannot establish representative model accuracy.
+   Presentation grouping must preserve occurrences, check IDs, and lifecycle rules.
    Do not use report/database modification as a product feature. Starting cloud
    VMs, changing deployments, and enabling real schedules require authorization;
    do not infer it from this plan.
