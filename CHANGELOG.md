@@ -78,6 +78,9 @@ These changes are engineering work on the current branch, not a published releas
 - Add disposable SQLite queue-load acceptance with deterministic state and audit invariants.
 - Add disposable stopped-SQLite backup/restore acceptance for known schema upgrades,
   recovery, retained evidence, restart review, rollback, and incomplete copies.
+- Add real offline operator workflow acceptance, authenticated container checks
+  before/after restart, and a finite local-beta test guide with an isolated fixture.
+- Correct container operator-key setup and the dashboard's self-hosted script documentation.
 - Verify the installed live MCP command and its lazily loaded implementation.
 
 ### Still incomplete

@@ -1,6 +1,6 @@
 # Engineering validation checkpoint
 
-Date: 2026-10-20. This records the beta build-out, not a release certification.
+Date: 2026-10-21. This records the beta build-out, not a release certification.
 The first checkpoint followed PRs #1 through #14. PRs #15 through #22 add
 discovery, check contracts, SQLite upgrades/audit history, local queue acceptance,
 and dashboard evidence views. None of these merges publishes a package.
@@ -16,16 +16,18 @@ PR #37 adds the remediated certifi dependency floor. PR #38 adds focused
 accessibility improvements and a reusable optional Chromium smoke workflow.
 PR #40 adds disposable stopped-SQLite backup/restore and recovery acceptance.
 PR #41 fixes offline replay detection of protected canaries in argument keys.
+PR #42 closes the local-beta acceptance slice with a real offline operator flow,
+authenticated container restart checks, corrected setup, and a finite test guide.
 
 ## Automated checks
 
-- Local Linux/Python 3.10.20: 1106 pytest cases passed. The suite invokes 78 Node
+- Local Linux/Python 3.10.20: 1107 pytest cases passed. The suite invokes 78 Node
   controller tests, which also passed independently.
-- Line coverage across `src`, `app`, and `scanner_cli`: 90%. The shared pipeline
-  is 95%, transport 99%, durable jobs 92%, schema acceptance 94%, and API 94%.
+- Line coverage across `src`, `app`, and `scanner_cli`: 91%. The shared pipeline
+  is 95%, transport 99%, durable jobs 92%, schema acceptance 94%, and API 95%.
   Mocked cloud inventory is 92%, traffic parsing 89%, and network discovery 97%.
   The live MCP client is 95% and the controlled policy module 96%; the small strict
-  template projection helper is 100%; the schedule service is 96%. This measures executed
+  template projection helper is 100%; the schedule service is 97%. This measures executed
   source lines, not attack coverage or security effectiveness.
 - Ruff and the configured medium/high-severity Bandit gate pass, including API
   source. Lower-severity static findings still require contextual review.
@@ -86,7 +88,10 @@ PR #41 fixes offline replay detection of protected canaries in argument keys.
 - Explicit JSON nesting limits were checked on Python 3.10 and an isolated Python
   3.12 environment. Network exponent overflow is rejected. Request and streamed
   body timeouts each record one failure, including Python 3.10's distinct exception.
-- Container build, readiness, and readiness after restart pass.
+- Container build, readiness, and readiness after restart pass. The container
+  smoke now also rejects missing/wrong operator keys and missing/invalid bearer
+  tokens, verifies configured operator identity and authenticated empty history,
+  and repeats after restart. It does not admit scans or validate a deployed volume.
 - Thirteen mandatory tests cover the optional browser fixture's temporary-path
   and effective-engine guards, environment restoration, bounded startup messages,
   and parent-owned process/database cleanup. They do not require Playwright.
@@ -205,6 +210,65 @@ missing schedule recovery, and an improperly accepted future version.
 No operator database was opened or target scanned. This covers local synthetic
 content preservation, not deployed restore, online backup, old-binary compatibility,
 crash durability, or release sign-off.
+
+## Local-beta finish pass
+
+The [beta guide](BETA_TESTING.md) defines a finite supported-scope gate and an
+offline walkthrough using separate keys, a private fresh database, sanitized
+settings, loopback binding, and the checked-in static SDK-import fixture.
+CLI discovery of that fixture returns one OpenAI inventory observation, no
+endpoint or finding, unexecuted security checks, and unassessed risk.
+
+The new mandatory operator test uses actual authentication, current-policy
+admission, template execution, repository discovery, the shared pipeline,
+file-backed SQLite dispatcher, report/audit/JSON/SARIF routes, and one explicitly
+enabled finite schedule occurrence. It verifies skipped security and unknown risk,
+secret-free reports, and recipe/schedule deletion preserving reports. External
+sockets, DNS, and process execution are forbidden; fixture source must never
+execute. Independent Python 3.10/3.12 runs passed, alongside 200 focused author
+tests. This is API-level acceptance, not a new full browser workflow.
+
+The existing Chromium command passed normally with optimization disabled at
+320/390/1440 pixels. Artifacts are in `/tmp/ai-scanner-browser-2p7pyzn4`.
+Its fixture PID 2987229 was reaped and its temporary database directory removed.
+Normal and optimized backup commands each passed all eight cases. Local build,
+Twine, installed-wheel smoke, lint, configured Bandit gate, dependency audit, and
+pip check passed. A focused independent security/correctness audit passed 314
+cases and reproduced no must-fix blocker in the supported boundary; this is not
+an exhaustive security certification.
+
+The local Docker image built from unchanged application code at `647c6d1`
+(`sha256:f90983133c6b11a8d6a02b17f261e75beb3bb57434bf07d91c3f6f444158ca52`)
+passed authenticated checks before and after restart. The uniquely owned test
+container was removed; no operator database, real target, or deployed volume was
+used. CI repeats this behavior on the PR's exact source. The setup example now
+passes the independent operator key instead of starting a server with login disabled.
+
+Five sequential fresh-database queue runs passed on Linux/aarch64, Python 3.10.20,
+SQLite 3.53.1. Every run had zero duplicate claims, consistent terminal states,
+one terminal event per scan, and peak workers within its bound:
+
+| Jobs | Workers | Synthetic latency (ms) | Elapsed (seconds) | Peak workers |
+| --- | --- | --- | --- | --- |
+| 200 | 2 | 1 | 8.823065 | 2 |
+| 200 | 2 | 1 | 9.917252 | 1 |
+| 200 | 2 | 1 | 8.919674 | 2 |
+| 500 | 4 | 5 | 24.108064 | 4 |
+| 500 | 4 | 5 | 22.384391 | 4 |
+
+Totals: 1600 jobs, 1435 completed, 160 cancelled, five interrupted, 1445 unique
+claims, and 4650 audit events. A separate 200-job/1000-ms case with a one-second
+deadline exited 1 and reported incomplete state rather than success (1.083490
+seconds). A parent-owned temporary root, sanitized environment, 90-second child
+watchdog, and bounded kill/reap grace protected every run; all roots were removed.
+The local driver is retained at `/tmp/ai-scanner-finish-queue-profile.py`.
+This is finite queue regression repetition, not a long-duration soak, HTTP or
+scheduler load test, production throughput claim, or performance threshold.
+
+After the reviewed revision and merged commit pass all seven CI jobs, this gate
+is ready for local operator beta testing. Stop feature expansion for that beta;
+collect feedback under the guide's scope. M6 and the release-level gaps below
+remain separate from that limited acceptance.
 
 ## Remaining validation gaps
 
