@@ -94,11 +94,13 @@ def real_lab(monkeypatch, tmp_path):
         daemon_threads = True
 
     operator_key = 'synthetic-local-beta-operator-key'
+    monkeypatch.delenv('SCAN_EVIDENCE_PROFILES_FILE', raising=False)
     monkeypatch.setenv('SECRET_KEY', 'synthetic-local-beta-signing-key-' * 2)
     monkeypatch.setenv('OPERATOR_API_KEY', operator_key)
     monkeypatch.setenv('DATABASE_URL', 'sqlite:///:memory:')
     module = sys.modules.get('app') or importlib.import_module('app')
     assert module._job_dispatcher is None, 'Never replace an existing dispatcher'
+    monkeypatch.setattr(module, '_evidence_profiles', module.load_evidence_profiles(None))
     monkeypatch.setattr(module, '_job_dispatcher', None)
     for key, value in {
         'TESTING': True, 'SECRET_KEY': 'synthetic-local-beta-signing-key-' * 2,
