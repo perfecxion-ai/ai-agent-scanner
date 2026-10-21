@@ -158,24 +158,39 @@ environment isolation, and cleanup. The measured suite is 1039 pytest cases and
 screen-reader acceptance. Root browser artifacts are preserved in
 `/tmp/ai-scanner-browser-54ifn1sb`. The fixture was stopped and its database removed.
 
+### Disposable backup/restore checkpoint
+
+PR #40 adds a bounded command that owns stopped synthetic SQLite databases and
+accepts no operator source/destination paths. All eight cases passed, including
+exact schema 1/2/3 backup/restore, real upgrade/recovery, single queued execution,
+preserved evidence/snapshots/audit/templates, restart-review schedules without
+admission, and an idempotent second dispatcher restart. Negative cases cover
+version-stamp rollback, future versions, competing ownership, and a restored copy
+missing a report despite valid SQLite integrity. Independent restoration retains
+old content/version; source and backup hashes stay unchanged.
+
+Forty-two mandatory tests cover containment, cached-engine rejection before
+connection, no-clobber copies, bounded child results/deadlines, optimized checks,
+environment isolation, and cleanup. The full local suite is 1081 pytest cases,
+78 Node cases, and 90% measured line coverage. Independent Python 3.12 acceptance
+passed 187 focused cases. No operator database or real target was accessed.
+See [usage and limits](jobs.md#disposable-backuprestore-acceptance).
+Deployed backup, online procedures, old-binary compatibility, crash durability,
+and M6 sign-off remain outside this acceptance slice.
+
 ## Next delivery sequence
 
-1. Add a bounded, disposable SQLite backup/restore acceptance command. Back up
-   stopped synthetic version 1/2/3 databases, restore only into absent temporary
-   files, compare logical contents and integrity, and start the real initializer
-   and dispatcher with synthetic work. Verify upgrade preservation, one-time queued
-   execution, interrupted/cancelled recovery, schedule restart review, and an
-   idempotent second restart. Reject cached/foreign engines before connecting.
-   Include failed/future upgrade and incomplete-restore cases. Do not accept
-   deployed database paths or claim deployed backup, crash durability, or M6 sign-off.
+1. Expand representative offline accuracy and service-compatibility fixtures.
+   Select a narrow evidence boundary with positive and negative synthetic cases;
+   preserve the distinction between heuristic observations and confirmed findings.
+   Keep real provider compatibility separate from mocked SDK/protocol fixtures.
 2. Expand workflow acceptance and selected integrations without bypassing shared
    admission, cancellation, or current-policy checks. Do not enable schedules or
    scan real targets automatically as part of engineering work.
    External integrations need an explicit supported destination and secret contract.
-3. Expand representative accuracy and service-compatibility fixtures, then run
-   load/soak, accessibility, and deployed backup/upgrade acceptance. Keep real
-   provider compatibility separate from mocked SDK and synthetic protocol fixtures;
-   do not require paid calls or claim complete coverage from line percentages.
+3. Run representative load/soak, accessibility, and separately authorized deployed
+   backup/upgrade acceptance. Do not require paid calls or claim complete coverage
+   from line percentages.
 
 Broader live MCP and any legacy adapter need separate versioned designs. Do not
 silently downgrade the current client or equate fixture inventory checks with

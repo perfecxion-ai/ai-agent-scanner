@@ -73,6 +73,8 @@ These changes are engineering work on the current branch, not a published releas
   coverage, enterprise controls, and production security guarantees.
 - Pin CI actions and verify uploaded distribution contents after downloading them.
 - Add disposable SQLite queue-load acceptance with deterministic state and audit invariants.
+- Add disposable stopped-SQLite backup/restore acceptance for known schema upgrades,
+  recovery, retained evidence, restart review, rollback, and incomplete copies.
 - Verify the installed live MCP command and its lazily loaded implementation.
 
 ### Still incomplete

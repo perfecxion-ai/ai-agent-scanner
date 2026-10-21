@@ -88,6 +88,11 @@ These are source-review findings, not evidence of exploitation in a deployment.
   have acceptance tests. A bounded local synthetic load workload verifies unique
   claims, worker limits, terminal consistency, and audit records. PostgreSQL/distributed coordination and a general
   migration framework remain outside the supported deployment boundary.
+  Disposable stopped-SQLite backup/restore acceptance now preserves exact schema
+  1/2/3 contents before upgrade, retained evidence, and one-time queued execution.
+  It rejects incomplete copies, failed/future upgrades, and competing ownership;
+  enabled schedules pause for review and a second restart is idempotent.
+  This is synthetic local acceptance, not deployed backup or crash durability.
 - M4 has passive MCP configuration/schema checks and offline replay for indirect
   markers, RAG tenant canaries, and tool authorization requests. A scoped CLI
   adapter collects read-only MCP 2026-07-28 Streamable HTTP inventory with bounded
