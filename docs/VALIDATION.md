@@ -23,6 +23,75 @@ PR #41 fixes offline replay detection of protected canaries in argument keys.
 PR #42 closes the local-beta acceptance slice with a real offline operator flow,
 authenticated container restart checks, corrected setup, and a finite test guide.
 
+## Exact-revision external retest
+
+The operator supplied a private live-lab retest for
+`150762513ecbf728c4922436bff1448266467150`. Two independent reviews inspected
+the underlying JSON/SARIF, repeated-run comparisons, logs, and scoped connection
+traces. These are reviews of supplied execution evidence, not independent cloud
+reruns. Infrastructure identifiers, fixture inputs, and raw artifacts remain
+outside the public repository.
+
+- Linux/Python 3.11: 1241 passed, one skipped. Native macOS/Python 3.13:
+  1242 passed with the stock temporary-directory configuration. Both platforms
+  passed normal and optimized backup acceptance, all eight cases per mode.
+- Linux and macOS logs support lint, configured static security checks, dependency
+  checks/audit, build, metadata, installed-package smoke, and finite queue gates.
+  Linux Chromium passed; macOS Chromium was not run. The merged revision's eight
+  CI jobs also passed, including native macOS and container restart checks.
+- The mixed-network inventory completed despite ordinary pages, non-HTTP banners,
+  and unused addresses; a genuine service error retained partial coverage.
+  Completed and finalized partial sources were actively tested, with source
+  uncertainty preserved in JSON/SARIF. CLI model selection executed 39 checks.
+- Five identical vulnerable-bot runs yielded one confirmed high leak at 70/100
+  and four inconclusive null-score results, with no passed checks. Comparisons
+  after the disclosure retained one unverified resolution and zero resolved
+  findings. A leak-then-timeout fixture retained high risk with partial coverage.
+  This measures conservative reporting, not representative detection sensitivity.
+- All 355 response excerpts in 73 supplied JSON/SARIF artifacts contain the
+  generated-text omission sentinel. Logs attest to zero protected-marker/PII
+  matches and private scanner-written CLI files plus database/lock permissions.
+  Exact markers and the database were intentionally omitted, so those sweeps
+  cannot be independently repeated from this bundle. Driver-saved API responses
+  are not scanner-written private exports and had different file permissions.
+- Real SDK inventory and controlled MCP tests support the documented findings,
+  denials, TLS/scope errors, and explicit page-sampling warning. Controls still
+  sample only their first page; authenticated baselines can paginate. No tool
+  was invoked. The metadata IP/hostname traces show no metadata connections;
+  a wider metadata-subnet test was rejected by the host-count bound first and
+  therefore does not independently exercise address-class enforcement.
+
+The operator report marks the 22 original findings passed or documented limits,
+with two items verified by source/documentation rather than live execution.
+Independent review found a further API contract defect: public compatibility
+summary and agent scores are zero where the saved pipeline says null and
+`not_assessed`. History exposes no risk fields and SARIF retains the correct
+nulls. This is a release blocker, not one of the six low-priority observations.
+The beta remains held pending a scoped fix, independent review, current CI, and
+new-revision API validation. Do not transfer the old retest's acceptance to new
+code or label the supported local beta enterprise-ready.
+
+### API projection follow-up
+
+The scoped follow-up projects public summary and agent risk from saved current
+policy/check evidence rather than storage placeholders. Unknown and unsupported
+historical scores remain null; assessed zero and confirmed partial high remain
+numeric. Malformed values, inconsistent scores/levels/severity floors, ambiguous
+asset IDs, and missing evidence fail closed. Historical reports and the database
+schema are unchanged. Inventory queries remain tenant-owned and batched; projected
+level filters have an explicit newest-100 tenant/type window and truncation warning.
+
+Local Linux/Python 3.10 acceptance passes 1279 tests, including 37 new API cases
+and strengthened actual dispatcher/protocol assertions for the outer results and
+inventory fields. Independent focused reviews pass 126 and 162 cases, plus the
+final 37-case projection run with warnings treated as errors. Ruff, configured
+Bandit, build, Twine, and installed-wheel smoke pass. Replaying four supplied
+private pipelines through actual Flask routes and fresh in-memory storage keeps
+both unassessed server cases null and both confirmed cases at 70, including
+partial coverage. Raw pipelines remain unchanged. This is offline API-adapter
+replay, not a new live-cloud run. The PR and merged revision still require their
+own complete CI and targeted API retest before the hold can be lifted.
+
 ## Automated checks
 
 ### Remediation infrastructure slice

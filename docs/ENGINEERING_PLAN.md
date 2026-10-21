@@ -5,6 +5,10 @@
 The beta is held after external lab validation found verdict and workflow defects.
 The [remediation gate](BETA_REMEDIATION.md) supersedes the earlier freeze/reopen
 sequence. Closing the reported defects is necessary but not enterprise sign-off.
+The exact-revision external retest supports the core fixes, but independent
+artifact review found that API compatibility fields still convert unknown risk
+to zero. Correct and validate that projection before reopening. Conservative
+nondisclosure reporting does not establish representative detection sensitivity.
 
 Build a defensible AI asset inventory and security assessment tool for security
 engineers. Preserve local CLI use and add a reliable single-operator server.
