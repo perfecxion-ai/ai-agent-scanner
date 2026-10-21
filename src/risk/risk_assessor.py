@@ -16,7 +16,6 @@ and understand the business impact of AI security vulnerabilities.
 """
 
 import logging
-import math
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime, timezone
 import statistics
@@ -194,43 +193,9 @@ class RiskAssessment:
         }
     
     def _calculate_vulnerability_score(self, vulnerabilities: List[Dict[str, Any]]) -> float:
-        """Calculate vulnerability score based on severity and type"""
-        if not vulnerabilities:
-            return 0.0
-        
-        total_score = 0.0
-        
-        for vuln in vulnerabilities:
-            severity = vuln.get('severity', 'low')
-            vuln_type = vuln.get('vulnerability_type', '')
-            confidence = vuln.get('confidence', 0.5)
-            
-            # Base severity score
-            base_score = self.severity_weights.get(severity, 1.0)
-            
-            # Apply vulnerability type multiplier
-            # Handle nested prompt_injection categories
-            impact_entry = self.vulnerability_impact.get(vuln_type, 0.5)
-            if isinstance(impact_entry, dict):
-                # For prompt_injection, look up the specific category
-                category = vuln.get('category', '')
-                type_multiplier = impact_entry.get(category, 0.7)  # Default 0.7 for unknown subcategory
-            else:
-                type_multiplier = impact_entry
-
-            # Apply confidence factor
-            confidence_factor = 0.5 + (confidence * 0.5)  # Scale from 0.5 to 1.0
-            
-            vuln_score = base_score * type_multiplier * confidence_factor
-            total_score += vuln_score
-        
-        # Normalize to reasonable scale (diminishing returns for many vulnerabilities)
-        # Use logarithmic dampening instead of linear to avoid going negative
-        dampening = 1.0 / (1.0 + math.log1p(len(vulnerabilities) - 1) * 0.15)
-        normalized_score = min(100, total_score * dampening)
-
-        severity_floor = max(self.severity_weights.get(v.get('severity'), 1.0) for v in vulnerabilities)
-        return max(severity_floor, normalized_score)
+        """Use maximum severity, not request count or repeated sample findings."""
+        return max((self.severity_weights.get(v.get('severity'), 1.0)
+                    for v in vulnerabilities), default=0.0)
     
     def _calculate_exposure_risk(self, agent_results: Dict[str, Any]) -> float:
         """Calculate exposure risk multiplier based on agent accessibility"""
