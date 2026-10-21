@@ -17,7 +17,8 @@ import dns.asyncresolver
 import dns.exception
 import dns.resolver
 
-from src.core.transport import SafeSession, TransportPolicyError, current_budget
+from src.core.transport import SafeSession, ScanBudget, TransportPolicyError, current_budget
+from src.core.scope import local_host_addresses
 
 
 MAX_BODY_BYTES = 10_000
@@ -151,7 +152,7 @@ class NetworkScanner:
         return agents
 
     async def _is_port_open(self, host: str, port: int) -> bool:
-        budget = current_budget()
+        budget = current_budget() or ScanBudget()
         if budget:
             try:
                 address = ipaddress.ip_address(host)
@@ -160,6 +161,7 @@ class NetworkScanner:
                 budget.reserve(f'http://{authority}:{port}')
             except (ValueError, TransportPolicyError):
                 budget.rejections += 1
+                self.logger.warning('Network discovery policy rejected TCP probe')
                 return False
         writer = None
         try:
@@ -168,10 +170,11 @@ class NetworkScanner:
         except ConnectionRefusedError:
             return False
         except (TimeoutError, asyncio.TimeoutError):
-            self._failure('TCP timeout')
+            # Filtered ports and unused addresses are expected during discovery.
+            self.logger.debug('Discovery TCP port did not respond')
             return False
         except OSError as error:
-            if error.errno not in {errno.ECONNREFUSED}:
+            if error.errno not in {errno.ECONNREFUSED, errno.EHOSTUNREACH, errno.ENETUNREACH}:
                 self._failure('TCP probe')
             return False
         except Exception:
@@ -203,11 +206,13 @@ class NetworkScanner:
                     continue
                 routes.setdefault(path, []).append((provider, signature))
         agents = []
-        async with SafeSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+        model_sets = {}
+        async with SafeSession(discovery=True, timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
             for path, signatures in routes.items():
                 try:
                     async with session.get(base_url + path) as response:
-                        document = await self._read_document(response, [signature for _, signature in signatures])
+                        document = await self._read_document(response, [signature for _, signature in signatures],
+                                                             established=bool(agents))
                         if document is None:
                             continue
                         for provider, signature in signatures:
@@ -215,7 +220,11 @@ class NetworkScanner:
                                 detected = ('openai-compatible' if provider in
                                             {'openai', 'vllm', 'openai-compatible'} else provider)
                                 endpoint = base_url + path
-                                agents.append(self._asset(host, port, scheme, endpoint, detected, response.status))
+                                asset = self._asset(host, port, scheme, endpoint, detected, response.status)
+                                agents.append(asset)
+                                models = (model['name'] for model in document['models']) if detected == 'ollama' else (
+                                    model['id'] for model in document['data']) if detected == 'openai-compatible' else ()
+                                model_sets[asset['id']] = frozenset(models)
                                 break
                 except TransportPolicyError:
                     # SafeSession already records policy rejections.
@@ -223,7 +232,12 @@ class NetworkScanner:
                 except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError):
                     # SafeSession already records failed I/O. Keep earlier assets.
                     continue
-        return agents
+        # Native Ollama also advertises an OpenAI-compatible inventory. Collapse
+        # only identical nonempty model sets on this same authority, never a
+        # colocated gateway exposing different models or a different provider.
+        native = {model_sets[asset['id']] for asset in agents if asset['provider'] == 'ollama'}
+        return [asset for asset in agents if not (
+            asset['provider'] == 'openai-compatible' and model_sets[asset['id']] in native)]
 
     def _asset(self, host, port, scheme, endpoint, provider, status):
         metadata = {'host': host, 'port': port, 'scheme': scheme,
@@ -236,7 +250,7 @@ class NetworkScanner:
                 'endpoint': endpoint, 'discovery_method': 'network_scan', 'confidence': 0.8,
                 'metadata': metadata}
 
-    async def _read_document(self, response, signatures=()):
+    async def _read_document(self, response, signatures=(), established=False):
         if response.status != 200:
             if response.status >= 500 or response.status in (408, 429):
                 self._failure('HTTP service error')
@@ -244,7 +258,12 @@ class NetworkScanner:
         body = bytearray()
         async for chunk in response.content.iter_chunked(4096):
             if len(body) + len(chunk) > MAX_BODY_BYTES:
-                self._failure('inventory body limit')
+                # A bounded HTML/text landing page is not an incomplete AI
+                # inventory. Keep indeterminate/JSON truncation conservative.
+                prefix = (body + chunk).lstrip()[:1]
+                content_type = response.headers.get('Content-Type', '').split(';')[0].lower()
+                if established or (prefix != b'<' and content_type not in ('text/html', 'text/plain')):
+                    self._failure('inventory body limit')
                 return None
             body.extend(chunk)
         try:
@@ -259,10 +278,17 @@ class NetworkScanner:
             self._failure('inventory JSON depth limit')
             return None
         if isinstance(document, dict) and 'error' in document:
-            self._failure('inventory error document')
+            if established:
+                self._failure('inventory error document')
             return None
         if isinstance(document, dict) and self._invalid_inventory(document, signatures):
-            self._failure('invalid inventory schema')
+            # Generic object:list APIs (for example payment APIs) are not AI
+            # evidence. A native discriminator or prior inventory is required.
+            native_claim = document.get('router') == 'text-generation-router' or (
+                isinstance(document.get('models'), list) and any(
+                    isinstance(model, dict) and 'modified_at' in model for model in document['models']))
+            if established or native_claim:
+                self._failure('invalid inventory schema')
             return None
         return document if isinstance(document, dict) else None
 
@@ -332,7 +358,13 @@ class NetworkScanner:
         try:
             domain = self._hostname(domain)
             resolver = dns.asyncresolver.Resolver()
-            budget = current_budget()
+            budget = current_budget() or ScanBudget()
+            local = local_host_addresses(domain)
+            if local:
+                for address in local:
+                    if budget:
+                        budget.check_address(address)
+                return local
             for record_type in ('A', 'AAAA'):
                 if budget:
                     budget.reserve('http://' + domain)
@@ -358,6 +390,7 @@ class NetworkScanner:
             return []
         except (dns.exception.DNSException, TimeoutError, asyncio.TimeoutError, ValueError, UnicodeError):
             self._failure('DNS resolution')
+            return []
         return ips
 
     @staticmethod

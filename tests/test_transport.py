@@ -76,7 +76,7 @@ async def test_shared_budget_counts_across_sessions(target_server):
 @pytest.mark.asyncio
 async def test_response_limit_marks_rejection(target_server):
     url, _ = target_server
-    budget = ScanBudget(max_response_bytes=1024)
+    budget = ScanBudget(allow_loopback=True, max_response_bytes=1024)
     with scan_transport(budget):
         async with SafeSession() as session:
             with pytest.raises(TransportPolicyError, match='body limit'):
@@ -154,3 +154,44 @@ async def test_tcp_discovery_consumes_shared_budget():
 def test_broad_allowlist_cannot_authorize_metadata_or_implicit_loopback(address):
     with pytest.raises(TransportPolicyError):
         ScanBudget(allowed_networks=('0.0.0.0/0', '::/0')).check_address(address)
+
+
+@pytest.mark.parametrize('address', ['169.254.169.254', '100.100.100.200', '168.63.129.16',
+                                     'fd00:ec2::254', '::ffff:127.0.0.1', '127.0.0.1',
+                                     '0.0.0.0', '224.0.0.1', 'fe80::1'])
+def test_unscoped_budget_still_forbids_special_addresses(address):
+    with pytest.raises(TransportPolicyError):
+        ScanBudget().check_address(address)
+
+
+def test_host_bits_in_transport_allowlist_are_normalized():
+    budget = ScanBudget(allowed_networks=('192.0.2.10/28',))
+    assert str(budget.networks[0]) == '192.0.2.0/28'
+    budget.check_address('192.0.2.1')
+    with pytest.raises(TransportPolicyError, match='allowlist'):
+        budget.check_address('192.0.2.16')
+
+
+@pytest.mark.asyncio
+async def test_unscoped_tcp_metadata_never_opens_socket():
+    from src.discovery.network_scanner import NetworkScanner
+    with patch('asyncio.open_connection', AsyncMock()) as connect:
+        assert not await NetworkScanner()._is_port_open('169.254.169.254', 80)
+        assert not await NetworkScanner()._is_port_open('127.0.0.1', 80)
+        connect.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_transport_failures_log_fixed_reason_without_exception_secrets(target_server, caplog):
+    url, _ = target_server
+    budget = ScanBudget(allow_loopback=True)
+    with scan_transport(budget):
+        async with SafeSession() as session:
+            session.session.request = lambda *args, **kwargs: (_ for _ in ()).throw(
+                aiohttp.ClientConnectionError('synthetic-credential-value'))
+            with pytest.raises(aiohttp.ClientConnectionError):
+                async with session.get(url):
+                    pass
+    assert budget.failures == 1
+    assert 'HTTP transport failed' in caplog.text
+    assert 'synthetic-credential-value' not in caplog.text
