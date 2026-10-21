@@ -21,7 +21,7 @@ authenticated container restart checks, corrected setup, and a finite test guide
 
 ## Automated checks
 
-- Local Linux/Python 3.10.20: 1107 pytest cases passed. The suite invokes 78 Node
+- Local Linux/Python 3.10.20: 1109 pytest cases passed. The suite invokes 78 Node
   controller tests, which also passed independently.
 - Line coverage across `src`, `app`, and `scanner_cli`: 91%. The shared pipeline
   is 95%, transport 99%, durable jobs 92%, schema acceptance 94%, and API 95%.
@@ -271,6 +271,16 @@ collect feedback under the guide's scope. M6 and the release-level gaps below
 remain separate from that limited acceptance.
 
 ## Remaining validation gaps
+
+The privacy cleanup excludes machine-local assistant instructions, lab setup, and
+the legacy screenshot from the current Git tree, source distributions, and Docker
+contexts. Two regressions check the public index and ignore policy. Fresh package
+metadata has no personal author email; professional credit remains. Local originals
+are retained. Repository and reachable-history pattern/context review found no
+plausible live credentials, but is not proof that every possible secret is absent.
+Existing history, published artifacts, and third-party copies were not rewritten
+or erased. Future commits use the account's user-approved repository-local noreply
+identity; global identity is unchanged.
 
 - Real cloud account inventory and representative capture-format integration
   remain incomplete despite stronger mocked/format fixtures. Network samples

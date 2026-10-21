@@ -68,6 +68,10 @@ These changes are engineering work on the current branch, not a published releas
 
 ### Delivery and documentation
 
+- Keep workstation instructions, local lab setup, and the legacy device-tagged
+  screenshot out of Git, distributions, and Docker build contexts. Preserve local
+  copies and professional attribution; remove personal contact metadata from new
+  packages/images. Existing Git history and previously built artifacts are unchanged.
 - Include the CLI entry point in distributions and test installed wheels outside
   the source checkout.
 - Gate publication on CI, including tests, lint, package checks, dependency audit,
