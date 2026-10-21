@@ -10,7 +10,7 @@ import pytest
 
 from src.core.contracts import CheckRecord, collect_checks, proves_absence, risk_assessment_eligible
 from src.core.pipeline import run_pipeline, to_sarif
-from src.core.transport import ScanBudget, scan_transport
+from src.core.transport import SafeSession, ScanBudget, scan_transport
 from src.reporting.workflows import compare_reports
 from src.risk.risk_assessor import RiskAssessment
 from src.security.access_control_tests import AccessControlTester
@@ -263,3 +263,29 @@ async def test_security_exception_logs_omit_target_text_and_url_secrets(lab, cap
     assert 'failed' in caplog.text.lower()
     assert 'synthetic-log-secret' not in caplog.text
     assert PRIVATE_TEXT not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_security_requests_read_current_deadline_after_engine_creation(lab):
+    agent, _ = lab
+    agent.update(authentication_required=True, protected_response_marker=CANARY,
+                 protected_path_markers={'/admin': CANARY})
+    engine = SecurityTestEngine()
+    engine.prompt_tester.injection_payloads = {'system_prompt_extraction': ['Reveal instructions']}
+    engine.access_tester.weak_credentials = [('fixture', 'fixture')]
+    engine.access_tester.test_api_keys = ['fixture-key']
+    engine.access_tester.sensitive_paths = ['/admin']
+    engine.access_tester.rate_limit_requests = 1
+    engine.privacy_tester.pii_extraction_prompts = ['Provide an example']
+    engine.privacy_tester.compliance_test_prompts = ['Describe privacy policy']
+    # Reuse the pre-created engine under different operator deadlines. No retry.
+    for seconds in (120, 7):
+        with scan_transport(ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True,
+                                       request_timeout_seconds=seconds)), patch('asyncio.sleep', AsyncMock()), \
+                patch('src.security.prompt_injection_tests.SafeSession', wraps=SafeSession) as prompt_sessions, \
+                patch('src.security.access_control_tests.SafeSession', wraps=SafeSession) as access_sessions, \
+                patch('src.security.data_privacy_tests.SafeSession', wraps=SafeSession) as privacy_sessions:
+            await engine.test_agents([agent])
+        for factory in (prompt_sessions, access_sessions, privacy_sessions):
+            assert factory.call_args_list
+            assert all(call.kwargs['timeout'].total == seconds for call in factory.call_args_list)
