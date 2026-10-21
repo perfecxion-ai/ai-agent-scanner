@@ -18,7 +18,7 @@ class AIAgentScanner {
         this.epoch = 0;
         this.selection = 0;
         this.scanId = null;
-        this.announcedTerminal = false;
+        this.terminalAnnouncement = '';
         this.timer = null;
         this.pending = new Set();
         this.historyOffset = 0;
@@ -121,7 +121,7 @@ class AIAgentScanner {
         this.selection += 1;
         this.token = null;
         this.scanId = null;
-        this.announcedTerminal = false;
+        this.terminalAnnouncement = '';
         this.el('scanAnnouncement').textContent = '';
         clearTimeout(this.timer);
         for (const controller of this.pending) controller.abort();
@@ -684,7 +684,7 @@ class AIAgentScanner {
     async selectScan(id) {
         if (!id) return;
         this.selection += 1;
-        this.announcedTerminal = false;
+        this.terminalAnnouncement = '';
         this.el('scanAnnouncement').textContent = '';
         clearTimeout(this.timer);
         this.scanId = id;
@@ -760,14 +760,16 @@ class AIAgentScanner {
         return this.reportState;
     }
     announceTerminal(status, reportState) {
-        if (this.announcedTerminal || !TERMINAL_STATES.has(status)) return;
+        if (!TERMINAL_STATES.has(status)) return;
         const states = {completed: 'Scan completed.', partial: 'Scan finished with partial results.',
             failed: 'Scan failed.', cancelled: 'Scan cancelled.', interrupted: 'Scan interrupted.'};
         const reports = {available: 'Report available. Review incomplete checks and evidence.',
             historical: 'No versioned report is available. Testing completeness is unverified.',
             unavailable: 'Report unavailable. Testing completeness is unverified.'};
-        this.el('scanAnnouncement').textContent = `${states[status]} ${reports[reportState] || reports.unavailable}`;
-        this.announcedTerminal = true;
+        const message = `${states[status]} ${reports[reportState] || reports.unavailable}`;
+        if (this.terminalAnnouncement === message) return;
+        this.el('scanAnnouncement').textContent = message;
+        this.terminalAnnouncement = message;
     }
     async loadAudit(reset = false) {
         if (!this.token || !this.scanId || (!reset && this.auditCount >= AUDIT_DISPLAY_LIMIT)) return;

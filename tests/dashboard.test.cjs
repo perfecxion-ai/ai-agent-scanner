@@ -136,8 +136,15 @@ test('all terminal states announce unavailable or historical evidence without cl
             assert.equal(app.el('jsonBtn').disabled, true);
             failed = false;
             await app.poll();
-            assert.equal(app.el('scanAnnouncement').textContent, announcement);
-            if (!historical) assert.equal(app.el('jsonBtn').disabled, false);
+            if (historical) assert.equal(app.el('scanAnnouncement').textContent, announcement);
+            else {
+                assert.match(app.el('scanAnnouncement').textContent, /Report available\./);
+                assert.doesNotMatch(app.el('scanAnnouncement').textContent, /unavailable|unverified/);
+                assert.equal(app.el('jsonBtn').disabled, false);
+                const recovered = app.el('scanAnnouncement').textContent;
+                await app.poll();
+                assert.equal(app.el('scanAnnouncement').textContent, recovered);
+            }
         }
     }
 });
