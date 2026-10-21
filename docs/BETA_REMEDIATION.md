@@ -1,8 +1,10 @@
 # Beta remediation and readiness gate
 
-Status: held. External lab validation found verdict correctness, evidence privacy,
-mixed-network workflow, and macOS acceptance defects in the prior beta. Passing
-the infrastructure suite did not establish trustworthy risk conclusions.
+Status: remediation gate closed for limited single-operator beta testing on
+runtime revision `82ee7d5e8d1a0183fe5344b41da90f60b49c5f91`. Reviewed external
+retests cover the prior verdict, evidence privacy, mixed-network, portability,
+and API projection defects. This is not production or enterprise approval, nor
+validation of representative detection sensitivity.
 
 The source lab report, infrastructure identifiers, and raw outputs remain local.
 This tracker contains only generalized defect descriptions and acceptance criteria.
@@ -19,9 +21,9 @@ publishing private lab details.
 | 5, 6, 14, 15, 18, 21, 22 | Operator workflows | Partial-source inventory safely reusable without erasing source uncertainty; CLI model binding and bounded budgets; canonical and snapshot IDs unambiguous; explicit MCP sampling limits; accurate commands and documentation; no misleading legacy CLI |
 | 16 | Portability | Default symlinked temporary ancestors work in normal and optimized acceptance; owned child and database symlink protections remain; native macOS CI |
 
-Each slice requires a reproducing regression, negative controls, independent
-review, and a scoped PR. This table is a work plan, not a claim that the fixes have
-passed. Record actual acceptance results in [validation](VALIDATION.md).
+Each slice required a reproducing regression, negative controls, independent
+review, and a scoped PR. Actual acceptance results and their limits are recorded
+in [validation](VALIDATION.md); the table alone is not evidence of acceptance.
 
 ## Local remediation checkpoint
 
@@ -30,8 +32,8 @@ honest supported limitations. PRs #44-#46 cover portability/private exports,
 verdicts, and mixed-network transport. PR #47 covers operator workflows:
 source reuse, CLI model/budget controls, identity aliases, and accurate guidance.
 MCP controls still sample one page; a missing protected tool now emits an explicit
-warning and stays inconclusive, not passed. Local regressions are not a closure
-of the external lab findings until the exact merged revision is retested there.
+warning and stays inconclusive, not passed. The reviewed external retests below
+provide acceptance beyond these local regressions, within their stated limits.
 A related storage follow-up protects new server files and tests actual container
 ownership/permissions across restart, without modifying existing mounted data.
 
@@ -49,11 +51,11 @@ included, so exact-secret sweeps and database checks remain operator attestation
 The report labels all 22 original findings passed, with explicit no-retry and
 MCP first-control-page limitations and two source/documentation checks. Review
 found an additional blocker: the server's compatibility summary and per-agent
-API fields expose storage placeholder scores of zero even when the authoritative
-pipeline reports null and `not_assessed`. This still misrepresents unknown risk
-for API consumers. Keep the beta held until that adapter is corrected, independently
-reviewed, and validated on the new merged revision. The prior live retest does
-not automatically cover later source changes.
+API fields exposed storage placeholder scores of zero even when the authoritative
+pipeline reported null and `not_assessed`. PR #49 corrected that adapter. Its
+independent review, eight PR/post-merge CI jobs, and the targeted external retest
+below close this blocker. The earlier live retest did not automatically cover
+the follow-up source change.
 
 The five fixed-configuration vulnerable-bot runs produced one confirmed leak
 and four inconclusive results, with no passes or verified resolutions. This
@@ -63,10 +65,40 @@ absence-of-vulnerability claims. See [validation](VALIDATION.md) for measurement
 Six reported lower-priority observations remain follow-up work: upfront refusal
 for forbidden CLI target classes, clearer missing-credential diagnostics, grouped
 repeated leak findings, specific MCP stderr reasons, a stale static-analysis
-suppression, and clearer MCP baseline-page wording. They do not replace the API
-score blocker or expand the supported MCP control sample.
+suppression, and clearer MCP baseline-page wording. These are not evidence of
+broader coverage and do not expand the supported MCP control sample.
 
-## Reopening the beta
+## Targeted API acceptance
+
+The operator supplied a second private bundle for exact runtime revision
+`82ee7d5`. Two independent reviews compared ten scan responses and 31 snapshots
+with their saved pipelines and archived inventory captures. All 29 unassessed
+snapshots retained null/unknown/not-assessed risk; both confirmed snapshots
+retained 70/high, with sampled and partial coverage respectively. Restart
+inventory retained all 31 matching snapshots. The check artifact contains 78
+passes, zero failures, and 16 informational entries. All 324 response excerpts
+are omission sentinels. See [validation](VALIDATION.md#targeted-live-api-acceptance).
+
+The positive cases used deterministic fixtures and controlled canary/context
+input seeding into server-produced discovery records while the server was
+stopped. Findings and scores were generated by the real server, not seeded.
+This validates downstream execution, scoring, storage, and projection; it does
+not establish a supported server canary-configuration workflow. Direct report
+or database modification is not an operator setup method. Real-model runs
+confirmed zero of three attempts and remained inconclusive, not passed.
+
+Final database privacy and file-mode checks remain operator attestations because
+the database and exact secrets were correctly excluded. Restart per-scan and
+high-filter response bodies were not retained separately; their assertions are
+in the logs, while restart inventory was independently inspected. The harness
+does not propagate failed assertions to its exit code, so acceptance rests on
+the archived checks and independent comparisons, not exit zero alone.
+
+Together with the prior reviewed lab evidence and merged CI, this closes the
+reported remediation hold for the documented limited beta. No publication,
+deployment, comprehensive accuracy claim, or enterprise sign-off is implied.
+
+## Regression requirements
 
 1. All 22 reported findings have a tested fix or an explicit supported limitation
    that no longer misrepresents a result. Do not close a defect solely by hiding
@@ -80,6 +112,10 @@ score blocker or expand the supported MCP control sample.
 4. Retest an explicitly authorized real-service lab on the exact merged revision.
    A source fix or synthetic fixture does not itself constitute this retest.
    No cloud start, deployment, paid target, or real schedule is implied by this plan.
+
+These requirements were met for the scoped remediation with the qualifications
+above. Runtime changes require relevant revalidation; documentation-only changes
+do not require another cloud run.
 
 ## Enterprise readiness is a separate decision
 

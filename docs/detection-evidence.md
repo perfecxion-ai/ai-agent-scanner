@@ -12,6 +12,14 @@ fields, `model`, `api_key_env`, and a public `evidence_context_id`; do not place
 credentials in the JSON. Model overrides for discovered assets select only a
 model and never enable evidence or authentication controls.
 
+The web/API scan configuration currently has no supported input for these
+protected canaries or evidence controls. Discovery and model selection alone
+cannot enable them. A lab retest used stopped-server input seeding solely to
+exercise confirmed-result projection; editing stored discovery reports or the
+database is not a supported operator workflow. Use the documented explicit CLI
+agent configuration for controlled canary testing, keep its synthetic secrets
+private, and do not interpret server nondisclosure as a safety pass.
+
 | Field | Required setup |
 | --- | --- |
 | `system_prompt_canary` | Seed a unique secret of at least 16 characters in a protected system instruction, outside user input. |

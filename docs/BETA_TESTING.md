@@ -1,8 +1,10 @@
 # Local beta testing
 
-Status: held following external lab validation. Infrastructure acceptance is not
-verdict-accuracy acceptance. Do not recommend this revision for operational risk
-decisions. See the [remediation gate](BETA_REMEDIATION.md) for reopening criteria.
+Status: reopened for limited single-operator beta testing on runtime revision
+`82ee7d5` after reviewed lab remediation and targeted API acceptance. This is not
+production or enterprise approval, and results must not be the sole basis for
+operational risk decisions. Detection sensitivity remains unvalidated. See the
+[remediation gate](BETA_REMEDIATION.md) and [evidence limits](detection-evidence.md).
 
 This is a finite acceptance gate for the documented single-operator beta, not
 completion of every engineering milestone. The supported server is one process
@@ -49,6 +51,8 @@ jobs green on its PR and merged commit, current full-suite/package/security chec
 the browser check, both backup checks, and the recorded queue profile. Record the
 tested commit with `git rev-parse HEAD`; [validation](VALIDATION.md) records results
 and limitations. A later source change needs the relevant checks again.
+Documentation-only updates do not change the tested runtime and do not require
+another cloud run. New runtime changes require risk-proportionate revalidation.
 
 Server request budgets use `SCAN_MAX_REQUESTS` (default 500, maximum 10000)
 and `SCAN_TIMEOUT_SECONDS` (default 300, maximum 3600). Active model requests use
