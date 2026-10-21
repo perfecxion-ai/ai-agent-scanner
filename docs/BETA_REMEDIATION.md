@@ -62,11 +62,13 @@ and four inconclusive results, with no passes or verified resolutions. This
 supports honest uncertainty, not reliable detection sensitivity or general
 absence-of-vulnerability claims. See [validation](VALIDATION.md) for measurements.
 
-Six reported lower-priority observations remain follow-up work: upfront refusal
-for forbidden CLI target classes, clearer missing-credential diagnostics, grouped
-repeated leak findings, specific MCP stderr reasons, a stale static-analysis
-suppression, and clearer MCP baseline-page wording. These are not evidence of
-broader coverage and do not expand the supported MCP control sample.
+The operator-diagnostics follow-up addresses O1, O2, O4, O5, and O6 with upfront
+forbidden-target refusal, static authorization/MCP failure reasons, a correctly
+scoped static-analysis suppression, and clearer baseline/control-page wording.
+Local combined acceptance is 1408 tests. The suppression is necessary for a
+wildcard-detection constant, not a listener; it was not removed or used to weaken
+the static gate. O3 finding presentation remains follow-up work. No diagnostic
+change expands MCP control sampling, retries, or security passes.
 
 ## Targeted API acceptance
 

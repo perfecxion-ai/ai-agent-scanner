@@ -35,6 +35,15 @@ accuracy, and broader enterprise work visible. Documentation-only updates do not
 change the tested runtime or require another cloud run. See [targeted acceptance
 and qualifications](VALIDATION.md#targeted-live-api-acceptance).
 
+The operator-diagnostics follow-up addresses O1/O2/O4/O5/O6 and passes 1408 local
+tests plus independent network/MCP reviews, Ruff, and configured Bandit. Forbidden
+CLI classes fail before scanning; required model denials and MCP failures have
+static secret-safe diagnostics; baseline/control pagination wording is explicit.
+The wildcard detector keeps a justified narrowly scoped suppression without stale
+warnings. No security pass, scope boundary, retry behavior, or MCP control coverage
+was broadened. Require current PR/post-merge CI. This local acceptance is not a
+new cloud retest. O3 grouping and the larger product gaps remain.
+
 The following slice descriptions record earlier local remediation checkpoints.
 
 The first remediation PR adds private atomic exports, macOS temporary-root
@@ -295,8 +304,10 @@ changing global identity. Do not rewrite history or erase local files implicitly
 1. Preserve the reviewed remediation checkpoint and require scoped independent
    review plus PR/post-merge CI for changes. Runtime changes need relevant
    revalidation; documentation-only changes do not require another cloud run.
-2. Address the six lower-priority observations and design a safe server evidence
-   input/secret-reference contract before claiming normal API canary workflows.
+2. Prioritize safe server evidence references and measured detection sensitivity.
+   The diagnostic observations have a parallel scoped fix; presentation grouping
+   remains separate. Validate the server input/secret-reference contract before
+   claiming normal API canary workflows.
    Do not use report/database modification as a product feature. Starting cloud
    VMs, changing deployments, and enabling real schedules require authorization;
    do not infer it from this plan.

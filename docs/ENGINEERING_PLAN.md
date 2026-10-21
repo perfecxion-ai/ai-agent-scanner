@@ -10,6 +10,11 @@ representative detection sensitivity. A supported server protected-canary input
 or secret-reference contract remains a capability gap, separate from API score
 correctness; direct modification of stored reports is not a supported workflow.
 
+The next product priorities are safe server-side evidence references and a
+fixed-budget sensitivity benchmark. Parallel diagnostic work addresses O1/O2
+and O4/O5/O6 without changing evidence verdicts or claiming stronger detection.
+Finding presentation grouping must preserve raw occurrences and lifecycle IDs.
+
 Build a defensible AI asset inventory and security assessment tool for security
 engineers. Preserve local CLI use and add a reliable single-operator server.
 Enterprise identity, distributed execution, and additional attack surfaces follow
