@@ -17,7 +17,7 @@ from src.core.pipeline import run_pipeline, to_sarif
 from src.core.model_selection import apply_model_overrides, validate_model_overrides
 from src.core.transport import ScanBudget, scan_transport
 from src.core.files import write_private_text
-from src.utils.helpers import validate_scan_scope
+from src.utils.helpers import validate_cli_target_classes, validate_scan_scope
 
 VERSION = "1.1.0"
 BANNER = "AI Agent Scanner"
@@ -133,7 +133,10 @@ def load_targets(network, domain, repository=(), traffic=(), config=None, allow_
             agent.setdefault('type', 'assistant')
             agent.setdefault('discovery_method', 'explicit')
             agent.setdefault('metadata', {})
-    else:
+    valid, error = validate_cli_target_classes(scope, agents, allow_loopback=allow_loopback)
+    if not valid:
+        raise click.ClickException(error)
+    if agents is None:
         valid, error = validate_scan_scope(scope, allow_loopback=allow_loopback)
         if not valid:
             raise click.ClickException(error)

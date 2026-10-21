@@ -304,7 +304,7 @@ def test_cli_evidence_context_is_explicit_bounded_public_provenance(tmp_path, co
         "id": "fixture", "name": "fixture", "endpoint": "http://127.0.0.1/model",
         "provider": "ollama", "model": "fixture-model", "evidence_context_id": context}]}))
     if context == "lab-policy-v1":
-        _, agents = load_targets((), (), config=str(config))
+        _, agents = load_targets((), (), config=str(config), allow_loopback=True)
         assert agents[0]["evidence_context_id"] == context
     else:
         with pytest.raises(click.ClickException):

@@ -113,6 +113,7 @@ class _Execution:
     failed_interactions: int = 0
     failed: bool = False
     decisive: bool = True
+    authorization_denied: bool = False
 
 
 _records = ContextVar("security_check_records", default=None)
@@ -129,7 +130,7 @@ def collect_checks():
         _records.reset(token)
 
 
-def record_interaction(valid: bool, decisive: bool = False):
+def record_interaction(valid: bool, decisive: bool = False, *, status_code=None):
     """Record response analysis, excluding empty or rejected required responses."""
     execution = _execution.get()
     if execution is not None:
@@ -137,6 +138,7 @@ def record_interaction(valid: bool, decisive: bool = False):
         execution.failed_interactions += int(not valid)
         execution.failed |= not valid
         execution.decisive &= decisive
+        execution.authorization_denied |= not valid and status_code in (401, 403)
 
 
 def has_canary(agent, field):
@@ -190,7 +192,9 @@ def checked(rule, spec, prerequisite=None, oracle=None, coverage=None, absence_r
                 elif execution.failed:
                     status = "failed"
                     outcome = "confirmed" if "confirmed" in evidence else "inconclusive"
-                    reason = "Some required interactions failed or returned unusable responses"
+                    reason = ("Required model interaction denied authorization (HTTP 401/403); verify credentials and access policy"
+                              if execution.authorization_denied else
+                              "Some required interactions failed or returned unusable responses")
                 elif not execution.evaluated:
                     status, outcome = "skipped", "not_evaluated"
                     reason = "No response was evaluated"

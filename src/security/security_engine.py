@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Callable
 import logging
 from src.core.transport import current_budget
-from src.utils.request_builder import construct_agent_request
+from src.utils.request_builder import construct_agent_request, missing_credential_reason
 from src.core.contracts import CHECK_SCHEMA_VERSION, collect_checks, missing_checks, risk_assessment_eligible
 from src.risk.risk_assessor import SEVERITY_SCORES
 
@@ -83,7 +83,8 @@ class SecurityTestEngine:
         try:
             if construct_agent_request(agent, "configuration check") is None:
                 test_results['status'] = 'skipped'
-                test_results['reason'] = 'Unsupported provider or invalid/missing model or credential configuration'
+                test_results['reason'] = (missing_credential_reason(agent) or
+                    'Unsupported provider or invalid/missing model configuration')
                 test_results['checks'] = missing_checks([], test_results['reason'])
                 return test_results
             budget = current_budget()

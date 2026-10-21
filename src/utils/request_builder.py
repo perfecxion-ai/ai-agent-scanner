@@ -28,6 +28,16 @@ def resolve_api_key(agent):
     return None
 
 
+def missing_credential_reason(agent):
+    """Describe missing declared credentials without exposing references or URLs."""
+    if not resolve_api_key(agent):
+        if agent.get('api_key_env'):
+            return 'Required credential environment reference is unset or empty'
+        if urlsplit(agent.get('endpoint') or '').hostname in _CLOUD:
+            return 'Required provider credential is unavailable; configure the provider API key'
+    return None
+
+
 def _route(endpoint, suffix, known):
     parts = urlsplit(endpoint)
     path = parts.path.rstrip('/')

@@ -318,8 +318,8 @@ class PromptInjectionTester:
                     data=request_data.get('data')
                 ) as response:
                     if not 200 <= response.status < 300:
-                        record_interaction(False)
-                        record_response_failure()
+                        record_interaction(False, status_code=response.status)
+                        record_response_failure(response.status)
                         return None
                     response_text = await response.text()
                     usable = usable_model_response(response_text)
