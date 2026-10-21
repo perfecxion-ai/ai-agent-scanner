@@ -106,8 +106,10 @@ and marker echoes never establish a pass. Origin 401 is inconclusive because
 authentication failure is not proof of Origin-policy enforcement.
 
 Controls sample only the first inventory page. A successful empty/public page,
-missing canary, or pagination cursor is inconclusive, never a pass. Controls do
-not follow cursors. One confirmed finding survives a later failed condition.
+including a page with a cursor to later inventory, records an explicit
+"Protected tool not on sampled page; later pages were not tested" check reason.
+That warning is inconclusive, not a denial or a clean server verdict. Controls
+do not follow cursors. One confirmed finding survives a later failed condition.
 Passes apply only to these sampled fixture conditions, not all principals,
 origins, tool execution, sandboxing, browser exploitability, or DNS rebinding.
 Overall risk remains `not_assessed`, and tool execution remains skipped.

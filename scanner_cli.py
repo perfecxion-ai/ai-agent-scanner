@@ -14,6 +14,9 @@ from src.security.security_engine import SecurityTestEngine
 from src.risk.risk_assessor import RiskAssessment
 from src.frameworks.owasp_llm_top10 import get_coverage_summary
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.model_selection import apply_model_overrides, validate_model_overrides
+from src.core.transport import ScanBudget, scan_transport
+from src.core.files import write_private_text
 from src.utils.helpers import validate_scan_scope
 
 VERSION = "1.1.0"
@@ -39,7 +42,23 @@ def target_options(function):
     return function
 
 
-def load_targets(network, domain, repository=(), traffic=(), config=None):
+def budget_options(function):
+    for option in reversed([
+        click.option('--max-requests', type=click.IntRange(1, 10000), default=500, show_default=True,
+                     help='Shared DNS/TCP/HTTP attempt budget'),
+        click.option('--max-response-bytes', type=click.IntRange(1, 16777216), default=1048576,
+                     show_default=True, help='Maximum bytes per HTTP response'),
+        click.option('--timeout-seconds', type=click.IntRange(1, 3600), default=300,
+                     show_default=True, help='Overall scan deadline'),
+        click.option('--request-timeout-seconds', type=click.FloatRange(1, 300), default=30,
+                     show_default=True, help='Maximum duration of each HTTP request'),
+        click.option('--allow-loopback', is_flag=True, help='Explicitly permit local loopback targets'),
+    ]):
+        function = option(function)
+    return function
+
+
+def load_targets(network, domain, repository=(), traffic=(), config=None, allow_loopback=False):
     data = {}
     if config:
         try:
@@ -115,7 +134,7 @@ def load_targets(network, domain, repository=(), traffic=(), config=None):
             agent.setdefault('discovery_method', 'explicit')
             agent.setdefault('metadata', {})
     else:
-        valid, error = validate_scan_scope(scope, allow_loopback=True)
+        valid, error = validate_scan_scope(scope, allow_loopback=allow_loopback)
         if not valid:
             raise click.ClickException(error)
     return DiscoveryScope(**scope), agents
@@ -123,49 +142,88 @@ def load_targets(network, domain, repository=(), traffic=(), config=None):
 
 @cli.command()
 @target_options
+@budget_options
 @click.option('--output', '-o', help='JSON output file')
 @click.option('--verbose', '-v', is_flag=True, help='Show completion details')
-def discover(network, domain, repository, traffic, config, output, verbose):
+def discover(network, domain, repository, traffic, config, output, verbose,
+             max_requests, max_response_bytes, timeout_seconds, allow_loopback, request_timeout_seconds):
     """Discover agents across network, repositories, cloud, and traffic sources."""
-    scope, agents = load_targets(network, domain, repository, traffic, config)
+    scope, agents = load_targets(network, domain, repository, traffic, config, allow_loopback)
     if agents is not None:
         raise click.ClickException("Explicit agents are supported by scan only")
-    asyncio.run(_execute(scope, None, output, 'json', 'discovery_only', verbose))
+    asyncio.run(_execute(scope, None, output, 'json', 'discovery_only', verbose,
+                         max_requests, max_response_bytes, timeout_seconds, allow_loopback,
+                         request_timeout_seconds=request_timeout_seconds))
 
 
 @cli.command()
 @target_options
+@budget_options
+@click.option('--model-override', multiple=True, metavar='ASSET_ID=MODEL',
+              help='Bind an exact discovered stable asset ID to a model (repeatable)')
 @click.option('--output', '-o', default='scan_results.json', help='Output file')
 @click.option('--format', '-f', 'fmt', type=click.Choice(['json', 'sarif']), default='json')
 @click.option('--verbose', '-v', is_flag=True, help='Show completion details')
 @click.option('--skip-security', is_flag=True, help='Discovery only')
-def scan(network, domain, repository, traffic, config, output, fmt, verbose, skip_security):
+def scan(network, domain, repository, traffic, config, output, fmt, verbose, skip_security,
+         model_override, max_requests, max_response_bytes, timeout_seconds, allow_loopback,
+         request_timeout_seconds):
     """Run shared discovery, security, risk, and report pipeline."""
-    scope, agents = load_targets(network, domain, repository, traffic, config)
+    scope, agents = load_targets(network, domain, repository, traffic, config, allow_loopback)
     if agents is not None and skip_security:
         raise click.ClickException("Explicit agents cannot be combined with --skip-security")
-    mode = 'security_only' if agents is not None else ('discovery_only' if skip_security else 'full')
-    asyncio.run(_execute(scope, agents, output, fmt, mode, verbose))
-
-
-async def _execute(scope, agents, output, fmt, mode, verbose):
+    selections = {}
+    for selection in model_override:
+        asset_id, separator, model = selection.partition('=')
+        if not separator or asset_id in selections:
+            raise click.UsageError('Model overrides require unique ASSET_ID=MODEL entries')
+        selections[asset_id] = model
     try:
-        result = await run_pipeline(DiscoveryEngine(), SecurityTestEngine(), RiskAssessment(),
-                                    scope, mode, agents=agents)
+        selections = validate_model_overrides(selections)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+    if selections and skip_security:
+        raise click.UsageError('--model-override requires security testing')
+    mode = 'security_only' if agents is not None else ('discovery_only' if skip_security else 'full')
+    asyncio.run(_execute(scope, agents, output, fmt, mode, verbose,
+                         max_requests, max_response_bytes, timeout_seconds, allow_loopback, selections,
+                         request_timeout_seconds))
+
+
+async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
+                   max_response_bytes=1048576, timeout_seconds=300, allow_loopback=False,
+                   selections=None, request_timeout_seconds=30):
+    try:
+        with scan_transport(ScanBudget(max_requests=max_requests, max_response_bytes=max_response_bytes,
+                                       allow_loopback=allow_loopback,
+                                       request_timeout_seconds=request_timeout_seconds)):
+            result = await asyncio.wait_for(
+                run_pipeline(DiscoveryEngine(), SecurityTestEngine(), RiskAssessment(),
+                             scope, mode, agents=agents,
+                             agent_validator=(lambda values: apply_model_overrides(values, selections))
+                             if selections else None), timeout=timeout_seconds)
+    except ValueError as exc:
+        if str(exc).startswith(('model_overrides', 'Source assets', 'Source asset')):
+            raise click.ClickException(str(exc)) from exc
+        raise click.ClickException('Scan execution failed') from exc
+    except (TimeoutError, asyncio.TimeoutError) as exc:
+        raise click.ClickException('Scan deadline exhausted; no complete report was produced') from exc
     except Exception as exc:
         raise click.ClickException("Scan execution failed") from exc
     report = to_sarif(result) if fmt == 'sarif' else result
     serialized = json.dumps(report, indent=2)
     if output:
         try:
-            Path(output).write_text(serialized + '\n')
-        except OSError as exc:
+            write_private_text(output, serialized + '\n')
+        except (OSError, ValueError) as exc:
             raise click.ClickException("Unable to write report") from exc
         click.echo(f"Report saved to {output}")
     else:
         click.echo(serialized)
     if verbose:
         click.echo(f"Scan status: {result['status']}", err=True)
+    if mode != 'discovery_only' and result.get('agents') and not result.get('summary', {}).get('checks_completed'):
+        raise click.ClickException('No security checks completed; configure an explicit model or inspect skipped prerequisites')
     if result['status'] != 'completed':
         raise click.ClickException("Scan completed with failed phases; inspect report")
 
@@ -230,8 +288,7 @@ def mcp_command(config, tools_path, fmt, output):
                    destination.exists() and destination.samefile(path)
                    for path in (config, tools_path) if path):
                 raise ValueError('Output must differ from input files')
-            with open(output, 'w', encoding='utf-8') as stream:
-                stream.write(rendered + '\n')
+            write_private_text(output, rendered + '\n')
         else:
             click.echo(rendered)
     except (OSError, ValueError) as exc:
@@ -254,7 +311,7 @@ def mcp_live_command(endpoint, allow_network, allow_loopback, api_key_env, fmt, 
         report = asyncio.run(inventory(endpoint, allow_network, allow_loopback, api_key_env))
         rendered = json.dumps(to_sarif(report) if fmt == 'sarif' else report, indent=2)
         if output:
-            Path(output).write_text(rendered + '\n', encoding='utf-8')
+            write_private_text(output, rendered + '\n')
         else:
             click.echo(rendered)
     except (OSError, ValueError) as exc:
@@ -285,7 +342,7 @@ def mcp_check_command(endpoint, allow_network, allow_loopback, api_key_env, poli
         report = asyncio.run(check(endpoint, allow_network, load_policy(policy), allow_loopback, api_key_env))
         rendered = json.dumps(to_sarif(report) if fmt == 'sarif' else report, indent=2)
         if output:
-            Path(output).write_text(rendered + '\n', encoding='utf-8')
+            write_private_text(output, rendered + '\n')
         else:
             click.echo(rendered)
     except (OSError, ValueError) as exc:
@@ -313,8 +370,7 @@ def evaluate_command(suite, output):
             if suite and (destination.resolve() == Path(suite).resolve() or
                           destination.exists() and destination.samefile(suite)):
                 raise ValueError('Output must differ from suite input')
-            with destination.open('w', encoding='utf-8') as stream:
-                stream.write(rendered + '\n')
+            write_private_text(destination, rendered + '\n')
         else:
             click.echo(rendered)
     except (OSError, ValueError) as exc:
@@ -333,8 +389,8 @@ def _write_derived_report(document, output, sources):
         if destination.resolve() == path.resolve() or (destination.exists() and destination.samefile(path)):
             raise click.ClickException("Output must be a different file from the inputs")
     try:
-        destination.write_text(json.dumps(document, indent=2) + '\n')
-    except OSError as exc:
+        write_private_text(destination, json.dumps(document, indent=2) + '\n')
+    except (OSError, ValueError) as exc:
         raise click.ClickException("Unable to write derived report") from exc
 
 

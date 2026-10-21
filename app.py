@@ -38,7 +38,8 @@ from src.reporting.report_generator import ReportGenerator
 from src.utils.auth import require_auth, create_jwt_token
 from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
-from src.core.model_selection import apply_model_overrides
+from src.core.model_selection import apply_model_overrides, canonical_model_overrides
+from src.core.contracts import validate_scan_result
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
 from src.core.transport import ScanBudget, scan_transport, current_budget
 from src.core.jobs import JobStore, JobDispatcher, TERMINAL_STATES
@@ -80,6 +81,7 @@ for _setting, _default, _maximum in (
     ("SCAN_MAX_HOSTS", 1024, 65536), ("SCAN_MAX_FILES", 10000, 100000),
     ("SCAN_TIMEOUT_SECONDS", 300, 3600), ("MAX_CONCURRENT_SCANS", 2, 32),
     ("SCAN_MAX_REQUESTS", 500, 10000), ("SCAN_MAX_RESPONSE_BYTES", 1048576, 16777216),
+    ("SCAN_REQUEST_TIMEOUT_SECONDS", 30, 300),
     ("SCAN_MAX_QUEUED", 32, 10000),
     ("SCAN_MAX_TEMPLATES", 64, 1024),
     ("SCAN_MAX_SCHEDULES", 64, 1024), ("SCAN_MAX_SCHEDULES_GLOBAL", 256, 4096),
@@ -351,26 +353,77 @@ def _prepare_scan(data, tenant, *, retain_declaration=True):
         source = ScanSession.query.filter_by(id=options["source_scan_id"], organization_id=tenant).first()
         if source is None:
             raise NotFound("Source scan not found")
-        if source.status != "completed":
-            raise BadRequest("Source scan must be completed")
-        previous = db.session.get(ScanResult, source.id)
-        if not previous:
-            raise BadRequest("Source scan has no versioned results")
-        if any(agent.get("endpoint_redacted") for agent in previous.result.get("agents", [])):
-            raise BadRequest("Source endpoints were redacted; supply fresh targets")
+        source_agents, aliases = _source_inventory(source)
         try:
-            apply_model_overrides(previous.result.get("agents", []), options.get("model_overrides", {}))
+            options["model_overrides"] = canonical_model_overrides(
+                source_agents, options.get("model_overrides", {}), aliases)
         except ValueError as exc:
             raise ScopeValidationError(str(exc)) from exc
-        source_agents = DiscoveredAgentModel.query.filter_by(scan_id=source.id).all()
-        if not source_agents:
-            raise BadRequest("Source scan has no assets")
-        validate_agent_endpoints([{"endpoint": agent.endpoint_url} for agent in source_agents], app.config)
+        validate_agent_endpoints(source_agents, app.config)
     elif retain_declaration:
         # Execution resolves these declarations again, rather than trusting stale DNS or symlinks.
         for key in ("network_ranges", "domains", "repositories", "traffic_sources"):
             scope[key] = deepcopy(data.get("target_scope", {}).get(key, []))
     return {"scan_name": name, "scan_type": mode, "target_scope": scope, "scan_config": options}
+
+
+def _source_inventory(source):
+    """Load terminal owned inventory, checking the report against saved snapshots.
+
+    Partial coverage is reusable inventory, not a successful discovery or security
+    verdict. The caller must still authorize ownership and current target policy.
+    """
+    if source.status not in {"completed", "partial"}:
+        raise BadRequest("Source scan must be terminal completed or partial")
+    previous = db.session.get(ScanResult, source.id)
+    if previous is None or not isinstance(previous.result, dict):
+        raise BadRequest("Source scan has no versioned results")
+    report = previous.result
+    agents = report.get("agents", [])
+    if not isinstance(agents, list):
+        raise BadRequest("Source inventory must be an array")
+    if source.status == "partial":
+        if source.completed_at is None or report.get("status") != "partial":
+            raise BadRequest("Partial source must have a finalized versioned report")
+        if (not isinstance(report.get("summary"), dict)
+                or not isinstance(report.get("security_results"), list)
+                or not isinstance(report.get("risk_assessments"), list)
+                or report["summary"].get("agents_discovered") != len(agents)):
+            raise BadRequest("Partial source report is incomplete")
+        try:
+            validate_scan_result(report)
+        except (TypeError, ValueError, KeyError) as exc:
+            raise BadRequest("Partial source report is invalid") from exc
+    try:
+        apply_model_overrides(agents, {})
+    except ValueError as exc:
+        raise BadRequest("Source inventory identities are invalid") from exc
+    snapshots = DiscoveredAgentModel.query.filter_by(scan_id=source.id).limit(
+        app.config["SCAN_MAX_HOSTS"] + 1).all()
+    if not snapshots or not agents:
+        raise BadRequest("Source scan has no assets")
+    if len(snapshots) > app.config["SCAN_MAX_HOSTS"]:
+        raise BadRequest("Source scan exceeds host budget")
+    expected = {agent["id"]: agent.get("endpoint") for agent in agents}
+    saved = {}
+    aliases = {}
+    for snapshot in snapshots:
+        if not isinstance(snapshot.metadata_json, dict):
+            raise BadRequest("Source snapshot metadata is invalid")
+        identifier = snapshot.metadata_json.get("asset_id", snapshot.id)
+        if not isinstance(identifier, str) or not identifier or len(identifier) > 256:
+            raise BadRequest("Source inventory identities are invalid")
+        if identifier in saved:
+            raise BadRequest("Source inventory identities are ambiguous")
+        saved[identifier] = snapshot.endpoint_url
+        aliases[snapshot.id] = identifier
+    if expected != saved:
+        raise BadRequest("Source inventory does not match saved snapshots")
+    if any(agent.get("endpoint_redacted") for agent in agents):
+        raise BadRequest("Source endpoints were redacted; supply fresh targets")
+    if source.status == "partial" and not any(agent.get("endpoint") for agent in agents):
+        raise BadRequest("Partial source has no usable endpoints")
+    return deepcopy(agents), aliases
 
 
 def _queue_scan(definition, tenant, actor, user_ip, *, before_commit=None):
@@ -587,10 +640,14 @@ def _schedule_token(definition, tenant):
         result = db.session.get(ScanResult, identifier)
         assets = DiscoveredAgentModel.query.filter_by(scan_id=identifier).order_by(
             DiscoveredAgentModel.id).limit(app.config["SCAN_MAX_HOSTS"] + 1).all()
-        if row is None or row.status != "completed" or result is None or not assets:
+        if row is None or row.status not in {"completed", "partial"} or result is None or not assets:
             raise BadRequest("Source scan prerequisites changed")
         if len(assets) > app.config["SCAN_MAX_HOSTS"]:
             raise BadRequest("Source scan exceeds host budget")
+        try:
+            _source_inventory(row)
+        except BadRequest as exc:
+            raise Conflict("Source inventory changed; review before scheduling") from exc
         source = (row.id, row.status, deepcopy(result.result), [(item.id, item.endpoint_url) for item in assets])
     return policy, source
 
@@ -1096,6 +1153,7 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
             allow_loopback=app.config["SCAN_ALLOW_LOOPBACK"],
             max_requests=app.config["SCAN_MAX_REQUESTS"],
             max_response_bytes=app.config["SCAN_MAX_RESPONSE_BYTES"],
+            request_timeout_seconds=app.config["SCAN_REQUEST_TIMEOUT_SECONDS"],
         )
         with scan_transport(budget):
             loop.run_until_complete(
@@ -1152,22 +1210,22 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                 current = db.session.get(ScanSession, scan_id)
                 source = ScanSession.query.filter_by(
                     id=scan_config.get("source_scan_id"), organization_id=current.organization_id,
-                    status="completed",
                 ).first()
                 if not source:
-                    raise ValueError("Completed source scan required")
-                previous = db.session.get(ScanResult, source.id)
-                if not previous:
-                    raise ValueError("Source scan has no versioned results")
-                source_agents = previous.result["agents"]
-                if any(agent.get("endpoint_redacted") for agent in source_agents):
-                    raise SourceReplayError("Source endpoints were redacted; use fresh explicit target configuration")
-                source_agents = apply_model_overrides(source_agents, scan_config.get("model_overrides", {}))
+                    raise ValueError("Owned terminal source scan required")
+                source_agents, aliases = _source_inventory(source)
+                source_agents = apply_model_overrides(source_agents, scan_config.get("model_overrides", {}), aliases)
+                source_coverage = {"scan_id": source.id, "status": source.status,
+                                   "coverage_complete": source.status == "completed"}
+                if source.status == "partial":
+                    source_coverage["warning"] = "Source inventory coverage is incomplete; only saved validated assets were tested"
         _update_progress(scan_id, 10, "Running scan pipeline")
         result = await run_pipeline(discovery_engine, security_engine, risk_assessor,
                                     scope, scan_type, agents=source_agents,
                                     agent_validator=lambda agents: validate_agent_endpoints(agents, app.config))
         result["scan_id"] = scan_id
+        if scan_type == "security_only":
+            result["source_inventory"] = source_coverage
         budget = current_budget()
         if budget and (budget.rejections or budget.failures):
             result["status"] = "partial"

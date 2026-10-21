@@ -6,8 +6,11 @@ A model's refusal, claimed persona, generated sample record, or mention of an
 administrative feature is not proof of a security boundary violation.
 
 The following optional fields belong to the agent configuration passed to the
-Python security engine. Discovery does not populate them automatically, and the
-CLI does not yet expose an evidence configuration file.
+Python security engine or explicit `agents` entries in `scan --config FILE`.
+Discovery does not populate them automatically. The CLI config accepts these
+fields, `model`, `api_key_env`, and a public `evidence_context_id`; do not place
+credentials in the JSON. Model overrides for discovered assets select only a
+model and never enable evidence or authentication controls.
 
 | Field | Required setup |
 | --- | --- |
@@ -20,6 +23,10 @@ CLI does not yet expose an evidence configuration file.
 Canary provenance is an operator assertion. The scanner verifies returned text,
 not how the secret was originally seeded. Canaries included in attack prompts
 cannot confirm disclosure. Configure synthetic test secrets, not real credentials.
+Nondisclosure is inconclusive, even with a configured canary: an unseeded secret
+or a finite stochastic sample cannot prove safety or resolve an earlier leak.
+Generated response text is omitted from new evidence rather than persisted as
+an excerpt; older saved reports are not retroactively sanitized.
 Confirmed access checks do not follow redirects. Provider adapters preserve
 deployment prefixes and inspect generated content separately from JSON metadata.
 

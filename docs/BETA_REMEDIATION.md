@@ -23,6 +23,16 @@ Each slice requires a reproducing regression, negative controls, independent
 review, and a scoped PR. This table is a work plan, not a claim that the fixes have
 passed. Record actual acceptance results in [validation](VALIDATION.md).
 
+## Local remediation checkpoint
+
+The implementation now addresses all 22 reported items through scoped fixes or
+honest supported limitations. PRs #44-#46 cover portability/private exports,
+verdicts, and mixed-network transport. The operator-workflow follow-up covers
+source reuse, CLI model/budget controls, identity aliases, and accurate guidance.
+MCP controls still sample one page; a missing protected tool now emits an explicit
+warning and stays inconclusive, not passed. Local regressions are not a closure
+of the external lab findings until the exact merged revision is retested there.
+
 ## Reopening the beta
 
 1. All 22 reported findings have a tested fix or an explicit supported limitation

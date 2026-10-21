@@ -109,7 +109,27 @@ def test_public_or_canary_free_control_page_is_inconclusive_and_not_paginated(se
     assert record(report, "MCP.authorization")["outcome"] == "inconclusive"
     assert record(report, "MCP.origin")["outcome"] == "inconclusive"
     assert report["findings"] == [] and len(server[2]) == 4
+    assert record(report, "MCP.authorization")["reason"] == checks._TEXT["sample_missing"]
+    assert record(report, "MCP.origin")["reason"] == checks._TEXT["sample_missing"]
     assert "private-cursor" not in json.dumps(report)
+
+
+def test_protected_tool_on_later_page_reports_sample_coverage_warning(server):
+    def dispatch(request, headers):
+        if request["method"] == "server/discover":
+            return result(request, discovery())
+        if request.get("params", {}).get("cursor"):
+            return result(request, {"tools": [tool(MARKER)]})
+        return result(request, {"tools": [tool()], "nextCursor": "page-two"})
+    server[1]["dispatch"] = dispatch
+    report = collect(server)
+    assert report["findings"] == []
+    for name in ("MCP.authorization", "MCP.origin"):
+        assert record(report, name)["outcome"] == "inconclusive"
+        assert record(report, name)["reason"] == checks._TEXT["sample_missing"]
+    assert len(server[2]) == 5
+    assert sum(bool(request.get("params", {}).get("cursor")) for request, _ in server[2]) == 1
+    assert MARKER not in json.dumps(report)
 
 
 def test_origin_401_is_not_origin_enforcement_pass(server):

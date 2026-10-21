@@ -217,7 +217,7 @@ class AIAgentScanner {
         let scope = {};
         if (mode === 'security_only') {
             config.source_scan_id = this.el('sourceScanId').value.trim();
-            if (!config.source_scan_id) throw new Error('Enter a completed source scan ID.');
+            if (!config.source_scan_id) throw new Error('Enter a terminal completed or partial source scan ID.');
             if (this.el('modelOverrides').value.trim()) {
                 try {
                     const models = JSON.parse(this.el('modelOverrides').value);

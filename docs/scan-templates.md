@@ -97,8 +97,10 @@ queued recipe. Preflight validation does not hold the admission lock.
 Connection-time checks still apply; this does not close the documented concurrent
 filesystem modification boundary for trusted local inputs.
 
-Security-only templates require a completed, tenant-owned source scan with
-versioned results and assets. Redacted source endpoints cannot be replayed.
+Security-only templates require a terminal completed or partial, tenant-owned
+source scan with versioned results and assets. Partial sources must be finalized,
+valid, and match saved snapshots with usable endpoints. Their incomplete coverage
+remains explicit in derived reports. Redacted source endpoints cannot be replayed.
 Selected asset/model IDs and current endpoint policy are checked at creation,
 update, admission, and worker execution. Templates store only the source scan ID
 and model selections, not a copy of credentials or protected canaries.

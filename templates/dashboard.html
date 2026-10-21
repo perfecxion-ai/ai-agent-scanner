@@ -43,8 +43,8 @@
               <p id="pathHelp" class="hint">Use absolute paths within the server's configured roots.</p>
             </details>
           </div>
-          <div id="sourceFields" hidden><label for="sourceScanId">Completed source scan ID</label><input id="sourceScanId" maxlength="64" aria-describedby="sourceHelp modelProbeHelp">
-            <p id="sourceHelp" class="hint">Uses stored assets from your organization. Redacted endpoints cannot be replayed.</p>
+          <div id="sourceFields" hidden><label for="sourceScanId">Completed or partial source scan ID</label><input id="sourceScanId" maxlength="64" aria-describedby="sourceHelp modelProbeHelp">
+            <p id="sourceHelp" class="hint">Uses finalized stored assets from your organization. Partial inventory remains incomplete coverage. Failed or cancelled scans and redacted endpoints cannot be replayed.</p>
             <label for="modelOverrides">Model selections (optional JSON)</label><textarea id="modelOverrides" rows="3" aria-describedby="modelSelectionHelp modelProbeHelp" placeholder='{"asset-id":"operator-selected-model"}'></textarea>
             <p id="modelSelectionHelp" class="hint">Map source asset IDs to model names. Do not include credentials or endpoints.</p></div>
           <button id="startScanBtn" type="submit">Queue scan</button>

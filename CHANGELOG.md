@@ -40,6 +40,13 @@ These changes are engineering work on the current branch, not a published releas
 
 ### Results and interfaces
 
+- Reuse finalized partial inventories with explicit source-coverage warnings,
+  matching saved snapshots, tenant ownership, and current-policy revalidation.
+  Accept unambiguous stable or snapshot model-selection IDs; reject corrupt data.
+- Add CLI discovered-model bindings, bounded request/body/deadline controls,
+  explicit loopback opt-in, and a maintained redirect for the legacy CLI.
+- Warn when protected MCP inventory is absent from the sampled control page;
+  retain inconclusive status rather than suggesting later pages were tested.
 - Persist versioned scan snapshots, findings, and risk results; keep repeated
   discoveries separate and support organization-scoped JSON/SARIF exports.
 - Share a scan pipeline between CLI and API; support explicit agent configuration

@@ -74,6 +74,48 @@ a specific safe TLS failure for both MCP inventory and policy checks. Pre-create
 security engines use each scan's current bounded request deadline, with no retry.
 These are synthetic regressions, not a new live-provider compatibility claim.
 
+### Combined operator remediation slice
+
+The complete local remediation tree passes 1235 Linux/Python 3.10 tests and
+82 Node controller cases, Ruff, configured Bandit, pip check, dependency audit,
+build/Twine checks, and an isolated installed-wheel smoke. Both normal and
+optimized backup commands pass all eight cases. Independent review passed 256
+source/API/schedule/CLI/privacy cases and 226 network cases with warnings as errors.
+The current PR and merged revision must still pass their own complete CI matrix.
+
+The new mandatory real-protocol workflow starts local AI inventory/inference,
+optional error/HTML routes, a TCP banner, and a separate 503 service. It uses a
+fresh file-backed SQLite database, actual dispatcher, operator login, admission,
+snapshot-ID model selection, adapter/HTTP calls, history and JSON/SARIF exports.
+Mixed-service discovery completes; genuine 503 discovery remains partial; the
+saved partial source is then actively tested with the exact selected model.
+The original source remains unchanged, uncertainty is retained, and no passed
+security conclusion or minimal-risk score is inferred. Synthetic private output,
+PII, operator credentials and tokens are absent from reports and audit events.
+Only configured ports, sample counts and pacing are adjusted; engines, adapters,
+transport, and security results are not mocked. This is not a real LLM or cloud
+lab retest. Guards prevent non-loopback connections or operator-database reuse.
+
+Malformed source arrays, null snapshot metadata and nonstring IDs reproduce
+controlled 400 rejection rather than generic 500/admission. Changed inventories
+remain 409 schedule conflicts. Source ownership and current-policy checks remain.
+The real Chromium workflow passed again at 320/390/1440 pixels; artifacts are in
+`/tmp/ai-scanner-browser-doy5ot92` and independent artifacts in
+`/tmp/ai-scanner-browser-4r6x44pw`. Fixture processes exited and databases were
+removed. This is focused workflow/keyboard acceptance, not comprehensive WCAG.
+
+The repeated finite queue profile passed five fresh-database runs: 200 jobs with
+two workers and 1ms synthetic latency in 9.938061, 7.817631 and 8.195153 seconds;
+500 jobs with four workers and 5ms latency in 21.363828 and 21.610206 seconds.
+Totals are 1600 jobs, 1435 completed, 160 cancelled, five interrupted, 1445 unique
+claims and 4650 audit events. Duplicate claims and state mismatches were zero.
+The insufficient one-second deadline case correctly exited 1 at 1.080374 seconds.
+All disposable databases were removed; logs remain in
+`/tmp/ai-scanner-beta-queue-review-llvm6a`. This is not a load/soak or throughput
+certification. No cloud VM was started, real target scanned, package published,
+or remote service deployed. The beta stays held for exact-revision lab retesting
+and the separate enterprise-readiness contract.
+
 ### Historical local-beta checkpoint
 
 - Local Linux/Python 3.10.20: 1109 pytest cases passed. The suite invokes 78 Node

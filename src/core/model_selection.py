@@ -25,8 +25,8 @@ def validate_model_overrides(overrides):
     return dict(overrides)
 
 
-def apply_model_overrides(source_agents, overrides):
-    """Copy source assets and set model only, rejecting unknown or ambiguous IDs.
+def canonical_model_overrides(source_agents, overrides, aliases=None):
+    """Normalize exact stable/snapshot aliases, rejecting unknown or ambiguous IDs.
 
     Call after the server has authorized source-scan ownership and before target
     policy validation and execution. This does not authorize targets or models.
@@ -41,8 +41,25 @@ def apply_model_overrides(source_agents, overrides):
         if agent['id'] in by_id:
             raise ValueError('Source asset IDs must be unique')
         by_id[agent['id']] = agent
-    if selections.keys() - by_id.keys():
-        raise ValueError('model_overrides references an unknown source asset')
+    identities = {identifier: identifier for identifier in by_id}
+    for alias, identifier in (aliases or {}).items():
+        if identifier not in by_id or (alias in identities and identities[alias] != identifier):
+            raise ValueError('Source asset identities are ambiguous')
+        identities[alias] = identifier
+    canonical = {}
+    for identifier, model in selections.items():
+        if identifier not in identities:
+            raise ValueError('model_overrides references an unknown source asset; use results.agents[].asset_id or id')
+        stable_id = identities[identifier]
+        if stable_id in canonical:
+            raise ValueError('model_overrides selects the same source asset more than once')
+        canonical[stable_id] = model
+    return canonical
+
+
+def apply_model_overrides(source_agents, overrides, aliases=None):
+    """Copy assets and change model only after validating exact unique identity."""
+    selections = canonical_model_overrides(source_agents, overrides, aliases)
     selected = deepcopy(source_agents)
     for agent in selected:
         if agent['id'] in selections:

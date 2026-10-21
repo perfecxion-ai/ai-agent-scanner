@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.core.model_selection import apply_model_overrides, validate_model_overrides
+from src.core.model_selection import apply_model_overrides, canonical_model_overrides, validate_model_overrides
 
 
 def assets():
@@ -66,3 +66,11 @@ def test_validation_does_not_read_environment_or_execute():
 def test_maximum_sized_map_accepted():
     selections = {f'asset-{i}': 'model' for i in range(100)}
     assert validate_model_overrides(selections) == selections
+
+
+def test_snapshot_aliases_are_canonical_and_bounded_to_source():
+    assert canonical_model_overrides(assets(), {'snapshot-1': 'chosen'}, {'snapshot-1': 'asset-1'}) == {'asset-1': 'chosen'}
+    with pytest.raises(ValueError, match='ambiguous'):
+        canonical_model_overrides(assets(), {}, {'asset-2': 'asset-1'})
+    with pytest.raises(ValueError, match='more than once'):
+        canonical_model_overrides(assets(), {'asset-1': 'one', 'snapshot-1': 'two'}, {'snapshot-1': 'asset-1'})

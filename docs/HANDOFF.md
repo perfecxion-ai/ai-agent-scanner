@@ -18,8 +18,12 @@ Local verdict acceptance is 1150 Python cases, 82 Node cases, and synthetic
 Chromium. The next network/deadline slice passes 1194 combined local tests with
 mixed-service and protocol-negative regressions, pre-I/O metadata blocking,
 bounded hosts resolution, consistent CIDRs, and secret-safe MCP TLS errors.
-Source reuse and CLI controls remain separate until integrated acceptance and CI.
-The beta hold remains in effect.
+The operator slice adds finalized partial-source reuse with matching snapshots,
+canonical/snapshot model IDs, actual CLI model calls, bounded CLI/server budgets,
+and an explicit MCP sampled-page warning. Corrupt source arrays/metadata are
+rejected before admission; source changes preserve schedule conflict semantics.
+See validation for combined acceptance. The beta hold remains in effect until an
+explicitly authorized real-service retest and the readiness gates pass.
 
 ## Original checkpoint
 
@@ -252,11 +256,11 @@ historical Git blobs, commit metadata, and previously distributed artifacts rema
 New commits use the account's approved repository-local noreply email without
 changing global identity. Do not rewrite history or erase local files implicitly.
 
-1. Freeze the reviewed local-beta revision after all seven PR and post-merge CI
-   jobs pass. Do not add more features to this acceptance slice.
-2. Hand off the offline walkthrough for operator testing and collect concrete,
-   redacted failures before selecting further work. Real targets and enabled
-   schedules require deliberate authorized scope; do not run them automatically.
+1. Finish the reported remediation slices and require independent review plus
+   every PR and post-merge CI job, including native macOS, to pass.
+2. Retest the exact merged revision in an explicitly authorized real-service lab
+   before reopening the beta. Starting cloud VMs, changing deployments, and
+   enabling real schedules require authorization; do not infer it from this plan.
 3. Treat representative accuracy/compatibility, long-duration load/soak,
    comprehensive accessibility, deployed backup/upgrade, and integrations as
    separate follow-up work. External integrations need an explicit destination
