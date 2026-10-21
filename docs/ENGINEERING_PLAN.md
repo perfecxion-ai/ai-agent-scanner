@@ -12,8 +12,10 @@ correctness; direct modification of stored reports is not a supported workflow.
 Other server authorization evidence inputs and enterprise secret management
 remain outside this slice.
 
-The next product priority is a fixed-budget sensitivity benchmark and a measured,
-bounded prompt/sampling improvement. The server canary input has local fixture
+The next product priority is a measured, bounded prompt/sampling improvement.
+The paired prompt benchmark compares the unchanged production sample with an
+experimental extraction-focused suite at equal budgets; real-model measurement
+is still required before adopting it. The server canary input has local fixture
 acceptance, not a real-model sensitivity result. PR #51 addresses O1/O2/O4/O5/O6
 without changing evidence verdicts or claiming stronger detection.
 Finding presentation grouping must preserve raw occurrences and lifecycle IDs.

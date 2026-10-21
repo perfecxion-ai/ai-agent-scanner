@@ -13,6 +13,12 @@ security-only scans support operator-configured system-prompt canary references;
 this closes an input gap, not the detection-sensitivity gap. See
 [evidence setup and limits](docs/detection-evidence.md).
 
+An opt-in [paired detector benchmark](docs/BETA_TESTING.md#equal-budget-prompt-comparison)
+compares the production prompt sample with an experimental extraction-focused
+suite at equal request budgets. It requires a controlled protected-canary lab.
+Fixture tests validate its accounting and privacy, not improved model hit rates;
+the experimental suite does not change production scan defaults.
+
 ## Install and try locally
 
 Python 3.10 through 3.13 are supported.

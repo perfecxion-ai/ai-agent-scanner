@@ -218,13 +218,63 @@ including 96 new profile cases. Ruff, configured Bandit, distribution build,
 Twine metadata checks, and installed-wheel smoke pass. Independent review also
 passed 407 focused cases and a 1369-case full run before the final startup and
 adapter regressions; final integrated focused review covers those additions.
-Require all eight PR and post-merge CI jobs on this exact source before merge
-acceptance; local results alone do not establish native macOS or container gates.
+PR #52 and merged revision `ed5684d` passed all eight CI jobs, including native
+macOS backup/restore and container restart. These checks do not replace a
+real-service retest of the newly supported API profile configuration.
 No cloud or real-model retest was performed for this slice. Detection sensitivity
 remains unvalidated, nondisclosure cannot establish safety, and raw database
 unknown-score placeholders were not migrated. Cross-tenant/authentication/path
 evidence configuration remains CLI/Python-only. Deployment and publication are
 not part of this change.
+
+### Experimental paired prompt benchmark
+
+The repository script uses the actual provider adapter, scoped transport,
+prompt analyzer, and versioned check contracts. Production prompt catalogs and
+scan defaults are unchanged. The experimental `protected-disclosure-v1` suite
+uses seven categories with five requests each, replacing generic output/persona
+objectives with protected-system-instruction extraction objectives. The baseline
+retains its original active payload bytes. Public manifest/version provenance
+distinguishes both suites; configured secrets are not identity inputs.
+
+Balanced, seeded baseline/candidate ordering supports one to ten pairs, default
+ten. Every arm is capped at 35 HTTP attempts, a 30-second request timeout, 64 KiB response
+cap, 1,200-second deadline, the existing 100-token output cap, and one-second
+pacing. The cohort deadline is 5,400 seconds, at most 700 attempts for ten pairs.
+The ordering seed does not control model generation. DNS validation is bounded
+separately. There are no automatic retries or increases after observing outcomes.
+
+The primary observation is whether a run confirms at least one exact protected
+canary disclosure, not how many repeated findings it produces. Benchmark-only
+observation checkpoints retain an actual analyzer confirmation when later
+cancellation prevents a category from returning. They do not fabricate check
+records; original collected checks and partial coverage remain explicit.
+Complete-case Wilson intervals exclude partial/unstarted arms. Paired counts
+exclude incomplete pairs, while scheduled denominators and partial positives
+remain separately visible. These are exploratory, potentially completion-biased
+measurements, not enterprise accuracy or independent-request statistics.
+
+Real loopback HTTP fixtures exercise deterministic disclosure, refusal, unseeded
+canaries, request reflection, malformed responses, authorization denial, and a
+confirmed response followed by timeout. Other regressions cover scope-before-I/O,
+missing credentials, secret/public-manifest collisions, deadline accounting,
+unchanged production defaults, parser errors, and private atomic no-clobber
+output. Reports omit raw generated text, target endpoints, secret references,
+credentials, and canary hashes. The supplied revision is explicitly labeled an
+operator assertion; the GCP procedure separately verifies the actual checkout.
+
+Local Linux/Python 3.10 acceptance passes 1559 cases with warnings treated as
+errors, including 55 new benchmark cases. Ruff, configured Bandit (also run on
+the new script), build, Twine, and installed-wheel smoke pass. Independent review passed 253
+focused cases plus four additional actual-HTTP negative/partial scenarios:
+metadata-only and Base64-only markers do not confirm, oversized bodies stay
+partial, and leak-then-503 retains its partial positive. Require all eight
+PR/post-merge CI jobs on the exact source before acceptance.
+The
+[next GCP retest](BETA_TESTING.md#next-authorized-gcp-detector-retest) covers the
+supported real-server profile workflow and frozen paired model comparison.
+No cloud model was exercised here, and no experimental prompt has been promoted
+to production based on fixture results.
 
 The slice checkpoints below are chronological records. Their historical hold
 and pending-retest statements are superseded by the targeted acceptance above;

@@ -143,3 +143,150 @@ No package publication or remote deployment is implied by a green gate.
 After this gate passes, stop adding features for this beta and collect operator
 feedback. Record any failure with the tested SHA, redacted reproduction, expected
 behavior, and actual behavior. Never attach credentials or protected canaries.
+
+## Next authorized GCP detector retest
+
+Run this only in the existing isolated, explicitly authorized lab. This guide
+does not authorize starting cloud VMs, modifying a deployed scanner, exposing a
+server, or invoking a paid provider. Use fresh job names, a dedicated one-process
+server, and a fresh private SQLite database. Preserve earlier results. The final
+handoff must supply the exact reviewed merge SHA; do not substitute moving main.
+Verify that checkout with `git rev-parse HEAD` and confirm the tracked worktree is
+clean before running. Record Python, platform, model/version or digest when
+available, fixture policy version, and private setup attestations. Never include
+the protected value or its hash in that record.
+
+### Supported server evidence workflow
+
+Configure a private startup registry using
+[server system-prompt canary profiles](detection-evidence.md#server-system-prompt-canary-profiles).
+Supply its referenced synthetic canary through the server process environment,
+matching a canary already seeded outside user input in the target. A profile
+contains the exact discovered endpoint/provider/model, operator organization,
+and public evidence-context version. Keep all paths, credentials, target fixture
+configuration, and the SQLite database private. Do not modify source reports or
+database rows to enable evidence. The registry is loaded once at startup.
+
+Use the real Gunicorn server and dispatcher for these cases:
+
+1. Discover the real models, a deterministic disclosing fixture, and a refusing
+   fixture alongside ordinary non-AI services. Save the actual discovery response.
+   Repeat with a genuine 503 source so the second source is finalized partial.
+2. Select source asset IDs and exact models through authenticated security-only
+   API definitions. Add `scan_config.evidence_profiles` references using the
+   documented API shape, not raw canaries. Run both a direct scan and a saved
+   template. Confirm the source documents remain unchanged afterward.
+3. Expect the deterministic disclosure to be confirmed high, at least 70/100,
+   with sampled coverage for a completed active assessment. Reusing a partial
+   source must retain `source_inventory.coverage_complete=false` and its warning;
+   active-check coverage may still be sampled when every active request completes.
+   Separately, a fixture that leaks and then fails an active request must retain
+   confirmed high risk with partial risk coverage. Nondisclosing and real-model
+   quiet runs remain inconclusive/null, never a prompt-check pass. A real model
+   is not required to leak for the configuration workflow to pass acceptance.
+4. Compare saved pipeline, JSON, SARIF, outer and per-agent API results, and
+   inventory. Retain the actual response bodies, including high-filter responses.
+   Restart the dedicated server cleanly and compare these views again. If an
+   expressly authorized deterministic-fixture schedule was enabled, it must
+   return paused for review. Otherwise mark that case NOT RUN; do not enable
+   real-target schedules merely to exercise it.
+5. Verify that raw protected fields, caller-supplied internal pins, unknown
+   profiles, foreign organizations, and endpoint/model mismatches are refused
+   without admitting work. With a saved deterministic-fixture template, stop the
+   dedicated server, remove or change its private profile, restart, and verify
+   the old template run is refused before any model request. Restore configuration
+   deliberately before later measurements. Run the automated queued-profile
+   regressions as part of the acceptance gate above.
+   Controlled profile changes need a new public context/version, not silent
+   secret-only rotation. Do not mutate a deployment to test this behavior.
+6. Sweep outputs, logs, audit, public API responses, templates, and the private
+   database against the actual private canaries, keys, and synthetic PII. Confirm
+   response excerpts are omission sentinels and database/lock modes are 0600.
+   Record counts and pass/fail attestations only; exclude the database, registry,
+   environment, fixture secrets, and generated model text from the return bundle.
+
+Known limitations remain intentional: the scanner does not seed or attest to
+target-side canaries; silent secret-only rotation is not a public pin change;
+server authentication/path/cross-tenant evidence controls remain unsupported.
+Database unknown-score storage placeholders are not assessed zeros. Use saved
+pipeline verdicts and canonical projections when evaluating risk.
+
+### Equal-budget prompt comparison
+
+The experimental `scripts/benchmark-prompt-leaks.py` compares the unchanged
+production prompt sample with `protected-disclosure-v1`. Both arms use seven
+categories with five requests each. The candidate changes the suite's extraction
+objectives, not the exact-canary confirmation rule, provider output limit, or
+production defaults. This is a composite suite hypothesis; category observations
+cannot establish which individual technique caused an improvement.
+
+Use the same protected target, model configuration, private canary, public context,
+and generation defaults for both arms. Freeze the configuration before the run.
+Do not pool earlier lab runs with these observations, change fixture protections
+between arms, add retries, or extend the sample after looking at results.
+
+Supply private values through the runner's existing secret mechanism, not shell
+history or command arguments. The following variables represent local private
+configuration; no lab identifiers or secret values belong in Git:
+
+```sh
+umask 077
+python scripts/benchmark-prompt-leaks.py \
+  --endpoint "$retest_endpoint" \
+  --provider "$retest_provider" \
+  --model "$retest_model" \
+  --evidence-context-id "$retest_context" \
+  --canary-env SCAN_EVIDENCE_RETEST_BOT \
+  --allow-network "$retest_target_cidr" \
+  --revision "$retest_commit" \
+  --pairs 10 --seed 0 \
+  --output "$retest_private_output/prompt-comparison.json"
+```
+
+`SCAN_EVIDENCE_RETEST_BOT` must contain the same opaque synthetic marker seeded
+in the target, not a newly invented value. Its environment-reference name is a
+configuration input and is not exported. If an issued API credential is required,
+use `--api-key-env SCAN_BENCHMARK_KEY_RETEST_BOT` with that private environment
+variable. Credentials require HTTPS except for literal `127.0.0.1` or `::1`
+with explicit loopback opt-in.
+Do not send them over an isolated lab's plaintext network as a workaround.
+Use `--allow-loopback` only for an owned loopback fixture and allowlist it
+explicitly. Endpoint user information, queries, fragments, escaped paths, or
+secret-bearing labels are outside this contract.
+
+The output path must be new; existing files and symlinks are not overwritten.
+Use a private parent directory. Output is atomically published with mode 0600.
+The revision argument is labeled operator-asserted; independently preserve the
+checkout verification above. The benchmark records public manifests, probe
+versions, pairing order, actual attempted/evaluated counts, latency, and bounded
+aggregate outcomes, not endpoints, credentials, generated text, or canary hashes.
+
+Ten pairs schedule at most 700 model requests per target. Each arm is capped at
+35 requests, 30 seconds per request, 64 KiB per response, and 1,200 seconds total.
+The cohort deadline is 5,400 seconds. The provider output cap stays 100 tokens;
+temperature and generation seed remain provider defaults, not controlled random
+seeds. The ordering seed controls only balanced baseline/candidate order. A
+partial comparison exits nonzero and must remain partial, not be rerun until it
+looks favorable. A separate one-pair deterministic fixture check can validate
+the harness; its results are not a real-model sensitivity measurement.
+
+Count runs detecting at least one confirmed leak, not repeated findings. Retain
+partial runs that observed a confirmed leak, but exclude incomplete arms from
+complete-case intervals and incomplete pairs from paired comparisons. Report
+all scheduled/started/completed counts and incomplete pairs. Confidence intervals
+are exploratory and conditional on completed runs; 35 requests within one run
+are not 35 independent trials. Nondisclosure never becomes a security pass.
+Do not promote the experimental suite based on fixture success or a favorable
+single run. Review the paired model evidence before changing production defaults.
+
+### Return bundle
+
+Return a brief report with the exact SHA, commands, exit codes, environment/model
+metadata, all assertions (including failures), aggregate benchmark JSON, and
+sanitized scanner/API JSON and SARIF. Include pre/post-restart and filter bodies,
+not just claims that they matched. The driver must exit nonzero on assertion
+failure; exit zero alone is not acceptance evidence. Keep raw model traffic,
+secrets, fixture configs, registry, database, lock files, and environment outside
+the bundle. Confirm the privacy sweep both before upload and on the receiving
+machine. Stop only the processes this retest started; retain private artifacts
+until their owner decides they can be removed.
