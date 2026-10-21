@@ -172,10 +172,12 @@ def acceptance(base, control_key, artifacts):
                 content_type="application/json", body=json.dumps(dict(error="Synthetic report unavailable"))))
             open_scan("failed")
             expect(announcement).to_contain_text("Scan failed. Report unavailable.")
+            expect(page.locator("#notice")).to_contain_text("Synthetic report unavailable")
             expect(page.locator("#jsonBtn")).to_be_disabled()
             page.unroute("**/api/scans/fixture-failed/results")
             page.evaluate("window.fixtureController.poll()")
             expect(announcement).to_contain_text("Scan failed. Report available.")
+            expect(page.locator("#notice")).not_to_contain_text("Synthetic report unavailable")
             page.evaluate("window.fixtureNotices=[]")
             page.evaluate("window.fixtureController.poll()")
             assert page.evaluate("window.fixtureNotices") == []
@@ -183,6 +185,7 @@ def acceptance(base, control_key, artifacts):
                 content_type="application/json", body=json.dumps(dict(results=dict(pipeline=None)))))
             open_scan("interrupted")
             expect(announcement).to_contain_text("No versioned report is available. Testing completeness is unverified.")
+            expect(page.locator("#notice")).to_contain_text("This scan has no versioned report")
             expect(page.locator("#jsonBtn")).to_be_disabled()
             page.unroute("**/api/scans/fixture-interrupted/results")
 
@@ -194,11 +197,14 @@ def acceptance(base, control_key, artifacts):
             wait_delayed()
             open_scan("partial")
             expect(announcement).to_contain_text("partial results")
+            expect(page.locator("#notice")).not_to_contain_text("This scan has no versioned report")
             for route in delayed:
                 route.continue_()
             delayed.clear()
             page.wait_for_timeout(100)
             expect(announcement).to_contain_text("partial results")
+            page.evaluate("window.fixtureController.notice('Unrelated operator action.');window.fixtureController.poll()")
+            expect(page.locator("#notice")).to_have_text("Unrelated operator action.")
 
             page.locator("#scanName").focus()
             colors = page.locator("#scanName").evaluate("n=>{const s=getComputedStyle(n);return {border:s.borderColor,bg:s.backgroundColor,focus:s.outlineColor,width:s.outlineWidth,style:s.outlineStyle}}")
