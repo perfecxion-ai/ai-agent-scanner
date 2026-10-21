@@ -312,6 +312,60 @@ async def test_missing_optional_routes_and_generic_service_are_clean_negatives(s
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('optional', [
+    web.json_response({'error': 'unsupported protocol'}),
+    web.Response(text='<html>' + 'x' * 12000 + '</html>', content_type='text/html'),
+    web.json_response({'object': 'list', 'data': [{'object': 'price', 'id': 'fixture-price'}]}),
+])
+@pytest.mark.parametrize('native_first', [False, True], ids=['compatible-first', 'native-first'])
+async def test_one_ai_protocol_does_not_require_other_optional_protocols(service, optional, native_first):
+    responses, _, port = service
+    signature_map = DiscoveryEngine().ai_signatures
+    if native_first:
+        signatures = {key: signature_map[key] for key in ('ollama', 'openai', 'tgi')}
+        responses['/api/tags'] = web.json_response(OLLAMA)
+        responses['/v1/models'] = optional
+        provider = 'ollama'
+    else:
+        signatures = signature_map
+        responses['/v1/models'] = web.json_response(MODELS)
+        responses['/api/tags'] = optional
+        provider = 'openai-compatible'
+    responses['/info'] = optional
+    engine = DiscoveryEngine()
+    engine.ai_signatures = signatures
+    engine.network_scanner.common_ai_ports = [port]
+    with scan_transport(budget()) as limits:
+        report = await run_pipeline(engine, None, None, DiscoveryScope(network_ranges=['127.0.0.1/32']), 'discovery_only')
+    assert report['status'] == 'completed'
+    assert len(report['agents']) == 1 and report['agents'][0]['provider'] == provider
+    assert limits.failures == limits.rejections == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider,document', [
+    ('ollama', {**OLLAMA, 'error': 'synthetic private error'}),
+    ('openai', {**MODELS, 'error': 'synthetic private error'}),
+    ('openai', {'object': 'list', 'data': [{'object': 'model', 'id': None}]}),
+    ('tgi', {**TGI, 'error': 'synthetic private error'}),
+])
+async def test_claimed_protocol_error_inventory_remains_incomplete(provider, document, caplog):
+    with scan_transport(budget()) as limits:
+        assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures[provider])
+    assert limits.failures == 1
+    assert 'Network discovery incomplete:' in caplog.text
+    assert 'synthetic private error' not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_json_body_limit_cannot_be_hidden_by_plaintext_content_type():
+    response = Response(b'{"models":[' + b' ' * 12000, headers={'Content-Type': 'text/plain'})
+    with scan_transport(budget()) as limits:
+        assert not await NetworkScanner()._is_ai_service(response, DiscoveryEngine().ai_signatures['ollama'])
+    assert limits.failures == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('bad', [web.Response(body=b'{"models":['), web.Response(status=503),
                                web.Response(body=b' ' * 10001 + b'{}')])
 async def test_unusable_source_keeps_successful_assets_and_marks_partial(service, bad):

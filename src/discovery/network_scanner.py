@@ -211,8 +211,7 @@ class NetworkScanner:
             for path, signatures in routes.items():
                 try:
                     async with session.get(base_url + path, discovery=not agents) as response:
-                        document = await self._read_document(response, [signature for _, signature in signatures],
-                                                             established=bool(agents))
+                        document = await self._read_document(response, [signature for _, signature in signatures])
                         if document is None:
                             continue
                         for provider, signature in signatures:
@@ -250,7 +249,7 @@ class NetworkScanner:
                 'endpoint': endpoint, 'discovery_method': 'network_scan', 'confidence': 0.8,
                 'metadata': metadata}
 
-    async def _read_document(self, response, signatures=(), established=False):
+    async def _read_document(self, response, signatures=()):
         if response.status != 200:
             if response.status >= 500 or response.status in (408, 429):
                 self._failure('HTTP service error')
@@ -262,7 +261,7 @@ class NetworkScanner:
                 # inventory. Keep indeterminate/JSON truncation conservative.
                 prefix = (body + chunk).lstrip()[:1]
                 content_type = response.headers.get('Content-Type', '').split(';')[0].lower()
-                if established or (prefix != b'<' and content_type not in ('text/html', 'text/plain')):
+                if prefix in (b'{', b'[') or (prefix != b'<' and content_type not in ('text/html', 'text/plain')):
                     self._failure('inventory body limit')
                 return None
             body.extend(chunk)
@@ -278,16 +277,14 @@ class NetworkScanner:
             self._failure('inventory JSON depth limit')
             return None
         if isinstance(document, dict) and 'error' in document:
-            if established:
+            if self._claims_inventory(document, signatures):
                 self._failure('inventory error document')
             return None
         if isinstance(document, dict) and self._invalid_inventory(document, signatures):
             # Generic object:list APIs (for example payment APIs) are not AI
-            # evidence. A native discriminator or prior inventory is required.
-            native_claim = document.get('router') == 'text-generation-router' or (
-                isinstance(document.get('models'), list) and any(
-                    isinstance(model, dict) and 'modified_at' in model for model in document['models']))
-            if established or native_claim:
+            # evidence. Require a discriminator for this route's protocol, not
+            # an unrelated successful inventory on the same authority.
+            if self._claims_inventory(document, signatures):
                 self._failure('invalid inventory schema')
             return None
         return document if isinstance(document, dict) else None
@@ -299,6 +296,21 @@ class NetworkScanner:
     @staticmethod
     def _supported_signature(signature):
         return bool({'modified_at', 'choices', 'model_id'} & set(signature.get('response_patterns', [])))
+
+    @staticmethod
+    def _claims_inventory(document, signatures):
+        for signature in signatures:
+            patterns = set(signature.get('response_patterns', []))
+            if ('model_id' in patterns and document.get('router') == 'text-generation-router'):
+                return True
+            if ('modified_at' in patterns and isinstance(document.get('models'), list)
+                    and any(isinstance(model, dict) and 'modified_at' in model for model in document['models'])):
+                return True
+            if ('choices' in patterns and document.get('object') == 'list'
+                    and isinstance(document.get('data'), list)
+                    and any(isinstance(model, dict) and model.get('object') == 'model' for model in document['data'])):
+                return True
+        return False
 
     @staticmethod
     def _matches_document(document, signature):
