@@ -14,10 +14,11 @@ with exact SQLite upgrades to schema version 3.
 PR #35 adds reviewed-pin dashboard schedules and targeted keyboard acceptance.
 PR #37 adds the remediated certifi dependency floor. PR #38 adds focused
 accessibility improvements and a reusable optional Chromium smoke workflow.
+PR #40 adds disposable stopped-SQLite backup/restore and recovery acceptance.
 
 ## Automated checks
 
-- Local Linux/Python 3.10.20: 1039 pytest cases passed. The suite invokes 78 Node
+- Local Linux/Python 3.10.20: 1081 pytest cases passed. The suite invokes 78 Node
   controller tests, which also passed independently.
 - Line coverage across `src`, `app`, and `scanner_cli`: 90%. The shared pipeline
   is 95%, transport 99%, durable jobs 92%, schema acceptance 94%, and API 94%.
@@ -167,6 +168,34 @@ Installed AWS, Azure, and GCP SDK method signatures and resource/list schemas we
 checked locally, including cloud extras. Tests use mocked responses without
 provider credentials or real account requests. Use Python 3.11 or newer for cloud
 inventory because the installed Google SDK warns about Python 3.10 support.
+
+## Disposable backup/restore acceptance
+
+The [local command](jobs.md#disposable-backuprestore-acceptance) passed all eight
+cases with a five-second work deadline on Python 3.10 and 3.12. Normal and
+optimized Python execution passed. Forty-two mandatory tests cover the command,
+pre-connect engine/path guards, no-clobber copies, strict child results, bounded
+output/deadlines, environment isolation, and process/database cleanup.
+
+Stopped synthetic schema 1/2/3 databases retain exact schema and logical rows in
+backup and restored files before initialization. The real initializer, job store,
+dispatcher, and schedule recovery preserve completed evidence, agent snapshots,
+audit history, templates, and existing occurrences. Synthetic queued work executes
+once; active work becomes interrupted/cancelled without replay. Enabled schedules,
+including an overdue schedule without outstanding work, pause for restart review
+without preflight or admission. The second dispatcher restart leaves rows unchanged.
+
+Injected version-stamp failures roll back schema 1/2 upgrades. Future versions and
+competing dispatcher ownership fail before recovery without database changes.
+A restored copy with a deleted report still passes SQLite integrity but is rejected
+by logical comparison before startup. An independent copy of the untouched backup
+retains original version/content; source and backup hashes remain unchanged.
+Independent fault mutations also detected lost rows, changed completed metadata,
+missing schedule recovery, and an improperly accepted future version.
+
+No operator database was opened or target scanned. This covers local synthetic
+content preservation, not deployed restore, online backup, old-binary compatibility,
+crash durability, or release sign-off.
 
 ## Remaining validation gaps
 

@@ -101,6 +101,48 @@ an explicit reviewed migration; deleting the version stamp is not a repair.
 This is an acceptance path for these known SQLite releases, not a general
 migration engine or support for PostgreSQL.
 
+## Disposable backup/restore acceptance
+
+From the checkout with the server dependencies installed:
+
+```bash
+python scripts/acceptance-backup-restore.py
+python scripts/acceptance-backup-restore.py --timeout-seconds 5
+```
+
+This command accepts no database source or destination paths. A parent-owned
+private temporary directory contains synthetic databases only; each case runs in
+a fresh child process. Existing `DATABASE_URL` and server settings are isolated,
+and a cached or foreign application engine is rejected before connecting. The
+parent bounds child output, kills/reaps timed-out children, and removes the
+temporary databases after success or failure. JSON includes `accepted`, each
+case's assertions, and bounded failure details; failure returns nonzero.
+
+Exact schema 1/2/3 fixtures contain completed evidence, an agent snapshot, audit
+history, queued work, and previously active work. Templates and schedules are
+seeded where supported. After stopping and disposing seed connections, a read-only
+SQLite backup is restored into absent files. Integrity, schema, and every logical
+user row must match before the real initializer and dispatcher start. Synthetic
+queued work executes once; prior active jobs recover without replay. Enabled
+schedules require restart review, including an overdue schedule with no outstanding
+scan. Existing occurrences remain intact and no schedule preflight/admission is
+allowed. A second restart must not change rows, evidence, or audit history.
+
+Negative cases verify exclusive ownership precedes initialization, schema 1/2
+version-stamp failures roll back, future versions remain unchanged, and a restored
+copy missing a report is rejected before initialization even though its SQLite
+integrity check passes. An independent restore of the untouched backup must retain
+the original version and content. Source and backup file hashes remain unchanged
+through later upgrade/recovery work. This is content preservation, not old-binary
+compatibility testing.
+
+The per-case work deadline is cooperative; a separate parent process timeout adds
+five seconds for imports, with a further bounded five-second kill/reap grace.
+This command is not a deployed database
+backup utility, online backup procedure, crash-durability test, or release sign-off.
+It never opens a deployed database or scans a real target. Operators still need
+separately authorized backup/restore and upgrade validation for their deployment.
+
 ## Audit history
 
 `GET /api/scans/<id>/audit` requires the scan's authenticated organization.
