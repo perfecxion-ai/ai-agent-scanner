@@ -4,7 +4,7 @@ import hashlib
 import re
 
 
-RULESET_VERSION = '1.0.0'
+RULESET_VERSION = '1.1.0'
 CHECKS = {
     'REPLAY001': 'indirect_instruction_marker',
     'REPLAY002': 'retrieved_tenant_canary',
@@ -37,8 +37,10 @@ def _text_leaves(value, pointer, depth=0):
     if isinstance(value, str):
         yield pointer, value
     elif isinstance(value, dict):
-        for index, child in enumerate(value.values()):
+        for index, (key, child) in enumerate(value.items()):
             # Numeric positions avoid copying potentially sensitive argument names.
+            if isinstance(key, str):
+                yield from _text_leaves(key, f'{pointer}/keys/{index}', depth + 1)
             yield from _text_leaves(child, f'{pointer}/values/{index}', depth + 1)
     elif isinstance(value, list):
         for index, child in enumerate(value):
