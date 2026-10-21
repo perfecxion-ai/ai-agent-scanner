@@ -52,6 +52,20 @@ MCP configuration review and transcript evaluation are offline operations. They
 do not start configured commands, connect to servers, fetch schemas, or execute
 tool calls. Their results describe supplied configuration or fixtures only.
 
+## Dependency maintenance
+
+Runtime dependency constraints live in `pyproject.toml`. Upgrading this source
+tree does not update an existing virtual environment or running container.
+Reinstall the project in each environment, rerun the dependency audit, and rebuild
+images before replacing a service using the documented stop/start procedure.
+
+The minimum certifi version, 2026.10.19, follows the remediation guidance in
+[PYSEC-2026-4320](https://github.com/pypa/advisory-database/blob/main/vulns/certifi/PYSEC-2026-4320.yaml).
+That version excludes the affected emSign root while retaining unaffected roots.
+The dependency floor does not modify system trust stores, already installed
+environments, existing images, or other applications. Local audit results are
+time-specific, not a guarantee that dependencies remain free of vulnerabilities.
+
 ## Reporting a vulnerability
 
 Send security reports to **scott@perfecxion.ai**. Include the affected commit or
