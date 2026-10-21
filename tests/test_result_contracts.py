@@ -191,9 +191,13 @@ async def test_checks_are_isolated_across_concurrent_scans(target):
     async def scan(agent):
         with scan_transport(ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True)):
             return await prompt_check(agent)
-    safe, leaked = await asyncio.gather(
-        scan({**target, "system_prompt_canary": CANARY}),
-        scan({**target, "endpoint": target["endpoint"].replace("/safe", "/leak"), "system_prompt_canary": CANARY}))
+    original_sleep = asyncio.sleep
+    # Concurrent inner patches can unwind out of order; one owner restores sleep.
+    with patch("asyncio.sleep", AsyncMock()):
+        safe, leaked = await asyncio.gather(
+            scan({**target, "system_prompt_canary": CANARY}),
+            scan({**target, "endpoint": target["endpoint"].replace("/safe", "/leak"), "system_prompt_canary": CANARY}))
+    assert asyncio.sleep is original_sleep
     assert safe[0]["outcome"] == "inconclusive"
     assert leaked[0]["outcome"] == "confirmed"
 
