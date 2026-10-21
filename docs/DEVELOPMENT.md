@@ -23,6 +23,14 @@ out of the checkout, and runs version, command help, static framework mapping,
 and offline evaluation checks.
 It requires package index access to install dependencies.
 
+Synthetic API, local-lab, and queue fixtures must not load the operator's private
+evidence registry. They clear `SCAN_EVIDENCE_PROFILES_FILE` before importing the
+app. Unit fixtures temporarily replace a cached registry with an empty one and
+restore it afterward; the standalone queue benchmark refuses a cached nonempty
+registry before database access. This is harness isolation, not a change to
+normal server startup or its configured profiles. Keep using the fixtures'
+private database and dispatcher guards; do not point tests at an operator app.
+
 ## Optional Chromium dashboard checks
 
 The mandatory Node controller suite runs through pytest. A separate optional

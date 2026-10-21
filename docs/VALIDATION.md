@@ -677,5 +677,23 @@ identity; global identity is unchanged.
   audit acceptance remain pending. Known SQLite upgrade tests and a synthetic
   queue workload do not close these release-level gaps.
 
+## Synthetic evaluation registry isolation
+
+The optional queue benchmark and API/local-lab fixtures must not inherit or
+reuse an operator's startup evidence registry. The standalone runner clears the
+registry-path setting and rejects a cached nonempty registry before app-context,
+database, or schema access. Unit fixtures also isolate cached registry objects
+and restore their original environment/object on teardown. Normal configured
+server behavior is unchanged. Backup acceptance already filters `SCAN_` child
+environment settings; its behavior was sufficient and was not changed.
+
+Four new bounded regressions cover missing/private paths with forbidden-open
+guards, fresh imports, cached fixtures, and restoration. Independent review
+passed 128 relevant cases with warnings treated as errors. The benchmark-plus-
+isolation tree passes 1563 full-suite cases; Ruff and whitespace checks pass.
+This does not use an operator registry, database, or target, and does not replace
+the separate browser isolation regression. All eight PR/post-merge CI jobs are
+required on the final source before acceptance.
+
 See [engineering milestones](ENGINEERING_PLAN.md), [development checks](DEVELOPMENT.md),
 and [persistent job constraints](jobs.md).

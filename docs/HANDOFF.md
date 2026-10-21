@@ -366,6 +366,14 @@ implementation priorities, not additional deployment or publication authority.
 
 ## Verification and review
 
+Synthetic API/local-lab fixtures exclude inherited operator registry settings and
+temporarily isolate cached registries. The queue acceptance runner clears that
+setting before app import and rejects a cached nonempty registry before database
+access. Four bounded regressions cover forbidden private-file access and parent
+environment/registry restoration. The browser fixture has equivalent isolation
+in its presentation slice. These are local harness guards, not secret-manager or
+runtime deployment changes. See [validation](VALIDATION.md#synthetic-evaluation-registry-isolation).
+
 ```bash
 python -m pytest tests/
 ruff check .
