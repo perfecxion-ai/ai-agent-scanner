@@ -28,6 +28,7 @@ _TEXT = {
     "baseline_valid": "Authorized protected inventory baseline observed",
     "control_unusable": "MCP policy control was unusable",
     "control_sample": "Sampled protected inventory policy control only",
+    "sample_missing": "Protected tool not on sampled page; later pages were not tested",
     "baseline_failed": "MCP policy baseline or deadline failed",
     "deadline": "MCP policy deadline exhausted",
     "origin_missing": "Origin policy not declared",
@@ -195,7 +196,7 @@ def _contains(value, marker):
     return False
 
 
-async def _control(session, endpoint, state, headers, marker, origin=False):
+async def _control(session, endpoint, state, headers, marker, origin=False, warnings=None):
     request_id = "policy-control"
     _sent(marker, endpoint, headers, request_id, "tools/list")
     async with session.request("POST", endpoint, headers={**headers, "Mcp-Method": "tools/list"},
@@ -207,6 +208,8 @@ async def _control(session, endpoint, state, headers, marker, origin=False):
             await asyncio.to_thread(live._tools, result, page)
             state.schema_nodes = page.schema_nodes
             state.evaluated += 1
+            if marker not in page.names and warnings is not None:
+                warnings.append(_TEXT["sample_missing"])
             return "confirmed" if marker in page.names else "inconclusive"
         if response.status not in {401, 403}:
             raise live.LiveError("MCP policy control returned an unexpected HTTP status")
@@ -231,6 +234,8 @@ async def _control(session, endpoint, state, headers, marker, origin=False):
             await asyncio.to_thread(live._tools, result, page)
             state.schema_nodes = page.schema_nodes
             state.evaluated += 1
+            if marker not in page.names and warnings is not None:
+                warnings.append(_TEXT["sample_missing"])
             return "confirmed" if marker in page.names else "inconclusive"
         if (not isinstance(message, dict) or message.get("jsonrpc") != "2.0"
                 or "method" in message or "result" in message
@@ -314,9 +319,11 @@ async def check(endpoint, allowed_networks, policy, allow_loopback=False, api_ke
             for rule, control_headers, origin in conditions:
                 before = (budget.requests, state.evaluated)
                 active_control = (rule, before)
+                sample_warnings = []
                 try:
                     async with SafeSession(cookie_jar=aiohttp.DummyCookieJar()) as session:
-                        outcome = await _control(session, endpoint, state, control_headers, marker, origin)
+                        outcome = await _control(session, endpoint, state, control_headers, marker, origin,
+                                                 sample_warnings)
                 except (live.LiveError, TransportPolicyError, aiohttp.ClientError, TimeoutError,
                         asyncio.TimeoutError, ValueError, TypeError, RecursionError):
                     records.append(_record(rule, "failed", "inconclusive", budget.requests - before[0],
@@ -325,7 +332,7 @@ async def check(endpoint, allowed_networks, policy, allow_loopback=False, api_ke
                     continue
                 records.append(_record(rule, "completed", outcome, budget.requests - before[0],
                                        state.evaluated - before[1],
-                                       _TEXT["control_sample"], context))
+                                       sample_warnings[0] if sample_warnings else _TEXT["control_sample"], context))
                 if outcome == "confirmed":
                     findings.append(_finding(rule, context, endpoint))
                 active_control = None
