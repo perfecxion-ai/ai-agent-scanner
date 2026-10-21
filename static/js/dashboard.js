@@ -745,7 +745,12 @@ class AIAgentScanner {
     async loadResults(selection) {
         if (this.reportState) return this.reportState;
         const epoch = this.epoch;
-        const data = await this.request(this.path('results'));
+        let data;
+        try { data = await this.request(this.path('results')); }
+        catch (error) {
+            if (epoch === this.epoch && selection === this.selection && this.reportState) return this.reportState;
+            throw error;
+        }
         if (epoch !== this.epoch || selection !== this.selection) return;
         if (this.reportState) return this.reportState;
         const report = data.results.pipeline;

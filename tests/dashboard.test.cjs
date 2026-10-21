@@ -211,27 +211,31 @@ test('selecting another scan resets report cache and permits its own terminal an
 });
 
 test('concurrent terminal result responses render and announce once without replacing focused records', async () => {
-    const replies = [];
-    const {app, doc} = fixture(path => path.endsWith('/status') ? Promise.resolve(response({status: 'completed'})) :
-        new Promise(done => replies.push(done)));
-    app.token = 'fixture-token'; app.scanId = 'fixture';
-    const first = app.poll();
-    const second = app.poll();
-    for (let attempt = 0; attempt < 5 && replies.length < 2; attempt += 1) await Promise.resolve();
-    assert.equal(replies.length, 2);
-    replies[1](response({results: {pipeline: checkedReport([{rule_id: 'current'}])}}));
-    await second;
-    const card = app.el('assetList').children[0];
-    const region = card.children.find(child => child.tagName === 'details').children[1];
-    region.focus();
-    const announcement = app.el('scanAnnouncement').textContent;
-    replies[0](response({results: {pipeline: checkedReport([{rule_id: 'earlier'}])}}));
-    await first;
-    assert.equal(app.el('assetList').children[0], card);
-    assert.equal(doc.activeElement, region);
-    assert.equal(app.el('scanAnnouncement').textContent, announcement);
-    assert.ok(texts(region).includes('current'));
-    assert.ok(!texts(region).includes('earlier'));
+    for (const fail of [false, true]) {
+        const replies = [];
+        const {app, doc} = fixture(path => path.endsWith('/status') ? Promise.resolve(response({status: 'completed'})) :
+            new Promise(done => replies.push(done)));
+        app.token = 'fixture-token'; app.scanId = 'fixture';
+        const first = app.poll();
+        const second = app.poll();
+        for (let attempt = 0; attempt < 5 && replies.length < 2; attempt += 1) await Promise.resolve();
+        assert.equal(replies.length, 2);
+        replies[1](response({results: {pipeline: checkedReport([{rule_id: 'current'}])}}));
+        await second;
+        const card = app.el('assetList').children[0];
+        const region = card.children.find(child => child.tagName === 'details').children[1];
+        region.focus();
+        const announcement = app.el('scanAnnouncement').textContent;
+        replies[0](fail ? response({error: 'Earlier result unavailable'}, 503) :
+            response({results: {pipeline: checkedReport([{rule_id: 'earlier'}])}}));
+        await first;
+        assert.equal(app.el('assetList').children[0], card);
+        assert.equal(doc.activeElement, region);
+        assert.equal(app.el('scanAnnouncement').textContent, announcement);
+        assert.ok(texts(region).includes('current'));
+        assert.ok(!texts(region).includes('earlier'));
+        assert.equal(app.el('scanStatus').textContent, 'completed');
+    }
 });
 
 test('direct result loading caches only current successful responses and retries errors', async () => {
