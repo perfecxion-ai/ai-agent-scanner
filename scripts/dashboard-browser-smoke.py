@@ -163,6 +163,59 @@ def acceptance(base, control_key, artifacts):
                 expect(announcement).to_contain_text("Scan " + status + ".")
                 assert "passed" not in announcement.inner_text().lower()
 
+            open_scan("finding-groups")
+            expect(page.locator("#findingGroupingSummary")).to_contain_text("7 finding groups / 18 sample occurrences")
+            expect(page.locator("#findingCount")).to_have_text("18")
+            expect(page.locator("#riskScore")).to_have_text("70.0 / 100")
+            expect(page.locator("#findingList .finding-groups > article")).to_have_count(7)
+            expect(page.locator("#findingList .finding-occurrences pre")).to_have_count(0)
+            expect(page.locator("#findingList img")).to_have_count(0)
+            expect(page.locator("#findingList article").first).to_contain_text("<img src=x onerror=alert(1)>")
+            records = page.locator("#findingList details").first
+            records.locator("summary").focus()
+            page.keyboard.press("Enter")
+            expect(records.locator("pre")).to_have_count(3)
+            saved_records = [json.loads(text) for text in records.locator("pre").all_text_contents()]
+            assert [record["id"] for record in saved_records] == [f"fixture-0-{index}" for index in range(3)]
+            expect(records.get_by_role("button", name="Show more occurrences")).to_be_hidden()
+            records.get_by_role("region").focus()
+            page.evaluate("window.fixtureController.poll()")
+            expect(records.get_by_role("region")).to_be_focused()
+            expect(records).to_have_attribute("open", "")
+            for width in (1440, 390, 320):
+                page.set_viewport_size(dict(width=width, height=1050 if width == 1440 else 844))
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
+                page.screenshot(path=str(artifacts / f"finding-groups-{width}.png"), full_page=True)
+            page.set_viewport_size(dict(width=1440, height=1050))
+
+            open_scan("finding-cap")
+            groups = page.locator("#findingList .finding-groups")
+            more = page.get_by_role("button", name="Show more finding groups", exact=True)
+            expect(groups.locator(":scope > article")).to_have_count(18)
+            expect(page.locator("#findingGroupingSummary")).to_contain_text("110 finding groups / 110 sample occurrences")
+            for _ in range(5):
+                more.focus()
+                page.keyboard.press("Enter")
+            expect(more).to_be_hidden()
+            expect(groups).to_be_focused()
+            expect(groups.locator(":scope > article")).to_have_count(100)
+            expect(page.locator("#findingList")).to_contain_text("Showing 100 of 110 finding groups")
+
+            open_scan("occurrence-cap")
+            records = page.locator("#findingList details").first
+            records.locator("summary").click()
+            expect(records.locator("pre")).to_have_count(18)
+            assert len(records.locator("pre").first.text_content()) == 16384
+            expect(records).to_contain_text("Record preview truncated")
+            more = records.get_by_role("button", name="Show more occurrences", exact=True)
+            for _ in range(5):
+                more.focus()
+                page.keyboard.press("Enter")
+            expect(more).to_be_hidden()
+            expect(records.get_by_role("region")).to_be_focused()
+            expect(records.locator("pre")).to_have_count(100)
+            expect(records).to_contain_text("Showing 100 of 110 occurrences")
+
             open_scan("running")
             expect(page.locator("#scanStatus")).to_have_text("running")
             expect(announcement).to_be_empty()
@@ -230,6 +283,8 @@ def acceptance(base, control_key, artifacts):
             page.unroute(pattern)
             expect(announcement).to_be_empty()
             expect(page.locator("#reportView")).to_be_hidden()
+            expect(page.locator("#findingList")).to_be_empty()
+            expect(page.locator("#findingGroupingSummary")).to_be_empty()
             expect(page.locator("#operatorKey")).to_be_focused()
             login()
             page.route(pattern, lambda route: route.fulfill(status=401,

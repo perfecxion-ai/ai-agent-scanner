@@ -67,7 +67,7 @@ forbidden-target refusal, static authorization/MCP failure reasons, a correctly
 scoped static-analysis suppression, and clearer baseline/control-page wording.
 Local combined acceptance is 1408 tests. The suppression is necessary for a
 wildcard-detection constant, not a listener; it was not removed or used to weaken
-the static gate. O3 finding presentation remains follow-up work. No diagnostic
+the static gate. O3 finding presentation is addressed separately below. No diagnostic
 change expands MCP control sampling, retries, or security passes.
 
 The subsequent server evidence-reference slice supplies supported named
@@ -80,7 +80,16 @@ See [configuration and limits](detection-evidence.md#server-system-prompt-canary
 and [local acceptance](VALIDATION.md#server-evidence-reference-slice).
 This does not improve or validate real-model hit rates. No cloud retest, broader
 server authorization inputs, raw-score schema migration, or enterprise approval
-is implied. Finding presentation and measured sensitivity remain priorities.
+is implied. Measured sensitivity remains a priority.
+
+The dashboard-only O3 slice groups compatible modern prompt occurrences while
+preserving original findings, IDs, scores, check counts, raw JSON/SARIF,
+suppression keys, and resolution rules. Synthetic 18-occurrence evidence renders
+as seven groups with bounded expandable original records. Historical or ambiguous
+provenance is not grouped. Independent Chromium acceptance covers keyboard,
+literal text, lazy/capped rendering, and desktop/mobile reflow. This improves
+readability, not detection yield or attribution to a shared root cause. See
+[presentation details](dashboard-evidence.md#finding-groups-and-original-occurrences).
 
 ## Targeted API acceptance
 

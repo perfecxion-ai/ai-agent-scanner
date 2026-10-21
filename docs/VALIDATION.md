@@ -276,6 +276,31 @@ supported real-server profile workflow and frozen paired model comparison.
 No cloud model was exercised here, and no experimental prompt has been promoted
 to production based on fixture results.
 
+### Finding presentation grouping
+
+The O3 slice changes only dashboard presentation and synthetic browser fixtures.
+Eighteen actual-analyzer/versioned-check occurrences display as seven groups.
+Python invariance tests preserve the source document, 18 raw JSON/SARIF results,
+seven checks/rules, score 70/high, all original IDs, suppression/comparison keys,
+and unverified rather than resolved nondisclosure. Contexts, versions, models,
+asset entries, visible/boundary fields, ambiguous counts and historical or
+redacted provenance remain separate. Matching confirmed checks are required.
+
+The controller gate passes 125 Node cases. Two independent reviewers accepted
+the code and ran the extended real Chromium workflow at 320/390/1440 pixels.
+It covers native details, lazy original records, group/occurrence 100-item caps,
+preview truncation, final-page keyboard focus, hostile literal text, unchanged
+terminal polling, logout and stale selection. No external browser requests,
+page errors, or CSP violations were observed. Disposable fixture processes and
+private database directories were removed; screenshot/log artifacts are retained.
+Inherited operator evidence-registry settings are excluded before fixture import.
+This remains targeted workflow acceptance, not comprehensive accessibility or
+screen-reader conformance. The integrated tree passes 1568 Python cases with
+warnings treated as errors, Ruff, and configured Bandit. A third root Chromium
+run passed the same workflow and its temporary process/database cleanup.
+Build, Twine, and installed-wheel smoke also pass. All eight PR/post-merge CI
+jobs remain required before acceptance.
+
 The slice checkpoints below are chronological records. Their historical hold
 and pending-retest statements are superseded by the targeted acceptance above;
 enterprise and unsupported-deployment limitations remain in effect.
