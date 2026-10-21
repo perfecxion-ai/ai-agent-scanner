@@ -35,6 +35,37 @@ of the external lab findings until the exact merged revision is retested there.
 A related storage follow-up protects new server files and tests actual container
 ownership/permissions across restart, without modifying existing mounted data.
 
+## Exact-revision external retest review
+
+An operator-supplied private retest bundle covers merged revision
+`150762513ecbf728c4922436bff1448266467150` with real inference services,
+the real MCP SDK, controlled vulnerable/secure fixtures, mixed-network negatives,
+and native macOS acceptance. Two independent artifact reviews support the core
+verdict, transport, source-reuse, privacy-omission, and portability fixes. The
+underlying reports, logs, and traces were inspected; the cloud jobs were not
+independently rerun here. Private fixture definitions and the database were not
+included, so exact-secret sweeps and database checks remain operator attestations.
+
+The report labels all 22 original findings passed, with explicit no-retry and
+MCP first-control-page limitations and two source/documentation checks. Review
+found an additional blocker: the server's compatibility summary and per-agent
+API fields expose storage placeholder scores of zero even when the authoritative
+pipeline reports null and `not_assessed`. This still misrepresents unknown risk
+for API consumers. Keep the beta held until that adapter is corrected, independently
+reviewed, and validated on the new merged revision. The prior live retest does
+not automatically cover later source changes.
+
+The five fixed-configuration vulnerable-bot runs produced one confirmed leak
+and four inconclusive results, with no passes or verified resolutions. This
+supports honest uncertainty, not reliable detection sensitivity or general
+absence-of-vulnerability claims. See [validation](VALIDATION.md) for measurements.
+
+Six reported lower-priority observations remain follow-up work: upfront refusal
+for forbidden CLI target classes, clearer missing-credential diagnostics, grouped
+repeated leak findings, specific MCP stderr reasons, a stale static-analysis
+suppression, and clearer MCP baseline-page wording. They do not replace the API
+score blocker or expand the supported MCP control sample.
+
 ## Reopening the beta
 
 1. All 22 reported findings have a tested fix or an explicit supported limitation

@@ -24,3 +24,24 @@ or authenticated reverse proxy, and enforce login rate limits there. The applica
 not currently provide login throttling. Do not expose the development server to the internet.
 The dashboard serves its scripts locally; its content security policy restricts scripts to that origin.
 Scan status, results, and agent listings are scoped to the token's organization.
+
+## API risk projections and inventory bounds
+
+`GET /api/scans/<scan_id>/results` and `GET /api/agents` project current risk
+from the saved pipeline's versioned check evidence and `severity-floor-v2`
+policy, not numeric database compatibility defaults. Unknown or unsupported
+historical risk is `null` with level `unknown`; it is not an assessed zero.
+An evidence-backed zero and a confirmed high score with partial coverage remain
+numeric. Agent projections include `risk_assessment_status`,
+`risk_coverage_status`, and `risk_scoring_policy`. The results summary also
+includes `risk_assessment_status`. Raw historical pipeline reports and exports
+are retained unchanged, not recalculated or retroactively sanitized.
+
+`GET /api/agents` considers at most the newest 100 assets in the authenticated
+organization after the optional `agent_type` filter. The optional `risk_level`
+filter applies to those assets' projected risk, not stored legacy levels or
+the full inventory. The additive `coverage` object reports `window_limit`,
+`window_truncated`, `risk_level_filter_scope`, and a warning when older assets
+were omitted. A filtered empty list with a truncated window does not establish
+that the full inventory contains no matching assets. This bounded compatibility
+listing is not an exhaustive inventory export or a paginated search API.

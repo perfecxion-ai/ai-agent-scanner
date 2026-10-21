@@ -8,6 +8,30 @@ finish checkpoint below is historical infrastructure acceptance, not release
 approval. Follow the [remediation gate](BETA_REMEDIATION.md) before reopening the
 beta. Keep the source lab report and raw artifacts local and private.
 
+The operator's exact-revision live retest of `1507625` supports the core fixes:
+Linux 1241 passed/one skipped, native macOS 1242 passed, both backup modes,
+mixed-service discovery, active source reuse, real inference/MCP compatibility,
+and conservative repeated-leak outcomes. Two independent artifact reviews found
+a remaining API blocker that the report missed: compatibility summary and agent
+fields return zero scores where the authoritative pipeline reports null and
+`not_assessed`. Keep the hold until that projection is fixed and validated on
+the new merged revision. Private marker/database sweep claims are operator
+attestations because those inputs were intentionally omitted. One confirmed leak
+in five runs demonstrates uncertainty handling, not high detection sensitivity.
+See [external retest validation](VALIDATION.md#exact-revision-external-retest)
+and the [current blocker](BETA_REMEDIATION.md#exact-revision-external-retest-review).
+
+The scoped API follow-up now passes 1279 local tests and independent review,
+including 37 new projection cases and the actual dispatcher/protocol workflow.
+Offline replay of the supplied live pipelines preserves null unknown scores and
+70/high confirmed partial scores without changing stored reports or schema.
+Ruff, configured Bandit, build/Twine, and installed-wheel smoke pass. Require the
+new PR/merged CI and targeted API retest before lifting the hold. Inventory risk
+filters now explicitly apply to a bounded newest-100 tenant/type window; inspect
+the additive coverage warning rather than treating an empty list as exhaustive.
+
+The following slice descriptions record earlier local remediation checkpoints.
+
 The first remediation PR adds private atomic exports, macOS temporary-root
 canonicalization, and native macOS CI. Its PR and merged revision passed all
 eight jobs. The verdict follow-up changes stochastic nondisclosure to inconclusive,
@@ -266,7 +290,9 @@ changing global identity. Do not rewrite history or erase local files implicitly
 1. Finish the reported remediation slices and require independent review plus
    every PR and post-merge CI job, including native macOS, to pass.
 2. Retest the exact merged revision in an explicitly authorized real-service lab
-   before reopening the beta. Starting cloud VMs, changing deployments, and
+   before reopening the beta. The supplied `1507625` retest is reviewed; the API
+   projection follow-up needs validation on its new revision. Starting cloud VMs,
+   changing deployments, and
    enabling real schedules require authorization; do not infer it from this plan.
 3. Treat representative accuracy/compatibility, long-duration load/soak,
    comprehensive accessibility, deployed backup/upgrade, and integrations as

@@ -38,6 +38,7 @@ from src.reporting.report_generator import ReportGenerator
 from src.utils.auth import require_auth, create_jwt_token
 from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.risk_projection import project_agent_risk, project_report_risk
 from src.core.model_selection import apply_model_overrides, canonical_model_overrides
 from src.core.contracts import validate_scan_result
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
@@ -935,6 +936,13 @@ def get_scan_status(scan_id):
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
+def _snapshot_asset_id(agent):
+    """Snapshot row IDs and stable pipeline asset IDs are separate identities."""
+    metadata = agent.metadata_json if isinstance(agent.metadata_json, dict) else {}
+    identifier = metadata.get("asset_id", agent.id)
+    return identifier if isinstance(identifier, str) and identifier else None
+
+
 @app.route("/api/scans/<scan_id>/results")
 @require_auth
 def get_scan_results(scan_id):
@@ -948,6 +956,7 @@ def get_scan_results(scan_id):
 
         agents = DiscoveredAgentModel.query.filter_by(scan_id=scan_id).all()
         persisted = db.session.get(ScanResult, scan_id)
+        risk_summary, risk_agents = project_report_risk(persisted.result if persisted else None)
 
         results = {
             "scan_info": {
@@ -962,19 +971,17 @@ def get_scan_results(scan_id):
                 "agents_discovered": scan_session.agents_discovered,
                 "vulnerabilities_found": scan_session.vulnerabilities_found,
                 "critical_risks": scan_session.critical_risks,
-                "overall_risk_score": scan_session.overall_risk_score,
+                **risk_summary,
             },
             "agents": [
                 {
                     "id": agent.id,
-                    "asset_id": agent.metadata_json.get("asset_id", agent.id),
-                    "security_status": agent.metadata_json.get("security_status", "unknown"),
+                    "asset_id": _snapshot_asset_id(agent),
                     "name": agent.agent_name,
                     "type": agent.agent_type,
                     "provider": agent.provider,
                     "endpoint": agent.endpoint_url,
-                    "risk_score": agent.risk_score,
-                    "risk_level": agent.risk_level,
+                    **risk_agents.get(_snapshot_asset_id(agent), project_agent_risk()),
                     "vulnerabilities": agent.vulnerabilities,
                     "discovered_at": agent.discovered_at.isoformat(),
                 }
@@ -1020,27 +1027,37 @@ def list_agents():
             ScanSession, DiscoveredAgentModel.scan_id == ScanSession.id
         ).filter(ScanSession.organization_id == org_id)
 
-        if risk_level:
-            query = query.filter(DiscoveredAgentModel.risk_level == risk_level)
         if agent_type:
             query = query.filter(DiscoveredAgentModel.agent_type == agent_type)
 
-        agents = query.order_by(DiscoveredAgentModel.discovered_at.desc()).limit(100).all()
+        window = query.order_by(DiscoveredAgentModel.discovered_at.desc(), DiscoveredAgentModel.id).limit(101).all()
+        agents = window[:100]
+        scan_ids = {agent.scan_id for agent in agents}
+        reports = db.session.query(ScanResult).join(ScanSession, ScanResult.scan_id == ScanSession.id).filter(
+            ScanSession.organization_id == org_id, ScanResult.scan_id.in_(scan_ids)).all() if scan_ids else []
+        risks = {row.scan_id: project_report_risk(row.result)[1] for row in reports}
+        projected = [{
+            "id": agent.id,
+            "asset_id": _snapshot_asset_id(agent),
+            "name": agent.agent_name,
+            "type": agent.agent_type,
+            "provider": agent.provider,
+            **risks.get(agent.scan_id, {}).get(_snapshot_asset_id(agent), project_agent_risk()),
+            "discovered_at": agent.discovered_at.isoformat(),
+        } for agent in agents]
+        if risk_level:
+            projected = [agent for agent in projected if agent["risk_level"] == risk_level]
 
         return jsonify({
             "success": True,
-            "agents": [
-                {
-                    "id": agent.id,
-                    "name": agent.agent_name,
-                    "type": agent.agent_type,
-                    "provider": agent.provider,
-                    "risk_score": agent.risk_score,
-                    "risk_level": agent.risk_level,
-                    "discovered_at": agent.discovered_at.isoformat(),
-                }
-                for agent in agents
-            ],
+            "agents": projected,
+            "coverage": {
+                "window_limit": 100,
+                "window_truncated": len(window) > 100,
+                "risk_level_filter_scope": "newest_100_tenant_type_assets",
+                "warning": "Only the newest 100 matching tenant/type assets were considered; risk-level filtering is not exhaustive."
+                    if len(window) > 100 else None,
+            },
         })
 
     except Exception as e:

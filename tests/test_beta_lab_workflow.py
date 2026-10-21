@@ -216,9 +216,12 @@ def test_real_mixed_discovery_partial_source_model_selection_and_private_reports
     assert len(source['agents']) == 1 and source['agents'][0].get('model') is None
     assert source['agents'][0]['provider'] == 'openai-compatible'
     original_source = deepcopy(source)
-    saved = request('GET', f'/api/scans/{source_id}/results')['results']['agents']
+    source_results = request('GET', f'/api/scans/{source_id}/results')['results']
+    saved = source_results['agents']
     assert len(saved) == 1 and saved[0]['id'] != saved[0]['asset_id']
     assert saved[0]['asset_id'] == source['agents'][0]['id']
+    assert source_results['summary']['overall_risk_score'] is None
+    assert saved[0]['risk_score'] is None and saved[0]['risk_level'] == 'unknown'
 
     scan_id, assessed = run({
         'scan_name': 'Actual model requests from partial discovery', 'scan_type': 'security_only',
@@ -245,15 +248,24 @@ def test_real_mixed_discovery_partial_source_model_selection_and_private_reports
     assert assessed['summary']['overall_risk_score'] is None
     assert assessed['risk_assessment_status'] == 'not_assessed'
     assert request('GET', f'/api/scans/{source_id}/report?format=json') == original_source
-    persisted = request('GET', f'/api/scans/{scan_id}/results')['results']['pipeline']
+    public_results = request('GET', f'/api/scans/{scan_id}/results')['results']
+    persisted = public_results['pipeline']
     assert persisted == assessed
+    assert public_results['summary']['overall_risk_score'] is None
+    assert public_results['summary']['risk_assessment_status'] == 'not_assessed'
+    public_agent = public_results['agents'][0]
+    assert public_agent['risk_score'] is None and public_agent['risk_level'] == 'unknown'
+    listed = request('GET', '/api/agents')['agents']
+    listed_agent = next(item for item in listed if item['id'] == public_agent['id'])
+    assert listed_agent['risk_score'] is None and listed_agent['risk_level'] == 'unknown'
+    assert listed_agent['risk_coverage_status'] == 'not_assessed'
     sarif = request('GET', f'/api/scans/{scan_id}/report?format=sarif')
     assert sarif['runs'][0]['properties']['source_inventory'] == assessed['source_inventory']
     assert sarif['runs'][0]['invocations'][0]['executionSuccessful'] is False
     assert sarif['runs'][0]['results'] == []
     audit = request('GET', f'/api/scans/{scan_id}/audit')['events']
     assert [event['event'] for event in audit] == ['admitted', 'claimed', 'terminal']
-    serialized = json.dumps([complete, source, assessed, persisted, sarif, audit])
+    serialized = json.dumps([complete, source, assessed, persisted, public_results, listed, sarif, audit])
     for secret in (operator_key, login.json['token'], 'synthetic-private-record-4f03c1',
                    '123-45-6789', '4111111111111111'):
         assert secret not in serialized
