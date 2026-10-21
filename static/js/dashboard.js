@@ -9,6 +9,86 @@ const TEMPLATE_PAGE_SIZE = 25;
 const TEMPLATE_OFFSET_LIMIT = 100000;
 const SCHEDULE_PAGE_SIZE = 25;
 const SCHEDULE_OFFSET_LIMIT = 100000;
+const FINDING_PAGE_SIZE = 18;
+const FINDING_DISPLAY_LIMIT = 100;
+const OCCURRENCE_DISPLAY_LIMIT = 100;
+const OCCURRENCE_PREVIEW_LIMIT = 16384;
+const PROMPT_CATEGORIES = new Set(['system_prompt_extraction', 'instruction_bypass', 'role_manipulation',
+    'dan_jailbreak', 'context_manipulation', 'injection_via_encoding', 'payload_injection']);
+const GROUP_FIELDS = ['rule_id', 'probe_id', 'probe_version', 'evidence_context_id', 'category',
+    'vulnerability_type', 'severity', 'evidence_status', 'control_status', 'test_name', 'path',
+    'endpoint', 'full_url', 'title', 'description', 'remediation'];
+const groupText = (value, maximum = 256) => typeof value === 'string' && value.length > 0 &&
+    value.length <= maximum && value.trim() === value && !/[\x00-\x1f\x7f]/.test(value);
+const findingRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const probeIdentity = finding => JSON.stringify([finding.rule_id, finding.probe_id, finding.probe_version]);
+const findingPreview = value => {
+    const text = String(value ?? '');
+    return text.length <= 4096 ? text : text.slice(0, 4096) + ' [Preview truncated; download JSON for complete text]';
+};
+
+function findingGroupKey(report, asset, finding, ids, probeCounts) {
+    if (report.schema_version !== '1.0' || report.check_schema_version !== '1.0' ||
+        !['id', 'provider', 'model'].every(key => groupText(asset[key]) && !/[\[\]]/.test(asset[key])) ||
+        !groupText(finding.id) || /[\[\]]/.test(finding.id) || ids.get(finding.id) !== 1 ||
+        finding.vulnerability_type !== 'prompt_injection' || finding.evidence_status !== 'confirmed' ||
+        !PROMPT_CATEGORIES.has(finding.category) || finding.rule_id !== `prompt_injection.${finding.category}` ||
+        finding.probe_id !== `${finding.rule_id}.sample` || !groupText(finding.probe_version) || /[\[\]]/.test(finding.probe_version) ||
+        !groupText(finding.evidence_context_id, 128) || /[\[\]]/.test(finding.evidence_context_id) ||
+        !['critical', 'high', 'medium', 'low', 'info'].includes(finding.severity) ||
+        ['agent_id', 'provider', 'model'].some(key => key in finding && finding[key] !== asset[key === 'agent_id' ? 'id' : key])) return null;
+    for (const key of GROUP_FIELDS) {
+        if (key in finding && (typeof finding[key] !== 'string' || finding[key].length > 4096 ||
+            /[\x00-\x1f\x7f]/.test(finding[key]))) return null;
+    }
+    const matches = (Array.isArray(asset.checks) ? asset.checks : []).filter(check => check &&
+        ['rule_id', 'probe_id', 'probe_version'].every(key => check[key] === finding[key]));
+    if (matches.length !== 1) return null;
+    const check = matches[0];
+    if (check.outcome !== 'confirmed' || !['completed', 'failed'].includes(check.status) ||
+        check.evidence_context_id !== finding.evidence_context_id ||
+        !Number.isSafeInteger(check.responses_evaluated) || check.responses_evaluated < 1 ||
+        !Number.isSafeInteger(check.requests_attempted) || check.requests_attempted < check.responses_evaluated ||
+        probeCounts.get(probeIdentity(finding)) > check.responses_evaluated) return null;
+    return {key: JSON.stringify(GROUP_FIELDS.map(key => key in finding ? ['value', finding[key]] : ['missing'])),
+        evaluated: check.responses_evaluated};
+}
+
+function groupFindingOccurrences(report) {
+    // Display identity only. Original records, scoring, and lifecycle keys are untouched.
+    const groups = [];
+    for (const asset of Array.isArray(report.agents) ? report.agents : []) {
+        const findings = Array.isArray(asset.vulnerabilities) ? asset.vulnerabilities : [];
+        const ids = new Map();
+        const probeCounts = new Map();
+        for (const finding of findings) {
+            if (!findingRecord(finding)) continue;
+            ids.set(finding.id, (ids.get(finding.id) || 0) + 1);
+            if (['rule_id', 'probe_id', 'probe_version'].every(key => groupText(finding[key]))) {
+                const key = probeIdentity(finding);
+                probeCounts.set(key, (probeCounts.get(key) || 0) + 1);
+            }
+        }
+        const local = new Map();
+        const assetGroups = [];
+        for (const original of findings) {
+            const finding = findingRecord(original) ? original : {};
+            const identity = findingGroupKey(report, asset, finding, ids, probeCounts);
+            if (identity && local.has(identity.key)) local.get(identity.key).occurrences.push(original);
+            else {
+                const group = {asset, finding, occurrences: [original], sampled: Boolean(identity), evaluated: identity?.evaluated};
+                assetGroups.push(group);
+                if (identity) local.set(identity.key, group);
+            }
+        }
+        for (const group of assetGroups) {
+            if (group.sampled && group.occurrences.length > group.evaluated) {
+                groups.push(...group.occurrences.map(finding => ({asset, finding, occurrences: [finding], sampled: false})));
+            } else groups.push(group);
+        }
+    }
+    return groups;
+}
 
 class AIAgentScanner {
     constructor(doc = document, fetcher = (...args) => fetch(...args)) {
@@ -110,6 +190,7 @@ class AIAgentScanner {
         this.el('jsonBtn').disabled = this.el('sarifBtn').disabled = true;
         this.el('checkSummary').textContent = '';
         this.el('assetCount').textContent = this.el('findingCount').textContent = '0';
+        this.el('findingGroupingSummary').textContent = '';
         this.el('riskScore').textContent = 'Not assessed';
         this.el('reportNote').textContent = '';
     }
@@ -852,14 +933,95 @@ class AIAgentScanner {
             container.appendChild(card);
         }
     }
+    renderFindingGroups(groups) {
+        const container = this.el('findingList');
+        container.replaceChildren();
+        if (!groups.length) {
+            this.append(container, 'p', 'No findings recorded. Check assessment completeness before interpreting this result.');
+            return;
+        }
+        const list = this.append(container, 'div', '');
+        list.className = 'finding-groups';
+        list.tabIndex = 0;
+        list.setAttribute('role', 'region');
+        list.setAttribute('aria-label', 'Finding groups');
+        const more = this.append(container, 'button', 'Show more finding groups');
+        more.type = 'button';
+        more.className = 'secondary';
+        const progress = this.append(container, 'p', '');
+        progress.className = 'hint';
+        let rendered = 0;
+        const show = () => {
+            if (rendered >= Math.min(groups.length, FINDING_DISPLAY_LIMIT)) return;
+            for (const group of groups.slice(rendered, Math.min(rendered + FINDING_PAGE_SIZE, FINDING_DISPLAY_LIMIT))) {
+                const card = this.append(list, 'article', '');
+                card.className = 'item';
+                const finding = group.finding;
+                this.append(card, 'strong', findingPreview(finding.title || finding.vulnerability_type || 'Finding'));
+                this.append(card, 'p', findingPreview([group.asset.name, finding.severity, finding.evidence_status].filter(Boolean).join(' / ')));
+                if (finding.category) this.append(card, 'p', findingPreview(`Category: ${finding.category}`));
+                if (finding.description) this.append(card, 'p', findingPreview(finding.description));
+                this.append(card, 'p', `${group.occurrences.length} ${group.sampled ? 'sample' : 'recorded'} occurrences`);
+                this.renderOccurrences(card, group);
+                rendered += 1;
+            }
+            const ownedFocus = this.doc.activeElement === more;
+            more.hidden = rendered >= Math.min(groups.length, FINDING_DISPLAY_LIMIT);
+            progress.textContent = `${rendered} of ${groups.length} finding groups shown. Counts above cover the full report.`;
+            if (more.hidden && ownedFocus) list.focus();
+            if (rendered === FINDING_DISPLAY_LIMIT && groups.length > rendered) {
+                this.append(container, 'p', `Showing ${FINDING_DISPLAY_LIMIT} of ${groups.length} finding groups. Download JSON for every original occurrence.`);
+            }
+        };
+        more.addEventListener('click', show);
+        show();
+    }
+    renderOccurrences(card, group) {
+        const details = this.append(card, 'details', '');
+        this.append(details, 'summary', `Original occurrence records (${group.occurrences.length})`);
+        const list = this.append(details, 'div', '');
+        list.className = 'finding-occurrences';
+        list.tabIndex = 0;
+        list.setAttribute('role', 'region');
+        list.setAttribute('aria-label', findingPreview(`Original occurrence records for ${group.finding.category || 'finding'} / ${group.asset.name || group.asset.id || 'asset'}`));
+        const more = this.append(details, 'button', 'Show more occurrences');
+        more.type = 'button';
+        more.className = 'secondary';
+        let rendered = 0;
+        const show = () => {
+            if (rendered >= Math.min(group.occurrences.length, OCCURRENCE_DISPLAY_LIMIT)) return;
+            for (const occurrence of group.occurrences.slice(rendered,
+                Math.min(rendered + FINDING_PAGE_SIZE, OCCURRENCE_DISPLAY_LIMIT))) {
+                this.append(list, 'strong', `Occurrence ${rendered + 1} of ${group.occurrences.length}`);
+                const original = JSON.stringify(occurrence, null, 2) ?? String(occurrence);
+                this.append(list, 'pre', original.slice(0, OCCURRENCE_PREVIEW_LIMIT));
+                if (original.length > OCCURRENCE_PREVIEW_LIMIT) {
+                    this.append(list, 'p', 'Record preview truncated. Download JSON for the complete original record.');
+                }
+                rendered += 1;
+            }
+            const ownedFocus = this.doc.activeElement === more;
+            more.hidden = rendered >= Math.min(group.occurrences.length, OCCURRENCE_DISPLAY_LIMIT);
+            if (more.hidden && ownedFocus) list.focus();
+            if (rendered === OCCURRENCE_DISPLAY_LIMIT && group.occurrences.length > rendered) {
+                this.append(details, 'p', `Showing ${OCCURRENCE_DISPLAY_LIMIT} of ${group.occurrences.length} occurrences. Download JSON for the complete record.`);
+            }
+        };
+        more.addEventListener('click', show);
+        details.addEventListener('toggle', () => { if (details.open && rendered === 0) show(); });
+    }
     renderReport(report) {
         this.el('reportView').hidden = false;
         const agents = report.agents || [];
         const findings = agents.flatMap(agent => (agent.vulnerabilities || []).map(finding => ({...finding, agent_name: agent.name})));
+        const findingGroups = groupFindingOccurrences(report);
         const observations = (report.security_results || []).flatMap(result =>
             (result.observations || []).map(finding => ({...finding, agent_name: result.agent_name})));
         this.el('assetCount').textContent = String(agents.length);
         this.el('findingCount').textContent = String(findings.length);
+        const occurrenceLabel = findingGroups.length && findingGroups.every(group => group.sampled) ? 'sample' : 'recorded';
+        this.el('findingGroupingSummary').textContent = `${findingGroups.length} finding groups / ${findings.length} ${occurrenceLabel} occurrences. ` +
+            'Grouping is for display only, not a shared-root-cause claim. JSON and SARIF retain every occurrence.';
         const score = report.summary && report.summary.overall_risk_score;
         const modern = report.check_schema_version === '1.0';
         const riskEligible = agent => agent.risk_scoring_policy === 'severity-floor-v2' &&
@@ -912,7 +1074,7 @@ class AIAgentScanner {
             this.renderChecks(card, modern ? agent.checks : null, `Check records for ${agent.name || agent.id || 'asset'}`);
             assetList.appendChild(card);
         }
-        this.renderItems('findingList', findings, 'No findings recorded. Check assessment completeness before interpreting this result.');
+        this.renderFindingGroups(findingGroups);
         this.renderItems('observationList', observations, 'No observations recorded.');
     }
     renderChecks(card, checks, label = 'Check records') {
@@ -972,5 +1134,5 @@ class AIAgentScanner {
     }
 }
 
-if (typeof module !== 'undefined') module.exports = {AIAgentScanner, TERMINAL_STATES};
+if (typeof module !== 'undefined') module.exports = {AIAgentScanner, TERMINAL_STATES, groupFindingOccurrences};
 if (typeof document !== 'undefined') new AIAgentScanner();

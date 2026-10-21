@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const {AIAgentScanner, TERMINAL_STATES} = require('../static/js/dashboard.js');
+const {AIAgentScanner, TERMINAL_STATES, groupFindingOccurrences} = require('../static/js/dashboard.js');
 
 class Element {
     constructor(tag = 'div', ownerDocument = null) { this.tagName = tag; this.ownerDocument = ownerDocument; this.children = []; this.value = ''; this.textContent = ''; this.disabled = false; this.hidden = false; this.handlers = {}; this.attributes = {}; }
@@ -36,6 +36,26 @@ const savedSchedule = (changes = {}) => ({id: 'schedule', template_id: 'recipe',
     total_runs: 4, admitted_runs: 0, revision: 2, state: 'disabled', pause_reason: null, outstanding_scan_id: null,
     next_due_at: null, ...changes});
 const occurrence = (ordinal = 1, changes = {}) => ({ordinal, scan_id: `scan-${ordinal}`, created_at: '2026-10-13T10:00:00+00:00', ...changes});
+function promptReport(counts = [3, 3, 3, 3, 2, 2, 2]) {
+    const categories = ['system_prompt_extraction', 'instruction_bypass', 'role_manipulation',
+        'dan_jailbreak', 'context_manipulation', 'injection_via_encoding', 'payload_injection'];
+    const checks = counts.map((count, index) => ({rule_id: `prompt_injection.${categories[index]}`,
+        probe_id: `prompt_injection.${categories[index]}.sample`, probe_version: '1:synthetic',
+        evidence_context_id: 'fixture-policy-v1', status: 'completed', outcome: 'confirmed',
+        requests_attempted: count, responses_evaluated: count}));
+    const findings = counts.flatMap((count, index) => Array.from({length: count}, (_, sample) => ({
+        id: `occurrence-${index}-${sample}`, agent_id: 'fixture-asset', vulnerability_type: 'prompt_injection',
+        category: categories[index], severity: 'high', evidence_status: 'confirmed', title: 'Protected System Canary Disclosure',
+        description: 'Configured protected canary was returned.', remediation: 'Review the protected instruction boundary.',
+        rule_id: checks[index].rule_id, probe_id: checks[index].probe_id, probe_version: checks[index].probe_version,
+        evidence_context_id: checks[index].evidence_context_id, payload: `Synthetic attack ${sample}`,
+        response_excerpt: '[GENERATED_TEXT_OMITTED]', timestamp: `2026-10-21T12:00:0${sample}Z`, confidence: 0.95})));
+    return {schema_version: '1.0', check_schema_version: '1.0', status: 'completed', scan_type: 'full',
+        risk_assessment_status: 'completed', summary: {overall_risk_score: 70, vulnerabilities_found: findings.length},
+        security_results: [], agents: [{id: 'fixture-asset', name: 'Synthetic fixture', provider: 'openai-compatible',
+            model: 'fixture-model', security_status: 'completed', risk_score: 70,
+            risk_scoring_policy: 'severity-floor-v2', checks, vulnerabilities: findings}]};
+}
 function reviewPin(app) {
     app.showTemplate(savedTemplate());
     app.el('reviewScheduleTemplate').checked = true;
@@ -336,10 +356,212 @@ test('findings and observations render as text and remain separate', () => {
         risk_score: null, vulnerabilities: [{title: hostile, description: hostile}]}],
         security_results: [{agent_name: hostile, observations: [{title: 'Heuristic', evidence_status: 'heuristic'}]}],
         summary: {overall_risk_score: null}});
-    assert.equal(app.el('findingList').children[0].children[0].textContent, hostile);
+    assert.equal(app.el('findingList').children[0].children[0].children[0].textContent, hostile);
     assert.equal(app.el('observationList').children[0].children[0].textContent, 'Heuristic');
     assert.equal(app.el('assetList').children[0].children[0].textContent, hostile);
     assert.equal(app.el('riskScore').textContent, 'Not assessed');
+});
+
+test('eighteen prompt occurrences form seven presentation groups without changing records or score', () => {
+    const report = promptReport();
+    const original = JSON.stringify(report);
+    const groups = groupFindingOccurrences(report);
+    assert.deepEqual(groups.map(group => group.occurrences.length), [3, 3, 3, 3, 2, 2, 2]);
+    assert.equal(new Set(groups.flatMap(group => group.occurrences.map(item => item.id))).size, 18);
+    assert.equal(groups[0].occurrences[0], report.agents[0].vulnerabilities[0]);
+    const {app} = fixture();
+    app.renderReport(report);
+    assert.match(app.el('findingGroupingSummary').textContent, /^7 finding groups \/ 18 sample occurrences\./);
+    assert.equal(app.el('findingCount').textContent, '18');
+    assert.equal(app.el('findingList').children[0].children.length, 7);
+    assert.equal(app.el('riskScore').textContent, '70.0 / 100');
+    assert.match(app.el('checkSummary').textContent, /7 completed/);
+    assert.equal(JSON.stringify(report), original);
+});
+
+for (const [field, value] of [['probe_version', '2:changed'], ['evidence_context_id', 'other-policy'],
+    ['severity', 'medium'], ['control_status', 'different-boundary'], ['test_name', 'different-test'],
+    ['path', '/different'], ['endpoint', 'https://different.invalid'], ['full_url', 'https://different.invalid'],
+    ['title', 'Different title'], ['description', 'Different description'], ['remediation', 'Different remediation'],
+    ['category', 'instruction_bypass'], ['vulnerability_type', 'different_type'], ['evidence_status', 'heuristic'],
+    ['provider', 'different-provider'], ['model', 'different-model'], ['agent_id', 'different-asset']]) {
+    test(`presentation grouping retains separate ${field} boundaries`, () => {
+        const report = promptReport([3]);
+        report.agents[0].vulnerabilities[2][field] = value;
+        assert.deepEqual(groupFindingOccurrences(report).map(group => group.occurrences.length), [2, 1]);
+    });
+}
+
+test('asset array entries remain separate even when every public identity is identical', () => {
+    const report = promptReport([3]);
+    report.agents.push(JSON.parse(JSON.stringify(report.agents[0])));
+    assert.deepEqual(groupFindingOccurrences(report).map(group => group.occurrences.length), [3, 3]);
+    report.agents[1].model = 'another-model';
+    assert.deepEqual(groupFindingOccurrences(report).map(group => group.occurrences.length), [3, 3]);
+});
+
+test('changed valid probe versions have distinct matching-check groups', () => {
+    const report = promptReport([3]);
+    const changed = report.agents[0].vulnerabilities[2];
+    changed.probe_version = '2:changed';
+    report.agents[0].checks.push({...report.agents[0].checks[0], probe_version: changed.probe_version,
+        requests_attempted: 1, responses_evaluated: 1});
+    assert.deepEqual(groupFindingOccurrences(report).map(group => group.occurrences.length), [2, 1]);
+});
+
+test('malformed legacy null and primitive occurrences remain visible as singleton originals', () => {
+    const {app} = fixture();
+    const report = promptReport([3]);
+    delete report.check_schema_version;
+    report.agents[0].vulnerabilities = [null, 'legacy text', 3, false, ['legacy array']];
+    const original = JSON.stringify(report);
+    const groups = groupFindingOccurrences(report);
+    assert.deepEqual(groups.map(group => group.occurrences), [[null], ['legacy text'], [3], [false], [['legacy array']]]);
+    app.renderReport(report);
+    assert.equal(app.el('findingCount').textContent, '5');
+    assert.equal(app.el('findingList').children[0].children.length, 5);
+    for (const card of app.el('findingList').children[0].children) {
+        const details = card.children.find(child => child.tagName === 'details');
+        details.open = true; details.handlers.toggle();
+        assert.equal(details.children[1].children.filter(child => child.tagName === 'pre').length, 1);
+    }
+    assert.equal(JSON.stringify(report), original);
+});
+
+test('conflicting groups cannot each reuse the same evaluated-response count', () => {
+    const report = promptReport([10]);
+    report.agents[0].checks[0].responses_evaluated = 5;
+    report.agents[0].vulnerabilities.slice(5).forEach(item => { item.severity = 'medium'; });
+    assert.deepEqual(groupFindingOccurrences(report).map(group => group.occurrences.length), Array(10).fill(1));
+});
+
+test('a unique redacted occurrence ID does not join valid sample identities', () => {
+    const report = promptReport([3]);
+    report.agents[0].vulnerabilities[2].id = '[redacted]';
+    assert.deepEqual(groupFindingOccurrences(report).map(group => group.occurrences.length), [2, 1]);
+});
+
+test('malformed singleton visible fields are bounded without altering raw text', () => {
+    const {app} = fixture();
+    const report = promptReport([3]);
+    report.agents[0].vulnerabilities[2].title = 'x'.repeat(20000);
+    report.agents[0].vulnerabilities[2].description = 'y'.repeat(20000);
+    const original = JSON.stringify(report);
+    app.renderReport(report);
+    const cards = app.el('findingList').children[0].children;
+    assert.equal(cards.length, 2);
+    assert.ok(cards[1].children[0].textContent.length < 4200);
+    assert.match(cards[1].children[0].textContent, /Preview truncated; download JSON/);
+    assert.ok(cards[1].children.filter(node => node.tagName === 'p').every(node => node.textContent.length < 4200));
+    assert.equal(JSON.stringify(report), original);
+});
+
+for (const mutation of ['historical', 'missing-context', 'redacted-context', 'redacted-version', 'missing-model',
+    'missing-id', 'duplicate-id', 'missing-check', 'ambiguous-check', 'wrong-context-check', 'failed-check',
+    'unmatched-check', 'invalid-count', 'overcount', 'object-path']) {
+    test(`historical or malformed provenance remains ungrouped: ${mutation}`, () => {
+        const report = promptReport([3]);
+        const asset = report.agents[0];
+        if (mutation === 'historical') delete report.check_schema_version;
+        if (mutation === 'missing-context') asset.vulnerabilities.forEach(item => { delete item.evidence_context_id; });
+        if (mutation === 'redacted-context') asset.vulnerabilities.forEach(item => { item.evidence_context_id = '[redacted]'; });
+        if (mutation === 'redacted-version') {
+            asset.vulnerabilities.forEach(item => { item.probe_version = '[redacted]'; });
+            asset.checks[0].probe_version = '[redacted]';
+        }
+        if (mutation === 'missing-model') delete asset.model;
+        if (mutation === 'missing-id') asset.vulnerabilities.forEach(item => { delete item.id; });
+        if (mutation === 'duplicate-id') asset.vulnerabilities.forEach(item => { item.id = 'ambiguous'; });
+        if (mutation === 'missing-check') asset.checks = [];
+        if (mutation === 'ambiguous-check') asset.checks.push({...asset.checks[0]});
+        if (mutation === 'wrong-context-check') asset.checks[0].evidence_context_id = 'other-context';
+        if (mutation === 'failed-check') asset.checks[0].outcome = 'inconclusive';
+        if (mutation === 'unmatched-check') asset.checks[0].probe_id = 'other-probe';
+        if (mutation === 'invalid-count') asset.checks[0].requests_attempted = 0;
+        if (mutation === 'overcount') asset.checks[0].responses_evaluated = 2;
+        if (mutation === 'object-path') asset.vulnerabilities.forEach(item => { item.path = {}; });
+        assert.deepEqual(groupFindingOccurrences(report).map(group => group.occurrences.length), [1, 1, 1]);
+    });
+}
+
+test('failed execution with confirmed evidence may group without changing partial risk', () => {
+    const report = promptReport([3]);
+    report.status = report.risk_assessment_status = 'partial';
+    report.agents[0].security_status = report.agents[0].checks[0].status = 'failed';
+    const {app} = fixture();
+    app.renderReport(report);
+    assert.equal(groupFindingOccurrences(report).length, 1);
+    assert.equal(app.el('riskScore').textContent, '70.0 / 100 (partial coverage)');
+});
+
+test('occurrence records are lazy, literal, preserved on reopen, and cleared on logout', () => {
+    const {app, doc} = fixture();
+    const report = promptReport([3]);
+    const hostile = '<img src=x onerror=alert(1)>';
+    report.agents[0].vulnerabilities.forEach(item => { item.title = hostile; item.payload = hostile; });
+    app.renderReport(report);
+    const card = app.el('findingList').children[0].children[0];
+    const details = card.children.find(child => child.tagName === 'details');
+    const list = details.children[1];
+    assert.equal(list.children.length, 0);
+    details.children[0].focus();
+    details.open = true;
+    details.handlers.toggle();
+    assert.equal(doc.activeElement, details.children[0]);
+    assert.equal(list.children.length, 6);
+    assert.equal(card.children[0].textContent, hostile);
+    assert.deepEqual(JSON.parse(list.children[1].textContent), report.agents[0].vulnerabilities[0]);
+    details.open = false; details.handlers.toggle(); details.open = true; details.handlers.toggle();
+    assert.equal(list.children.length, 6);
+    app.logout();
+    assert.equal(app.el('findingList').children.length, 0);
+    assert.equal(app.el('findingGroupingSummary').textContent, '');
+});
+
+test('finding group pages use full-report counts and cap DOM with focus restoration', () => {
+    const {app, doc} = fixture();
+    const report = promptReport([3]);
+    const baseline = report.agents[0];
+    report.agents = Array.from({length: 110}, (_, index) => ({...baseline, id: `asset-${index}`,
+        vulnerabilities: baseline.vulnerabilities.map(item => ({...item, agent_id: `asset-${index}`}))}));
+    app.renderReport(report);
+    assert.equal(app.el('findingCount').textContent, '330');
+    assert.match(app.el('findingGroupingSummary').textContent, /^110 finding groups \/ 330 sample occurrences\./);
+    const container = app.el('findingList');
+    const [list, more, progress] = container.children;
+    assert.equal(list.children.length, 18);
+    assert.match(progress.textContent, /^18 of 110 finding groups shown/);
+    more.focus();
+    while (!more.hidden) more.click();
+    assert.equal(list.children.length, 100);
+    assert.equal(doc.activeElement, list);
+    assert.match(texts(container).join(' '), /Showing 100 of 110 finding groups/);
+    const count = container.children.length;
+    more.click();
+    assert.equal(container.children.length, count);
+    const css = fs.readFileSync(require.resolve('../static/css/dashboard.css'), 'utf8');
+    assert.match(css, /\.finding-groups:focus-visible,\.finding-occurrences:focus-visible\{outline:3px solid #3b9a88/);
+    assert.equal(list.className, 'finding-groups');
+});
+
+test('occurrence previews page and truncate without changing complete export data', () => {
+    const {app, doc} = fixture();
+    const report = promptReport([110]);
+    report.agents[0].vulnerabilities[0].payload = 'x'.repeat(20000);
+    const original = JSON.stringify(report);
+    app.renderReport(report);
+    const details = app.el('findingList').children[0].children[0].children.find(child => child.tagName === 'details');
+    const [, list, more] = details.children;
+    details.open = true; details.handlers.toggle();
+    assert.equal(list.children[1].textContent.length, 16384);
+    assert.match(texts(list).join(' '), /Record preview truncated/);
+    more.focus();
+    while (!more.hidden) more.click();
+    assert.equal(list.children.filter(child => child.tagName === 'pre').length, 100);
+    assert.equal(doc.activeElement, list);
+    assert.equal(list.className, 'finding-occurrences');
+    assert.match(texts(details).join(' '), /Showing 100 of 110 occurrences/);
+    assert.equal(JSON.stringify(report), original);
 });
 
 test('cancel uses authenticated POST and rechecks selected scan', async () => {
