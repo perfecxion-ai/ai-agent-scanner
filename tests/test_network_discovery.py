@@ -202,10 +202,10 @@ async def test_valid_empty_or_unrelated_inventory_is_clean_negative(document):
                                     ('ollama', {'models': [{'name': 'model', 'modified_at': 'not-date'}]}),
                                     ('openai', {'object': 'list', 'data': [None]}),
                                     ('tgi', {**TGI, 'max_input_tokens': None})])
-async def test_invalid_claimed_inventory_marks_incomplete(provider, document):
+async def test_native_claimed_inventory_marks_incomplete_but_generic_shape_is_negative(provider, document):
     with scan_transport(budget()) as limits:
         assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures[provider])
-    assert limits.failures == 1
+    assert limits.failures == (0 if provider == 'openai' or document.get('models', False) is None else 1)
 
 
 @pytest.mark.asyncio
@@ -240,6 +240,66 @@ async def test_real_read_only_inventory_and_stable_nonvendor_identity(service):
 
 
 @pytest.mark.asyncio
+async def test_ollama_native_and_compatible_same_models_are_one_asset(service):
+    responses, _, port = service
+    compatible = {'object': 'list', 'data': [{'id': 'fixture:latest', 'object': 'model'}]}
+    responses['/v1/models'] = web.json_response(compatible)
+    responses['/api/tags'] = web.json_response(OLLAMA)
+    with scan_transport(budget()):
+        assets = await NetworkScanner()._identify_ai_service('127.0.0.1', port, DiscoveryEngine().ai_signatures)
+    assert len(assets) == 1 and assets[0]['provider'] == 'ollama'
+    assert assets[0]['endpoint'].endswith('/api/tags')
+
+
+@pytest.mark.asyncio
+async def test_mixed_http_negatives_and_tcp_banner_complete_discovery(service):
+    responses, _, port = service
+    responses['/v1/models'] = web.json_response({'object': 'list', 'data': [{'id': 'price_fixture', 'object': 'price'}]})
+    responses['/api/tags'] = web.json_response({'error': 'not an AI service'})
+    responses['/info'] = web.Response(text='<html>' + 'x' * 12000 + '</html>', content_type='text/html')
+
+    async def banner(reader, writer):
+        writer.write(b'LAB NON-HTTP SERVICE\r\n')
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(banner, '127.0.0.1', 0)
+    banner_port = server.sockets[0].getsockname()[1]
+    app = web.Application()
+
+    async def inventory(request):
+        return web.json_response(OLLAMA)
+
+    async def ordinary_page(request):
+        return web.Response(text='<html>ordinary page</html>', content_type='text/html')
+
+    app.router.add_get('/api/tags', inventory)
+    app.router.add_get('/info', ordinary_page)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '127.0.0.1', 0)
+    await site.start()
+    ai_port = site._server.sockets[0].getsockname()[1]
+    closed = await asyncio.start_server(banner, '127.0.0.1', 0)
+    closed_port = closed.sockets[0].getsockname()[1]
+    closed.close()
+    await closed.wait_closed()
+    engine = DiscoveryEngine()
+    engine.network_scanner.common_ai_ports = [port, banner_port, ai_port, closed_port]
+    try:
+        with scan_transport(budget()) as limits:
+            report = await run_pipeline(engine, None, None, DiscoveryScope(network_ranges=['127.0.0.1/32']), 'discovery_only')
+    finally:
+        server.close()
+        await server.wait_closed()
+        await runner.cleanup()
+    assert report['status'] == 'completed'
+    assert len(report['agents']) == 1 and report['agents'][0]['provider'] == 'ollama'
+    assert limits.failures == limits.rejections == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('response', [web.Response(status=404), web.Response(status=405),
                                     web.Response(status=401), web.Response(status=302),
                                     web.Response(text='<html>login</html>')])
@@ -249,6 +309,60 @@ async def test_missing_optional_routes_and_generic_service_are_clean_negatives(s
     with scan_transport(budget()) as limits:
         assets = await NetworkScanner()._identify_ai_service('127.0.0.1', port, DiscoveryEngine().ai_signatures)
     assert not assets and limits.failures == limits.rejections == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('optional', [
+    web.json_response({'error': 'unsupported protocol'}),
+    web.Response(text='<html>' + 'x' * 12000 + '</html>', content_type='text/html'),
+    web.json_response({'object': 'list', 'data': [{'object': 'price', 'id': 'fixture-price'}]}),
+])
+@pytest.mark.parametrize('native_first', [False, True], ids=['compatible-first', 'native-first'])
+async def test_one_ai_protocol_does_not_require_other_optional_protocols(service, optional, native_first):
+    responses, _, port = service
+    signature_map = DiscoveryEngine().ai_signatures
+    if native_first:
+        signatures = {key: signature_map[key] for key in ('ollama', 'openai', 'tgi')}
+        responses['/api/tags'] = web.json_response(OLLAMA)
+        responses['/v1/models'] = optional
+        provider = 'ollama'
+    else:
+        signatures = signature_map
+        responses['/v1/models'] = web.json_response(MODELS)
+        responses['/api/tags'] = optional
+        provider = 'openai-compatible'
+    responses['/info'] = optional
+    engine = DiscoveryEngine()
+    engine.ai_signatures = signatures
+    engine.network_scanner.common_ai_ports = [port]
+    with scan_transport(budget()) as limits:
+        report = await run_pipeline(engine, None, None, DiscoveryScope(network_ranges=['127.0.0.1/32']), 'discovery_only')
+    assert report['status'] == 'completed'
+    assert len(report['agents']) == 1 and report['agents'][0]['provider'] == provider
+    assert limits.failures == limits.rejections == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider,document', [
+    ('ollama', {**OLLAMA, 'error': 'synthetic private error'}),
+    ('openai', {**MODELS, 'error': 'synthetic private error'}),
+    ('openai', {'object': 'list', 'data': [{'object': 'model', 'id': None}]}),
+    ('tgi', {**TGI, 'error': 'synthetic private error'}),
+])
+async def test_claimed_protocol_error_inventory_remains_incomplete(provider, document, caplog):
+    with scan_transport(budget()) as limits:
+        assert not await NetworkScanner()._is_ai_service(Response(document), DiscoveryEngine().ai_signatures[provider])
+    assert limits.failures == 1
+    assert 'Network discovery incomplete:' in caplog.text
+    assert 'synthetic private error' not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_json_body_limit_cannot_be_hidden_by_plaintext_content_type():
+    response = Response(b'{"models":[' + b' ' * 12000, headers={'Content-Type': 'text/plain'})
+    with scan_transport(budget()) as limits:
+        assert not await NetworkScanner()._is_ai_service(response, DiscoveryEngine().ai_signatures['ollama'])
+    assert limits.failures == 1
 
 
 @pytest.mark.asyncio
@@ -357,6 +471,22 @@ async def test_dns_bounded_a_and_aaaa_and_scope_checks(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_domain_discovery_uses_hosts_file_and_rechecks_complete_scope(monkeypatch):
+    monkeypatch.setattr('src.discovery.network_scanner.local_host_addresses', lambda host: ['192.0.2.5'])
+    resolve = AsyncMock()
+    monkeypatch.setattr(dns.asyncresolver.Resolver, 'resolve', resolve)
+    with scan_transport(ScanBudget(allowed_networks=('192.0.2.10/28',))) as limits:
+        assert await NetworkScanner()._resolve_domain('fixture.example') == ['192.0.2.5']
+    assert limits.failures == limits.rejections == 0
+    resolve.assert_not_called()
+    monkeypatch.setattr('src.discovery.network_scanner.local_host_addresses',
+                        lambda host: ['192.0.2.5', '169.254.169.254'])
+    with scan_transport(ScanBudget(allowed_networks=('192.0.2.0/24',))) as limits:
+        assert not await NetworkScanner()._resolve_domain('fixture.example')
+    assert limits.rejections == 1
+
+
+@pytest.mark.asyncio
 async def test_mixed_dns_answers_fail_closed(monkeypatch):
     resolve = AsyncMock(return_value=['192.0.2.1', '169.254.169.254'])
     monkeypatch.setattr(dns.asyncresolver.Resolver, 'resolve', resolve)
@@ -372,6 +502,15 @@ async def test_dns_cap_does_not_scan_partial_answer_set(monkeypatch):
     with scan_transport(ScanBudget()) as limits:
         assert not await NetworkScanner()._resolve_domain('fixture.invalid')
     assert limits.failures == 1 and resolve.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_second_family_dns_failure_discards_partial_addresses(monkeypatch):
+    resolve = AsyncMock(side_effect=[['192.0.2.1'], dns.exception.Timeout()])
+    monkeypatch.setattr(dns.asyncresolver.Resolver, 'resolve', resolve)
+    with scan_transport(ScanBudget()) as limits:
+        assert not await NetworkScanner()._resolve_domain('fixture.invalid')
+    assert limits.failures == 1
 
 
 @pytest.mark.asyncio
@@ -410,7 +549,7 @@ async def test_dns_timeout_and_cancellation_propagate_promptly(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_tcp_refused_is_clean_but_timeout_and_unexpected_io_are_incomplete(monkeypatch):
+async def test_tcp_refused_and_filtered_are_clean_but_unexpected_io_is_incomplete(monkeypatch):
     scanner = NetworkScanner()
     with scan_transport(ScanBudget()) as limits:
         monkeypatch.setattr(asyncio, 'open_connection', AsyncMock(side_effect=ConnectionRefusedError()))
@@ -420,7 +559,7 @@ async def test_tcp_refused_is_clean_but_timeout_and_unexpected_io_are_incomplete
         assert not await scanner._is_port_open('192.0.2.1', 80)
         monkeypatch.setattr(asyncio, 'open_connection', AsyncMock(side_effect=OSError('synthetic secret')))
         assert not await scanner._is_port_open('192.0.2.1', 80)
-        assert limits.failures == 2
+        assert limits.failures == 1
 
 
 @pytest.mark.asyncio

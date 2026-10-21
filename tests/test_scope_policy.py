@@ -1,11 +1,12 @@
 """Synthetic request, filesystem, and network boundary regression cases."""
 
 import asyncio
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, mock_open, patch
 
 import pytest
 
-from src.core.scope import ScopePolicy, ScopeValidationError, validate_agent_endpoints, validate_request
+from src.core.scope import (ScopePolicy, ScopeResolutionError, ScopeValidationError,
+                            local_host_addresses, resolve_domain, validate_agent_endpoints, validate_request)
 from src.core.transport import current_budget
 from tests.test_api_auth import api as api, headers
 
@@ -68,6 +69,28 @@ def test_one_disallowed_dns_answer_rejects_entire_domain():
     with pytest.raises(ScopeValidationError, match="Forbidden"):
         validate_request(request_body(domains=["fixture.example"]), config(),
                          lambda _: ["192.0.2.1", "169.254.169.254"])
+
+
+def test_hosts_file_aliases_use_bounded_local_lookup_without_dns():
+    hosts = b'192.0.2.5 primary fixture.example # fixture\n2001:db8::1 fixture.example\n'
+    with patch('pathlib.Path.open', mock_open(read_data=hosts)), patch('dns.resolver.resolve') as dns:
+        assert resolve_domain('fixture.example') == ['192.0.2.5', '2001:db8::1']
+        dns.assert_not_called()
+
+
+def test_hosts_file_complete_set_still_rejects_metadata():
+    hosts = b'192.0.2.5 fixture.example\n169.254.169.254 fixture.example\n'
+    with patch('pathlib.Path.open', mock_open(read_data=hosts)):
+        with pytest.raises(ScopeValidationError, match='Forbidden'):
+            ScopePolicy.from_config(config()).addresses('fixture.example')
+
+
+@pytest.mark.parametrize('data', [b'x' * 65537,
+                                b''.join(f'192.0.2.{index} fixture.example\n'.encode() for index in range(1, 34))])
+def test_hosts_file_bounds_reject_incomplete_answer_sets(data):
+    with patch('pathlib.Path.open', mock_open(read_data=data)):
+        with pytest.raises(ScopeResolutionError):
+            local_host_addresses('fixture.example')
 
 
 @pytest.mark.parametrize("scope", [{"cloud_accounts": {"aws": {}}}, {"include_cloud": True},

@@ -6,6 +6,10 @@ These changes are engineering work on the current branch, not a published releas
 
 ### Security and correctness
 
+- Separate expected network negatives from incomplete AI inventory, log safe
+  failure categories, normalize CIDRs, and reject CLI metadata targets before I/O.
+- Deduplicate matching Ollama inventories, honor bounded local hosts aliases,
+  explain MCP DNS/TLS failures, and enforce configurable bounded request deadlines.
 - Use one severity-floor 0-100 risk policy without repeated-sample inflation.
   Preserve confirmed risk during partial execution and show coverage warnings.
 - Treat prompt/tenant nondisclosure as inconclusive, never a safety pass or proof

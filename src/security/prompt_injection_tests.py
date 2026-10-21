@@ -18,8 +18,7 @@ you own or have explicit permission to test.
 """
 
 import asyncio
-import aiohttp
-from src.core.transport import SafeSession, record_response_failure
+from src.core.transport import SafeSession, model_request_timeout, record_response_failure
 import logging
 import re
 from typing import List, Dict, Any, Optional
@@ -57,10 +56,6 @@ class PromptInjectionTester:
         """
         # Set up logging for debugging and audit trails
         self.logger = logging.getLogger(__name__)
-        
-        # Configure HTTP client with reasonable timeout (30 seconds)
-        # This prevents hanging requests and ensures tests complete in reasonable time
-        self.session_timeout = aiohttp.ClientTimeout(total=30)
         
         # Load all attack payloads organized by category
         # Each category tests different types of prompt injection vulnerabilities
@@ -307,7 +302,7 @@ class PromptInjectionTester:
                                  category: str, payload: str) -> Optional[Dict[str, Any]]:
         """Test a single injection payload against an agent"""
         
-        async with SafeSession(timeout=self.session_timeout) as session:
+        async with SafeSession(timeout=model_request_timeout()) as session:
             # Try to construct request based on agent type
             request_data = self._construct_request(agent, payload)
             

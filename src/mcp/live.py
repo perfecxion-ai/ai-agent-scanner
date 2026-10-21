@@ -15,7 +15,7 @@ from jsonschema import Draft202012Validator, SchemaError
 
 from src.core.contracts import CHECK_SCHEMA_VERSION, CheckRecord
 from src.core.redaction import redact_secrets
-from src.core.scope import ScopePolicy, ScopeValidationError
+from src.core.scope import ScopePolicy, ScopeResolutionError, ScopeValidationError
 from src.core.transport import SafeSession, ScanBudget, TransportPolicyError, scan_transport
 from src.mcp.assessment import _unique_object, assess
 
@@ -398,10 +398,16 @@ async def inventory(endpoint, allowed_networks, allow_loopback=False, api_key_en
         await asyncio.wait_for(collect(), timeout=OVERALL_TIMEOUT)
     except LiveError as exc:
         reason = str(exc)
+    except ScopeResolutionError:
+        reason = "MCP endpoint hostname could not be resolved"
     except ScopeValidationError:
         reason = "MCP endpoint is outside the allowed scope"
     except TransportPolicyError:
         reason = "MCP transport policy rejected inventory"
+    except aiohttp.ClientConnectorCertificateError:
+        reason = "MCP TLS certificate verification failed"
+    except aiohttp.ClientSSLError:
+        reason = "MCP TLS negotiation failed"
     except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError):
         reason = "MCP transport failed or timed out"
     except (ValueError, TypeError, RecursionError):

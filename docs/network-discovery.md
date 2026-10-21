@@ -31,6 +31,11 @@ negatives but do not provide enough evidence to identify a service. Unsupported
 provider signatures do not silently receive heuristic network identification.
 Code and traffic sources retain their separate provider/domain observations.
 
+An Ollama authority may advertise the same model set through both compatible and
+native inventories. Matching sets on the same authority become one native Ollama
+observation; different model sets remain distinct. This prevents duplicate probes
+without conflating different providers, models, or cloud resources.
+
 ## Limits and failures
 
 The scanner samples ten configured common ports per address. Each range is at
@@ -46,11 +51,16 @@ limit. JSON container nesting is capped at 32, counting the outer object as one;
 this bound does not depend on the Python parser's recursion limit. Non-finite
 numeric literals and overflowing numeric exponents are rejected.
 Invalid or truncated advertised inventories, duplicate/non-finite JSON,
-HTTP 408/429/5xx, DNS failures, unexpected TCP errors, and timeouts make the scan
-incomplete. Earlier successful observations remain available. Closed ports,
-missing optional routes, redirects, generic pages, and ordinary authorization
-responses are normal unidentified observations. No redirect is followed and no
-credentials or body text are stored as discovery evidence.
+HTTP 408/429/5xx, DNS failures, unexpected TCP errors, and HTTP I/O timeouts make
+the scan incomplete. Earlier successful observations remain available. Closed,
+filtered, unreachable or nonresponsive TCP ports, non-HTTP banners, bounded generic
+HTML/text pages, unsupported optional protocol routes, redirects, and ordinary
+authorization responses are expected unidentified observations. They do not prove
+service absence or target safety. A valid OpenAI inventory does not require the
+same authority to implement Ollama/TGI routes. Actual AI inventory claims remain
+subject to strict schema/body checks; genuine failures are not silently ignored.
+Each failure/rejection increment has a fixed diagnostic without raw exceptions,
+response text, credentials, or credential-bearing URLs. No redirects are followed.
 
 Explicit CLI domain discovery resolves only the requested canonical name, not
 guessed subdomains. A and AAAA lookups each have a ten-second lifetime and async
@@ -62,6 +72,22 @@ answers through the shared transport policy. These are authority observations,
 not a claim that every individual DNS member serves the same inventory.
 Hostname observations omit unknown internet exposure rather than treating every
 DNS name as public. Literal IP observations use the address's global classification.
+
+Local `/etc/hosts` aliases are checked first with bounded reads and address counts.
+This does not implement every OS resolver plugin or service-discovery mechanism.
+Connection-time resolution independently validates actual addresses, including
+mixed answers. Failed resolution and untrusted TLS certificates have specific,
+secret-safe MCP error reasons instead of being mislabeled as scope or timeout
+failures. CLI and server transport both reject metadata/reserved address classes;
+CLI loopback access requires explicit opt-in even without an allowlist. Configured
+CIDRs with host bits normalize consistently before admission and execution.
+
+Active model probes use a bounded per-request timeout, default 30 seconds, from
+the current scan budget. Shorter protocol timeouts remain shorter and the overall
+scan deadline still applies. There is no automatic active-probe retry; repeated
+requests can have side effects and do not turn nondisclosure into a safety proof.
+An incomplete interaction keeps coverage partial but cannot erase a confirmed
+finding or its eligible observed-risk score.
 
 The API's admission policy currently normalizes requested domains to approved IP
 ranges. Its network discovery therefore remains IP-based and can miss virtual

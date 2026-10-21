@@ -14,9 +14,12 @@ eight jobs. The verdict follow-up changes stochastic nondisclosure to inconclusi
 uses severity-floor-v2 scoring without duplicate-sample inflation, preserves
 confirmed partial risk, omits generated text, and keeps exception logs static.
 Historical scoring is not recalculated or displayed as a current verdict.
-Local acceptance is 1150 Python cases, 82 Node cases, and the synthetic Chromium
-workflow. Network, source-reuse, CLI, and deadline slices remain separate until
-their integrated acceptance and CI pass. The beta hold remains in effect.
+Local verdict acceptance is 1150 Python cases, 82 Node cases, and synthetic
+Chromium. The next network/deadline slice passes 1194 combined local tests with
+mixed-service and protocol-negative regressions, pre-I/O metadata blocking,
+bounded hosts resolution, consistent CIDRs, and secret-safe MCP TLS errors.
+Source reuse and CLI controls remain separate until integrated acceptance and CI.
+The beta hold remains in effect.
 
 ## Original checkpoint
 

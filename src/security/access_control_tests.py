@@ -16,8 +16,7 @@ vulnerabilities in their AI systems for remediation purposes.
 """
 
 import asyncio
-import aiohttp
-from src.core.transport import SafeSession
+from src.core.transport import SafeSession, model_request_timeout
 import logging
 import base64
 from http.cookies import SimpleCookie, CookieError
@@ -59,9 +58,6 @@ class AccessControlTester:
         """
         # Set up logging for audit trails and debugging
         self.logger = logging.getLogger(__name__)
-        
-        # Configure HTTP client timeout (30 seconds prevents hanging)
-        self.session_timeout = aiohttp.ClientTimeout(total=30)
         
         # Common weak credentials used in credential stuffing attacks
         # These are typical default/weak combinations found in real systems
@@ -149,7 +145,7 @@ class AccessControlTester:
             return []
         # Explicitly omit every credential-bearing header, including auto-resolved keys.
         try:
-            async with SafeSession(timeout=self.session_timeout) as session:
+            async with SafeSession(timeout=model_request_timeout()) as session:
                 async with session.request(request['method'], request['url'],
                                            headers={'Content-Type': 'application/json'},
                                            json=request['json'], allow_redirects=False) as response:
@@ -236,7 +232,7 @@ class AccessControlTester:
         if not await self._has_denied_control(agent):
             return None
         
-        async with SafeSession(timeout=self.session_timeout) as session:
+        async with SafeSession(timeout=model_request_timeout()) as session:
             endpoint = agent.get('endpoint')
             
             # Try the bypass method
@@ -292,7 +288,7 @@ class AccessControlTester:
             try:
                 credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
                 
-                async with SafeSession(timeout=self.session_timeout) as session:
+                async with SafeSession(timeout=model_request_timeout()) as session:
                     async with session.get(
                         endpoint,
                         headers={'Authorization': f'Basic {credentials}'}, allow_redirects=False
@@ -352,7 +348,7 @@ class AccessControlTester:
                 ]
                 
                 for headers in header_variations:
-                    async with SafeSession(timeout=self.session_timeout) as session:
+                    async with SafeSession(timeout=model_request_timeout()) as session:
                         async with session.get(endpoint, headers=headers, allow_redirects=False) as response:
                             
                             text = await response.text()
@@ -409,7 +405,7 @@ class AccessControlTester:
             try:
                 test_url = urljoin(endpoint.rstrip('/'), path)
                 
-                async with SafeSession(timeout=self.session_timeout) as session:
+                async with SafeSession(timeout=model_request_timeout()) as session:
                     async with session.get(test_url, allow_redirects=False) as response:
                         
                         response_text = await response.text()
@@ -455,7 +451,7 @@ class AccessControlTester:
             request_times = []
             status_codes = []
             
-            async with SafeSession(timeout=self.session_timeout) as session:
+            async with SafeSession(timeout=model_request_timeout()) as session:
                 for i in range(min(20, self.rate_limit_requests)):  # Test with 20 requests
                     start_time = datetime.now(timezone.utc)
                     
@@ -507,7 +503,7 @@ class AccessControlTester:
         
         try:
             # Test session fixation and cookie security
-            async with SafeSession(timeout=self.session_timeout) as session:
+            async with SafeSession(timeout=model_request_timeout()) as session:
                 async with session.get(endpoint) as response:
                     record_interaction(response.status in (401, 403) or 200 <= response.status < 300)
                     
@@ -558,7 +554,7 @@ class AccessControlTester:
         if agent.get('authentication_required') is not True or not isinstance(marker, str) or len(marker) < 16:
             return False
         try:
-            async with SafeSession(timeout=self.session_timeout) as session:
+            async with SafeSession(timeout=model_request_timeout()) as session:
                 async with session.get(agent['endpoint'], headers={'Authorization': f'Bearer scanner-invalid-{uuid.uuid4()}'}, allow_redirects=False) as response:
                     text = await response.text()
                     denied = response.status in (401, 403) and marker not in text

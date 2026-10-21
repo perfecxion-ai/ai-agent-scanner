@@ -18,6 +18,10 @@ class ScopeValidationError(ValueError):
     """A request violates the configured scan boundary."""
 
 
+class ScopeResolutionError(ScopeValidationError):
+    """A bounded hostname lookup could not produce a complete address set."""
+
+
 _FORBIDDEN = tuple(ipaddress.ip_network(value) for value in (
     "0.0.0.0/8", "169.254.0.0/16", "224.0.0.0/4", "240.0.0.0/4",
     "100.100.100.200/32", "168.63.129.16/32", "::/128", "fe80::/10",
@@ -34,19 +38,56 @@ def bounded_integer(value, name, maximum, minimum=1):
     return value
 
 
+def local_host_addresses(hostname):
+    """Honor hosts-file aliases without an unbounded OS resolver/NSS call.
+
+    DNS still uses explicit query lifetimes. HTTP connection-time resolution
+    independently validates all actual OS resolver answers against scan policy.
+    """
+    try:
+        with Path('/etc/hosts').open('rb') as source:
+            data = source.read(65537)
+    except OSError:
+        return []
+    if len(data) > 65536:
+        raise ScopeResolutionError('Local hosts file exceeds lookup limit')
+    addresses = []
+    for line in data.decode('utf-8', errors='replace').splitlines():
+        fields = line.partition('#')[0].split()
+        if len(fields) < 2 or hostname.lower().rstrip('.') not in (
+                alias.lower().rstrip('.') for alias in fields[1:]):
+            continue
+        try:
+            address = str(ipaddress.ip_address(fields[0]))
+        except ValueError:
+            raise ScopeResolutionError('Local hostname has an invalid address') from None
+        if address not in addresses:
+            addresses.append(address)
+        if len(addresses) > 32:
+            raise ScopeResolutionError('Domain has too many addresses')
+    return addresses
+
+
 def resolve_domain(hostname):
     """Resolve both address families with bounded DNS query lifetimes."""
-    addresses = []
+    addresses = local_host_addresses(hostname)
+    if addresses:
+        return addresses
     for record_type in ("A", "AAAA"):
         try:
             answers = dns.resolver.resolve(hostname, record_type, lifetime=3)
-            addresses.extend(str(answer) for answer in answers)
+            for answer in answers:
+                address = str(answer)
+                if address not in addresses:
+                    addresses.append(address)
+                if len(addresses) > 32:
+                    raise ScopeResolutionError('Domain has too many addresses')
         except dns.resolver.NoAnswer:
             continue
         except dns.exception.DNSException as exc:
-            raise ScopeValidationError(f"Cannot resolve domain: {hostname}") from exc
+            raise ScopeResolutionError('Cannot resolve target hostname') from exc
     if not addresses or len(addresses) > 32:
-        raise ScopeValidationError("Domain must resolve to between 1 and 32 addresses")
+        raise ScopeResolutionError("Domain must resolve to between 1 and 32 addresses")
     return addresses
 
 

@@ -3,6 +3,8 @@
 import asyncio
 import ipaddress
 import json
+import logging
+import math
 import socket
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
@@ -23,6 +25,7 @@ class ScanBudget:
     allow_loopback: bool = False
     max_requests: int = 500
     max_response_bytes: int = 1_048_576
+    request_timeout_seconds: float = 30
     requests: int = 0
     failures: int = 0
     rejections: int = 0
@@ -31,12 +34,14 @@ class ScanBudget:
     def __post_init__(self):
         if self.max_requests < 1 or self.max_response_bytes < 1:
             raise ValueError('Transport limits must be positive')
-        self.networks = tuple(ipaddress.ip_network(value) for value in self.allowed_networks or ())
+        if (type(self.request_timeout_seconds) not in (int, float)
+                or not math.isfinite(self.request_timeout_seconds)
+                or not 1 <= self.request_timeout_seconds <= 300):
+            raise ValueError('Request timeout must be from 1 to 300 seconds')
+        self.networks = tuple(ipaddress.ip_network(value, strict=False) for value in self.allowed_networks or ())
 
     def check_address(self, address):
         ip = ipaddress.ip_address(address)
-        if self.allowed_networks is None:
-            return
         if ip.is_link_local or ip.is_multicast or ip.is_unspecified or getattr(ip, 'ipv4_mapped', None):
             raise TransportPolicyError('Address class is not permitted')
         if ip.is_loopback and not self.allow_loopback:
@@ -46,6 +51,8 @@ class ScanBudget:
         if any(ip.version == network.version and ip in network
                for network in map(ipaddress.ip_network, denied)):
             raise TransportPolicyError('Metadata or reserved address is not permitted')
+        if self.allowed_networks is None:
+            return
         if not any(ip.version == network.version and ip in network for network in self.networks):
             raise TransportPolicyError('Address is outside the scan allowlist')
 
@@ -71,6 +78,27 @@ def current_budget():
     return _budget.get()
 
 
+def model_request_timeout():
+    """Use the operator's bounded request deadline for active model probes."""
+    budget = current_budget()
+    return aiohttp.ClientTimeout(total=budget.request_timeout_seconds if budget else 30)
+
+
+def _bounded_timeout(value, maximum):
+    if isinstance(value, aiohttp.ClientTimeout):
+        total = value.total
+        if type(total) not in (int, float) or not math.isfinite(total) or total <= 0:
+            total = maximum
+        return aiohttp.ClientTimeout(total=min(total, maximum),
+                                     connect=value.connect, sock_read=value.sock_read,
+                                     sock_connect=value.sock_connect, ceil_threshold=value.ceil_threshold)
+    if value is None:
+        return aiohttp.ClientTimeout(total=maximum)
+    if type(value) in (int, float) and math.isfinite(value):
+        return aiohttp.ClientTimeout(total=min(value, maximum) if value > 0 else maximum)
+    raise TransportPolicyError('Invalid HTTP timeout configuration')
+
+
 def record_response_failure():
     """Record a required model interaction rejected at the HTTP layer.
 
@@ -79,6 +107,7 @@ def record_response_failure():
     budget = current_budget()
     if budget is not None:
         budget.failures += 1
+        logging.getLogger(__name__).warning('Required HTTP interaction failed')
 
 
 @contextmanager
@@ -96,7 +125,9 @@ class PolicyResolver(AbstractResolver):
         self.resolver = resolver or aiohttp.resolver.DefaultResolver()
 
     async def resolve(self, host, port=0, family=socket.AF_INET):
-        addresses = await self.resolver.resolve(host, port, family)
+        addresses = await asyncio.wait_for(self.resolver.resolve(host, port, family), timeout=10)
+        if not addresses or len(addresses) > 32:
+            raise TransportPolicyError('DNS must return between 1 and 32 addresses')
         for address in addresses:
             self.budget.check_address(address['host'])
         return addresses
@@ -153,7 +184,9 @@ class SafeSession:
     async def __aenter__(self):
         self.resolver = PolicyResolver(self.budget)
         connector = aiohttp.TCPConnector(resolver=self.resolver, limit=20)
-        self.session = aiohttp.ClientSession(connector=connector, trust_env=False, **self.kwargs)
+        options = dict(self.kwargs)
+        options['timeout'] = _bounded_timeout(options.get('timeout'), self.budget.request_timeout_seconds)
+        self.session = aiohttp.ClientSession(connector=connector, trust_env=False, **options)
         await self.session.__aenter__()
         return self
 
@@ -164,17 +197,31 @@ class SafeSession:
             await self.resolver.close()
 
     @asynccontextmanager
-    async def request(self, method, url, **kwargs):
+    async def request(self, method, url, discovery=False, **kwargs):
         try:
             self.budget.reserve(url)
+            if 'timeout' in kwargs:
+                kwargs['timeout'] = _bounded_timeout(kwargs['timeout'], self.budget.request_timeout_seconds)
             kwargs['allow_redirects'] = False
             async with self.session.request(method, url, **kwargs) as response:
                 yield BoundedResponse(response, self.budget)
         except TransportPolicyError:
             self.budget.rejections += 1
+            logging.getLogger(__name__).warning('HTTP transport policy rejected request')
             raise
-        except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError):
+        except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError) as exc:
+            # A TCP banner is an expected negative when asking an unknown port
+            # whether it speaks HTTP. Never ignore body truncation, TLS failures,
+            # refused connections, timeouts, or errors from active security work.
+            if (discovery and isinstance(exc, aiohttp.ClientResponseError)
+                    and exc.status == 400 and exc.headers is None):
+                logging.getLogger(__name__).debug('Discovery port did not speak HTTP')
+                raise
             self.budget.failures += 1
+            logging.getLogger(__name__).warning('HTTP transport failed: %s',
+                                               'certificate verification' if isinstance(
+                                                   exc, aiohttp.ClientConnectorCertificateError)
+                                               else 'request or response I/O')
             raise
 
     def get(self, url, **kwargs):

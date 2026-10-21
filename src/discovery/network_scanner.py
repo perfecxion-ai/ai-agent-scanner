@@ -17,7 +17,8 @@ import dns.asyncresolver
 import dns.exception
 import dns.resolver
 
-from src.core.transport import SafeSession, TransportPolicyError, current_budget
+from src.core.transport import SafeSession, ScanBudget, TransportPolicyError, current_budget
+from src.core.scope import local_host_addresses
 
 
 MAX_BODY_BYTES = 10_000
@@ -151,7 +152,7 @@ class NetworkScanner:
         return agents
 
     async def _is_port_open(self, host: str, port: int) -> bool:
-        budget = current_budget()
+        budget = current_budget() or ScanBudget()
         if budget:
             try:
                 address = ipaddress.ip_address(host)
@@ -160,6 +161,7 @@ class NetworkScanner:
                 budget.reserve(f'http://{authority}:{port}')
             except (ValueError, TransportPolicyError):
                 budget.rejections += 1
+                self.logger.warning('Network discovery policy rejected TCP probe')
                 return False
         writer = None
         try:
@@ -168,10 +170,11 @@ class NetworkScanner:
         except ConnectionRefusedError:
             return False
         except (TimeoutError, asyncio.TimeoutError):
-            self._failure('TCP timeout')
+            # Filtered ports and unused addresses are expected during discovery.
+            self.logger.debug('Discovery TCP port did not respond')
             return False
         except OSError as error:
-            if error.errno not in {errno.ECONNREFUSED}:
+            if error.errno not in {errno.ECONNREFUSED, errno.EHOSTUNREACH, errno.ENETUNREACH}:
                 self._failure('TCP probe')
             return False
         except Exception:
@@ -203,10 +206,11 @@ class NetworkScanner:
                     continue
                 routes.setdefault(path, []).append((provider, signature))
         agents = []
+        model_sets = {}
         async with SafeSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
             for path, signatures in routes.items():
                 try:
-                    async with session.get(base_url + path) as response:
+                    async with session.get(base_url + path, discovery=not agents) as response:
                         document = await self._read_document(response, [signature for _, signature in signatures])
                         if document is None:
                             continue
@@ -215,7 +219,11 @@ class NetworkScanner:
                                 detected = ('openai-compatible' if provider in
                                             {'openai', 'vllm', 'openai-compatible'} else provider)
                                 endpoint = base_url + path
-                                agents.append(self._asset(host, port, scheme, endpoint, detected, response.status))
+                                asset = self._asset(host, port, scheme, endpoint, detected, response.status)
+                                agents.append(asset)
+                                models = (model['name'] for model in document['models']) if detected == 'ollama' else (
+                                    model['id'] for model in document['data']) if detected == 'openai-compatible' else ()
+                                model_sets[asset['id']] = frozenset(models)
                                 break
                 except TransportPolicyError:
                     # SafeSession already records policy rejections.
@@ -223,7 +231,12 @@ class NetworkScanner:
                 except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError):
                     # SafeSession already records failed I/O. Keep earlier assets.
                     continue
-        return agents
+        # Native Ollama also advertises an OpenAI-compatible inventory. Collapse
+        # only identical nonempty model sets on this same authority, never a
+        # colocated gateway exposing different models or a different provider.
+        native = {model_sets[asset['id']] for asset in agents if asset['provider'] == 'ollama'}
+        return [asset for asset in agents if not (
+            asset['provider'] == 'openai-compatible' and model_sets[asset['id']] in native)]
 
     def _asset(self, host, port, scheme, endpoint, provider, status):
         metadata = {'host': host, 'port': port, 'scheme': scheme,
@@ -244,7 +257,12 @@ class NetworkScanner:
         body = bytearray()
         async for chunk in response.content.iter_chunked(4096):
             if len(body) + len(chunk) > MAX_BODY_BYTES:
-                self._failure('inventory body limit')
+                # A bounded HTML/text landing page is not an incomplete AI
+                # inventory. Keep indeterminate/JSON truncation conservative.
+                prefix = (body + chunk).lstrip()[:1]
+                content_type = response.headers.get('Content-Type', '').split(';')[0].lower()
+                if prefix in (b'{', b'[') or (prefix != b'<' and content_type not in ('text/html', 'text/plain')):
+                    self._failure('inventory body limit')
                 return None
             body.extend(chunk)
         try:
@@ -259,10 +277,15 @@ class NetworkScanner:
             self._failure('inventory JSON depth limit')
             return None
         if isinstance(document, dict) and 'error' in document:
-            self._failure('inventory error document')
+            if self._claims_inventory(document, signatures):
+                self._failure('inventory error document')
             return None
         if isinstance(document, dict) and self._invalid_inventory(document, signatures):
-            self._failure('invalid inventory schema')
+            # Generic object:list APIs (for example payment APIs) are not AI
+            # evidence. Require a discriminator for this route's protocol, not
+            # an unrelated successful inventory on the same authority.
+            if self._claims_inventory(document, signatures):
+                self._failure('invalid inventory schema')
             return None
         return document if isinstance(document, dict) else None
 
@@ -273,6 +296,21 @@ class NetworkScanner:
     @staticmethod
     def _supported_signature(signature):
         return bool({'modified_at', 'choices', 'model_id'} & set(signature.get('response_patterns', [])))
+
+    @staticmethod
+    def _claims_inventory(document, signatures):
+        for signature in signatures:
+            patterns = set(signature.get('response_patterns', []))
+            if ('model_id' in patterns and document.get('router') == 'text-generation-router'):
+                return True
+            if ('modified_at' in patterns and isinstance(document.get('models'), list)
+                    and any(isinstance(model, dict) and 'modified_at' in model for model in document['models'])):
+                return True
+            if ('choices' in patterns and document.get('object') == 'list'
+                    and isinstance(document.get('data'), list)
+                    and any(isinstance(model, dict) and model.get('object') == 'model' for model in document['data'])):
+                return True
+        return False
 
     @staticmethod
     def _matches_document(document, signature):
@@ -332,7 +370,13 @@ class NetworkScanner:
         try:
             domain = self._hostname(domain)
             resolver = dns.asyncresolver.Resolver()
-            budget = current_budget()
+            budget = current_budget() or ScanBudget()
+            local = local_host_addresses(domain)
+            if local:
+                for address in local:
+                    if budget:
+                        budget.check_address(address)
+                return local
             for record_type in ('A', 'AAAA'):
                 if budget:
                     budget.reserve('http://' + domain)
@@ -355,9 +399,11 @@ class NetworkScanner:
         except TransportPolicyError:
             if current_budget():
                 current_budget().rejections += 1
+            self.logger.warning('Network discovery policy rejected DNS addresses')
             return []
         except (dns.exception.DNSException, TimeoutError, asyncio.TimeoutError, ValueError, UnicodeError):
             self._failure('DNS resolution')
+            return []
         return ips
 
     @staticmethod

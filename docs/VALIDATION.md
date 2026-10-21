@@ -55,6 +55,25 @@ The browser parent also canonicalizes its created temporary root; the mandatory
 symlink-ancestor regression and existing guard/cleanup cases pass. These fixtures
 do not rerun the external lab or reopen the beta.
 
+### Network remediation slice
+
+The verdict plus network tree passes 1194 local Linux/Python 3.10 tests and Ruff.
+Independent review exercised transport, scope, MCP, mixed DNS, configurable
+deadlines, and safe failure accounting; focused runs also passed with warnings
+treated as errors. A real loopback mixed-service fixture retains one Ollama and
+completes with TCP banners, large SPA/HTML, unrelated API inventories, JSON error
+documents, and closed ports. Matching native/compatible model sets deduplicate.
+Separate fixtures preserve partial status for actual protocol claims with invalid
+data, 503s, truncation, and JSON/body limits, including JSON mislabeled text/plain.
+Optional protocol routes stay optional after another inventory succeeds.
+
+Metadata/reserved addresses are rejected before TCP or HTTP even without a CLI
+allowlist. Host-bit CIDRs normalize consistently. Bounded local hosts aliases and
+mixed-answer fail-closed checks pass. A real untrusted certificate fixture reports
+a specific safe TLS failure for both MCP inventory and policy checks. Pre-created
+security engines use each scan's current bounded request deadline, with no retry.
+These are synthetic regressions, not a new live-provider compatibility claim.
+
 ### Historical local-beta checkpoint
 
 - Local Linux/Python 3.10.20: 1109 pytest cases passed. The suite invokes 78 Node

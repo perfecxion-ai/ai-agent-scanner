@@ -17,8 +17,7 @@ personal data and comply with privacy regulations like GDPR and CCPA.
 """
 
 import asyncio
-import aiohttp
-from src.core.transport import SafeSession, record_response_failure
+from src.core.transport import SafeSession, model_request_timeout, record_response_failure
 import logging
 import re
 from typing import List, Dict, Any, Optional
@@ -46,7 +45,6 @@ class DataPrivacyTester:
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.session_timeout = aiohttp.ClientTimeout(total=30)
         
         # PII patterns for detection
         self.pii_patterns = {
@@ -338,7 +336,7 @@ class DataPrivacyTester:
         if not endpoint:
             return None
         
-        async with SafeSession(timeout=self.session_timeout) as session:
+        async with SafeSession(timeout=model_request_timeout()) as session:
             # Construct request based on agent type (reuse logic from prompt injection tester)
             request_data = self._construct_request(agent, prompt)
             
