@@ -194,6 +194,10 @@ class ScopePolicy:
 def validate_request(data, config, resolver=None):
     if not isinstance(data, dict):
         raise ScopeValidationError("JSON object required")
+    if set(data) & {"system_prompt_canary", "system_prompt_canary_env", "cross_tenant_canary",
+                    "evidence_context_id", "evidence_profiles", "evidence_profiles_file",
+                    "profiles_file", "SCAN_EVIDENCE_PROFILES_FILE", "_evidence_profile_pins"}:
+        raise ScopeValidationError("Use scan_config.evidence_profiles references; protected evidence is server-configured")
     scan_type = data.get("scan_type", "full")
     if scan_type not in ("full", "discovery_only", "security_only"):
         raise ScopeValidationError("Unsupported scan_type")
@@ -204,7 +208,7 @@ def validate_request(data, config, resolver=None):
     options = data.get("scan_config", {})
     if not isinstance(scope, dict) or not isinstance(options, dict):
         raise ScopeValidationError("target_scope and scan_config must be JSON objects")
-    if set(options) - {"source_scan_id", "timeout_seconds", "model_overrides"}:
+    if set(options) - {"source_scan_id", "timeout_seconds", "model_overrides", "evidence_profiles"}:
         raise ScopeValidationError("Unsupported scan_config field")
     if set(scope) - {*_TARGET_FIELDS, "cloud_accounts", "include_network",
                      "include_repositories", "include_traffic", "include_cloud"}:
@@ -238,7 +242,12 @@ def validate_request(data, config, resolver=None):
                 options["model_overrides"] = validate_model_overrides(options["model_overrides"])
             except ValueError as exc:
                 raise ScopeValidationError(str(exc)) from exc
+        if "evidence_profiles" in options:
+            from src.core.evidence_profiles import validate_references
+            options["evidence_profiles"] = validate_references(options["evidence_profiles"])
         return name.strip(), scan_type, {}, options
+    if "evidence_profiles" in options:
+        raise ScopeValidationError("evidence_profiles is only valid for security_only")
     if "model_overrides" in options:
         raise ScopeValidationError("model_overrides is only valid for security_only")
     if "source_scan_id" in options:

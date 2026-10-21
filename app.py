@@ -47,6 +47,7 @@ from src.core.jobs import JobStore, JobDispatcher, TERMINAL_STATES
 from src.core.schema import initialize_schema, SCHEMA_VERSION
 from src.core.templates import project_template, template_revision
 from src.core.schedules import ScheduleService, schedule_definition
+from src.core.evidence_profiles import EvidenceProfileError, PIN_FIELD, load_evidence_profiles
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -78,6 +79,8 @@ app.config["SCAN_ALLOWED_PATH_ROOTS"] = tuple(filter(None, os.environ.get(
     "SCAN_ALLOWED_PATH_ROOTS", ""
 ).split(os.pathsep)))
 app.config["SCAN_ALLOW_LOOPBACK"] = os.environ.get("SCAN_ALLOW_LOOPBACK", "false").lower() == "true"
+# Bindings are immutable until process restart; protected values stay outside config.
+_evidence_profiles = load_evidence_profiles(os.environ.get("SCAN_EVIDENCE_PROFILES_FILE"))
 for _setting, _default, _maximum in (
     ("SCAN_MAX_HOSTS", 1024, 65536), ("SCAN_MAX_FILES", 10000, 100000),
     ("SCAN_TIMEOUT_SECONDS", 300, 3600), ("MAX_CONCURRENT_SCANS", 2, 32),
@@ -347,8 +350,12 @@ def start_scan():
         return jsonify({"success": False, "error": "Failed to start scan"}), 500
 
 
-def _prepare_scan(data, tenant, *, retain_declaration=True):
+def _prepare_scan(data, tenant, *, retain_declaration=True, trusted_definition=False):
     """Validate current policy while retaining declared DNS and path intent."""
+    pins = None
+    if trusted_definition and isinstance(data, dict) and isinstance(data.get("scan_config"), dict):
+        data = deepcopy(data)
+        pins = data["scan_config"].pop(PIN_FIELD, None)
     name, mode, scope, options = validate_request(data, app.config)
     if mode == "security_only":
         source = ScanSession.query.filter_by(id=options["source_scan_id"], organization_id=tenant).first()
@@ -361,11 +368,22 @@ def _prepare_scan(data, tenant, *, retain_declaration=True):
         except ValueError as exc:
             raise ScopeValidationError(str(exc)) from exc
         validate_agent_endpoints(source_agents, app.config)
+        if options.get("evidence_profiles") or pins is not None:
+            if trusted_definition and pins is None:
+                raise EvidenceProfileError()
+            selected = apply_model_overrides(source_agents, options.get("model_overrides", {}))
+            references, revisions = _evidence_profiles.references(
+                selected, options.get("evidence_profiles", {}), tenant, aliases, pins=pins)
+            options["evidence_profiles"] = references
+            options[PIN_FIELD] = revisions
     elif retain_declaration:
         # Execution resolves these declarations again, rather than trusting stale DNS or symlinks.
         for key in ("network_ranges", "domains", "repositories", "traffic_sources"):
             scope[key] = deepcopy(data.get("target_scope", {}).get(key, []))
-    return {"scan_name": name, "scan_type": mode, "target_scope": scope, "scan_config": options}
+    definition = {"scan_name": name, "scan_type": mode, "target_scope": scope, "scan_config": options}
+    if options.get("evidence_profiles"):
+        _evidence_profiles.validate_public_definition(definition, options["evidence_profiles"])
+    return definition
 
 
 def _source_inventory(source):
@@ -480,11 +498,12 @@ def _template_json(row, *, definition=True):
               "updated_at": row.updated_at.isoformat()}
     if definition:
         result.update(_template_definition(row))
+        result["scan_config"].pop(PIN_FIELD, None)
     return result
 
 
-def _prepare_template(data, tenant):
-    definition = _prepare_scan(project_template(data), tenant)
+def _prepare_template(data, tenant, *, trusted_definition=False):
+    definition = _prepare_scan(project_template(data), tenant, trusted_definition=trusted_definition)
     # Defaults and normalized flags count toward the persisted document limit too.
     project_template(definition)
     return definition
@@ -566,7 +585,7 @@ def run_template(template_id):
         raise BadRequest("Template run requires a JSON object containing only optional revision")
     if "revision" in data and template_revision(data["revision"]) != revision:
         raise Conflict("Template revision changed; reload before running")
-    definition = _prepare_template(_template_definition(row), tenant)
+    definition = _prepare_template(_template_definition(row), tenant, trusted_definition=True)
     db.session.rollback()
     with _admission_lock:
         row = _owned_template(template_id, tenant)
@@ -634,6 +653,10 @@ def _schedule_policy():
 def _schedule_token(definition, tenant):
     """Public configuration and source identity only; no DNS or filesystem work."""
     policy = _schedule_policy()
+    options = definition["scan_config"]
+    if options.get("evidence_profiles") or PIN_FIELD in options:
+        policy["evidence_profile_revisions"] = _evidence_profiles.token(
+            options.get("evidence_profiles", {}), options.get(PIN_FIELD), tenant)
     source = None
     if definition["scan_type"] == "security_only":
         identifier = definition["scan_config"]["source_scan_id"]
@@ -670,7 +693,7 @@ def schedules_collection():
         raise Conflict("Template revision changed; create a schedule for the reviewed revision")
     declaration = _template_definition(template)
     before = _schedule_token(declaration, tenant)
-    definition = _prepare_template(declaration, tenant)
+    definition = _prepare_template(declaration, tenant, trusted_definition=True)
     token = _schedule_token(definition, tenant)
     if before != token:
         raise Conflict("Source or policy changed during validation; review before creating")
@@ -742,7 +765,7 @@ def schedule_action(identifier, action):
             raise Conflict("Pinned template changed; create a replacement schedule")
         declaration = _template_definition(template)
         before = _schedule_token(declaration, tenant)
-        definition = _prepare_template(declaration, tenant)
+        definition = _prepare_template(declaration, tenant, trusted_definition=True)
         token = _schedule_token(definition, tenant)
         if before != token:
             raise Conflict("Source or policy changed during validation; review before enabling")
@@ -814,7 +837,7 @@ def _schedule_preflight(candidate):
                 return {"error": "template_changed"}
             declaration = _template_definition(template)
             before = _schedule_token(declaration, candidate["organization_id"])
-            definition = _prepare_template(declaration, candidate["organization_id"])
+            definition = _prepare_template(declaration, candidate["organization_id"], trusted_definition=True)
             token = _schedule_token(definition, candidate["organization_id"])
             if before != token:
                 return {"error": "policy_review"}
@@ -845,7 +868,7 @@ def _schedule_admit(candidate, result, stop):
             try:
                 if result["token"] != _schedule_token(result["definition"], row.organization_id):
                     reason = "policy_review"
-            except HTTPException:
+            except (HTTPException, ScopeValidationError):
                 reason = "policy_review"
         if row.revision >= 2**31 - 1:
             reason = "revision_limit"
@@ -1127,7 +1150,7 @@ def _execute_job(scan_id, cancelled):
         definition = _prepare_scan({
             "scan_type": scan.scan_type, "scan_name": scan.scan_name,
             "target_scope": scan.target_scope, "scan_config": scan.scan_config,
-        }, scan.organization_id, retain_declaration=False)
+        }, scan.organization_id, retain_declaration=False, trusted_definition=True)
     _run_scan_in_thread(scan_id, definition["scan_type"], definition["target_scope"],
                         definition["scan_config"], cancelled)
 
@@ -1232,6 +1255,13 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                     raise ValueError("Owned terminal source scan required")
                 source_agents, aliases = _source_inventory(source)
                 source_agents = apply_model_overrides(source_agents, scan_config.get("model_overrides", {}), aliases)
+                if scan_config.get("evidence_profiles") or PIN_FIELD in scan_config:
+                    validate_agent_endpoints(source_agents, app.config)
+                    if PIN_FIELD not in scan_config:
+                        raise EvidenceProfileError()
+                    source_agents = _evidence_profiles.apply(
+                        source_agents, scan_config.get("evidence_profiles", {}),
+                        current.organization_id, scan_config[PIN_FIELD])
                 source_coverage = {"scan_id": source.id, "status": source.status,
                                    "coverage_complete": source.status == "completed"}
                 if source.status == "partial":

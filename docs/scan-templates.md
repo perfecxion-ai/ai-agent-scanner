@@ -102,8 +102,13 @@ source scan with versioned results and assets. Partial sources must be finalized
 valid, and match saved snapshots with usable endpoints. Their incomplete coverage
 remains explicit in derived reports. Redacted source endpoints cannot be replayed.
 Selected asset/model IDs and current endpoint policy are checked at creation,
-update, admission, and worker execution. Templates store only the source scan ID
-and model selections, not a copy of credentials or protected canaries.
+update, admission, and worker execution. Templates store source IDs, model
+selections, and optional named `evidence_profiles` references with internal public
+binding pins, never protected canary values or credentials. See
+[server canary profiles](detection-evidence.md#server-system-prompt-canary-profiles)
+for server setup. Returned definitions omit internal pins so they can be edited
+and resubmitted. Runs revalidate bindings; an unavailable or changed profile
+requires operator review rather than silently using a different policy.
 
 Template operations do not append definition contents to scan audit history.
 Successful runs use the existing admission/claim/cancellation/terminal events.

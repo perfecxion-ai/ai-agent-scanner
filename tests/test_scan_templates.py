@@ -373,8 +373,8 @@ def test_concurrent_creation_cannot_exceed_quota(file_api, monkeypatch):
     original = module._prepare_template
     barrier = threading.Barrier(2)
 
-    def prepare(*args):
-        result = original(*args)
+    def prepare(*args, **kwargs):
+        result = original(*args, **kwargs)
         barrier.wait(timeout=3)
         return result
 
@@ -396,8 +396,8 @@ def test_recipe_change_during_run_preflight_cannot_admit(file_api, monkeypatch, 
     entered, released = threading.Event(), threading.Event()
     original = module._prepare_template
 
-    def prepare(*args):
-        result = original(*args)
+    def prepare(*args, **kwargs):
+        result = original(*args, **kwargs)
         if threading.current_thread().name == "template-run":
             entered.set()
             assert released.wait(3)

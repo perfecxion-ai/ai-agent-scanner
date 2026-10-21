@@ -8,8 +8,9 @@ a comprehensive test of every AI attack surface.
 The [lab remediation gate](docs/BETA_REMEDIATION.md) is closed for limited
 single-operator beta testing on runtime revision `82ee7d5`. This is not
 production or enterprise approval. Detection sensitivity remains unvalidated;
-zero findings and inconclusive results are not clean security verdicts. The
-server has no supported protected-canary configuration input; see
+zero findings and inconclusive results are not clean security verdicts. Server
+security-only scans support operator-configured system-prompt canary references;
+this closes an input gap, not the detection-sensitivity gap. See
 [evidence setup and limits](docs/detection-evidence.md).
 
 ## Install and try locally

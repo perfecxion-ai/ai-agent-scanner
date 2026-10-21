@@ -175,9 +175,56 @@ The wildcard detection constant retains its justified B104 suppression, isolated
 so the installed Bandit reports no stale suppression warnings.
 
 These are local synthetic diagnostics/privacy regressions, not another cloud
-retest or a detection-sensitivity improvement. Repeated finding presentation,
-supported server canary configuration, sampling/latency work, and enterprise
-acceptance remain separate. The PR and merged revision must pass current CI.
+retest or a detection-sensitivity improvement. PR #51 and its merged revision
+passed all eight CI jobs. Repeated finding presentation, sampling/latency work,
+and enterprise acceptance remain separate.
+
+### Server evidence-reference slice
+
+Named server profiles enable normal system-prompt canary input for security-only
+API scans and saved-template/schedule workflows. No stored discovery report is
+edited and no score or finding is seeded. The registry is private, bounded, and
+loaded only at startup; public endpoint/provider/model/organization/context pins
+are revalidated at admission and execution. Secrets are not pin inputs.
+
+The real local HTTP/API/dispatcher/file-backed SQLite regression exercises a
+disclosing and nondisclosing target through supported template APIs. The former
+produces 70/high, the latter null/inconclusive with no prompt-check passes. Saved
+pipelines, JSON/SARIF, compatibility results, and inventory agree. Source reports
+remain unchanged. Assertions check generated reports, queued definitions,
+templates, SQLite bytes, audit, logs, and captured model requests for marker and
+environment-reference absence. All target response text remains omitted.
+
+Negative tests cover private-file ownership/mode/type/size, duplicate/nonfinite
+and deeply nested JSON, missing/invalid environment values, tenant/asset/model
+binding, alias ambiguity, external reserved fields/pins, changed queued bindings,
+schedule preflight/admission races, and marker collisions with public labels,
+revision pins, source inventory, normalized URLs, and resolved credentials.
+Escaped-marker and HTTP-client path normalization regressions prevent reflected
+request data from acting as protected-canary evidence. Two selected models may
+share a protected fixture marker without mutating the original source.
+
+Four isolated subprocess tests exercise actual app startup with configured
+profiles, including valid, missing-secret, malformed-registry, and missing-file
+cases. Socket connection/bind, DNS, and SQLite connections are forbidden;
+the subprocess deadline is 15 seconds. Failures expose static reasons, not
+protected values or registry paths. This is startup configuration acceptance,
+not a new real-Gunicorn or deployed-secret-manager test.
+
+Independent review accepted the implementation after reproducing and closing
+reflection/privacy and multi-asset correctness blockers. Local integrated
+Linux/Python 3.10 acceptance passes 1504 tests with warnings treated as errors,
+including 96 new profile cases. Ruff, configured Bandit, distribution build,
+Twine metadata checks, and installed-wheel smoke pass. Independent review also
+passed 407 focused cases and a 1369-case full run before the final startup and
+adapter regressions; final integrated focused review covers those additions.
+Require all eight PR and post-merge CI jobs on this exact source before merge
+acceptance; local results alone do not establish native macOS or container gates.
+No cloud or real-model retest was performed for this slice. Detection sensitivity
+remains unvalidated, nondisclosure cannot establish safety, and raw database
+unknown-score placeholders were not migrated. Cross-tenant/authentication/path
+evidence configuration remains CLI/Python-only. Deployment and publication are
+not part of this change.
 
 The slice checkpoints below are chronological records. Their historical hold
 and pending-retest statements are superseded by the targeted acceptance above;

@@ -6,14 +6,20 @@ The [remediation gate](BETA_REMEDIATION.md) is closed for limited single-operato
 beta testing on runtime revision `82ee7d5`. Reviewed lab evidence and the targeted
 API retest support the core fixes, including unknown-risk projection. This is not
 enterprise sign-off. Conservative nondisclosure reporting does not establish
-representative detection sensitivity. A supported server protected-canary input
-or secret-reference contract remains a capability gap, separate from API score
+representative detection sensitivity. The subsequent server evidence-reference
+slice adds supported system-prompt canary profiles, separate from API score
 correctness; direct modification of stored reports is not a supported workflow.
+Other server authorization evidence inputs and enterprise secret management
+remain outside this slice.
 
-The next product priorities are safe server-side evidence references and a
-fixed-budget sensitivity benchmark. Parallel diagnostic work addresses O1/O2
-and O4/O5/O6 without changing evidence verdicts or claiming stronger detection.
+The next product priority is a fixed-budget sensitivity benchmark and a measured,
+bounded prompt/sampling improvement. The server canary input has local fixture
+acceptance, not a real-model sensitivity result. PR #51 addresses O1/O2/O4/O5/O6
+without changing evidence verdicts or claiming stronger detection.
 Finding presentation grouping must preserve raw occurrences and lifecycle IDs.
+Keep raw database unknown-score migration separate; new consumers must use saved
+pipeline verdicts and canonical projections rather than treating placeholder
+zeros as assessments. No enterprise readiness claim follows from these slices.
 
 Build a defensible AI asset inventory and security assessment tool for security
 engineers. Preserve local CLI use and add a reliable single-operator server.

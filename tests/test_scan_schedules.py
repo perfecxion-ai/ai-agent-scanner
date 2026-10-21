@@ -257,8 +257,8 @@ def test_changes_during_validation_require_review(api, monkeypatch, phase, mutat
         due(module, row["id"])
     original = module._prepare_template
 
-    def change(data, tenant):
-        result = original(data, tenant)
+    def change(data, tenant, **kwargs):
+        result = original(data, tenant, **kwargs)
         if mutation == "policy":
             monkeypatch.setitem(module.app.config, "SCAN_MAX_REQUESTS", 1)
         else:

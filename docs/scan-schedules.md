@@ -100,6 +100,15 @@ attempts. Paused schedules require operator review before resuming.
 
 ## Policy, templates, and restart
 
+Security-only templates may reference operator-configured
+[system-prompt canary profiles](detection-evidence.md#server-system-prompt-canary-profiles).
+Creation, enable, preflight, admission, and worker execution revalidate their
+public bindings and marker availability. A missing or changed binding fails
+closed; no canary value is stored in a schedule or its policy token. Registry
+changes require a controlled server restart and enabled schedules pause for
+review. Secret-only rotation is not detected as a public binding revision; use
+new profile/context versions for changed protected fixtures.
+
 Creation, enable, and each admission use the existing strict template/scan
 validator. This can resolve DNS and inspect bounded local files, but does not send
 model requests. Server policy and security-only source identity are captured
