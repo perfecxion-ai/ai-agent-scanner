@@ -168,4 +168,22 @@ jobs:
                   "Protected history did not return an empty scan list")
           print("Authenticated container smoke passed")
           PY
+            docker exec -i scanner python - <<'PY'
+          import os
+          from pathlib import Path
+          import stat
+
+          directory = Path("/app/instance")
+          metadata = directory.lstat()
+          if (not stat.S_ISDIR(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o700
+                  or metadata.st_uid != os.getuid()):
+              raise RuntimeError("Container state directory must be private and service-owned")
+          for path in (directory / "ai_agent_scanner.db", directory / "ai_agent_scanner.db.dispatcher.lock"):
+              metadata = path.lstat()
+              if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
+                  raise RuntimeError("Container database and dispatcher lock must be private regular files")
+              if metadata.st_uid != os.getuid():
+                  raise RuntimeError("Container state must belong to the service user")
+          print("Container state permissions passed")
+          PY
           done

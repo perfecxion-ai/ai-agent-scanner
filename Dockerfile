@@ -15,7 +15,7 @@ COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir --no-index --find-links=/wheels "ai-agent-scanner[server]" \
     && rm -rf /wheels \
     && useradd --create-home --shell /usr/sbin/nologin scanner \
-    && mkdir /app/instance \
+    && mkdir -m 0700 /app/instance \
     && chown scanner:scanner /app/instance
 COPY app.py ./
 COPY gunicorn.conf.py ./

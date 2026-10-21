@@ -15,8 +15,10 @@ asset, so repeated scans no longer collide on database primary keys. Security st
 `not_tested`, `skipped`, `completed`, `partial`, or `failed`. Failed required
 checks retain available evidence and make the scan `partial`.
 Missing endpoints are skipped. Risk is unknown (`null` in versioned JSON) unless assessment ran.
-New assessment requires known, validated check records with at least one completed
-passed or confirmed check. `risk_assessment_status` and the risk-assessed summary
+New assessment requires a confirmed finding matched to its validated confirmed
+check, even with partial execution, or a completed protected-access sampled pass.
+Prompt and tenant nondisclosure are inconclusive, not passes.
+`risk_assessment_status` and the risk-assessed summary
 counts distinguish completed execution from an actual assessment. See
 [versioned check contracts](result-contracts.md).
 Legacy numeric columns retain zero for compatibility; use the versioned result's state and risk.

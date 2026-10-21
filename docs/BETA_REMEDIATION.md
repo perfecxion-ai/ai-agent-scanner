@@ -27,11 +27,13 @@ passed. Record actual acceptance results in [validation](VALIDATION.md).
 
 The implementation now addresses all 22 reported items through scoped fixes or
 honest supported limitations. PRs #44-#46 cover portability/private exports,
-verdicts, and mixed-network transport. The operator-workflow follow-up covers
+verdicts, and mixed-network transport. PR #47 covers operator workflows:
 source reuse, CLI model/budget controls, identity aliases, and accurate guidance.
 MCP controls still sample one page; a missing protected tool now emits an explicit
 warning and stays inconclusive, not passed. Local regressions are not a closure
 of the external lab findings until the exact merged revision is retested there.
+A related storage follow-up protects new server files and tests actual container
+ownership/permissions across restart, without modifying existing mounted data.
 
 ## Reopening the beta
 

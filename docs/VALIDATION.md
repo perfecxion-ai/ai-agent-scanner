@@ -116,6 +116,25 @@ certification. No cloud VM was started, real target scanned, package published,
 or remote service deployed. The beta stays held for exact-revision lab retesting
 and the separate enterprise-readiness contract.
 
+### New server-state permission defaults
+
+The storage follow-up passes 1242 local Linux/Python 3.10 tests, Ruff and the
+configured Bandit gate including Gunicorn configuration. Seven new mandatory
+subprocess regressions verify import does not change the caller's umask, rejected
+worker counts fail before changing it, and actual entrypoint/worker hooks create
+0700 directories plus 0600 SQLite/journal/lock files under an inherited 022 mask.
+Existing 0644 files and 0755 directories remain unchanged. An independent actual
+Gunicorn run with a copied public app and fresh private SQLite state passed
+readiness with a 0700 default instance and 0600 database/lock, then stopped cleanly.
+No deployed or operator database was opened or changed.
+
+Container CI now checks the fresh instance, database/lock modes and file ownership
+after authenticated readiness and again after restart. The new PR and merged
+revision must pass this actual-container assertion before claiming it. Existing
+mounted volumes and retained historical reports need their own operator review;
+these defaults do not repair their permissions or sanitize old report contents.
+The real-service lab retest and enterprise sign-off remain outstanding.
+
 ### Historical local-beta checkpoint
 
 - Local Linux/Python 3.10.20: 1109 pytest cases passed. The suite invokes 78 Node
