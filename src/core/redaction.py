@@ -14,6 +14,18 @@ def sensitive_key(key):
     return normalized in ('cookie', 'setcookie') or any(word in normalized for word in _SENSITIVE)
 
 
+def contains_literal(value, protected):
+    """Check raw JSON string leaves and keys without serialization escaping."""
+    if isinstance(value, str):
+        return protected in value
+    if isinstance(value, dict):
+        return any(contains_literal(key, protected) or contains_literal(item, protected)
+                   for key, item in value.items())
+    if isinstance(value, list):
+        return any(contains_literal(item, protected) for item in value)
+    return False
+
+
 def collect_secrets(value):
     secrets = set()
     if isinstance(value, dict):

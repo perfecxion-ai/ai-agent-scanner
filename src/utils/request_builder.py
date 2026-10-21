@@ -4,6 +4,8 @@ import json
 import os
 import re
 from urllib.parse import urlsplit, urlunsplit, quote, unquote
+from yarl import URL
+from src.core.redaction import contains_literal
 
 
 SUPPORTED_PROVIDERS = {'openai', 'openai-compatible', 'vllm', 'ollama', 'anthropic', 'google', 'gemini'}
@@ -81,6 +83,9 @@ def extract_response_text(response_text):
 
 def construct_agent_request(agent, payload):
     """Return a supported POST request or None when execution lacks required configuration."""
+    protected = agent.get('system_prompt_canary')
+    if isinstance(protected, str) and protected and isinstance(payload, str) and protected in payload:
+        return None
     endpoint = agent.get('endpoint')
     provider = str(agent.get('provider', '')).lower()
     if not endpoint or provider not in SUPPORTED_PROVIDERS:
@@ -135,4 +140,9 @@ def construct_agent_request(agent, payload):
                 'generationConfig': {'maxOutputTokens': 100}}
         if key:
             headers['x-goog-api-key'] = key
-    return {'method': 'POST', 'url': url, 'headers': headers, 'json': body}
+    result = {'method': 'POST', 'url': url, 'headers': headers, 'json': body}
+    if isinstance(protected, str) and protected:
+        if (contains_literal(result, protected) or protected in str(URL(url))
+                or protected in json.dumps(result)):
+            return None
+    return result
