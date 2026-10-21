@@ -1,6 +1,10 @@
 # Engineering validation checkpoint
 
 Date: 2026-10-21. This records the beta build-out, not a release certification.
+The beta is now held following external lab validation of verdict accuracy,
+mixed-network workflows, evidence privacy, and macOS temporary-path handling.
+The historical green results below do not overrule those reproductions. Follow
+the [remediation gate](BETA_REMEDIATION.md) for current acceptance requirements.
 The first checkpoint followed PRs #1 through #14. PRs #15 through #22 add
 discovery, check contracts, SQLite upgrades/audit history, local queue acceptance,
 and dashboard evidence views. None of these merges publishes a package.
@@ -20,6 +24,19 @@ PR #42 closes the local-beta acceptance slice with a real offline operator flow,
 authenticated container restart checks, corrected setup, and a finite test guide.
 
 ## Automated checks
+
+### Remediation infrastructure slice
+
+The first remediation slice passes 1120 local Linux/Python 3.10 tests, Ruff, and
+the configured Bandit gate. Fifty-seven focused cases cover report permissions,
+atomic replacement, failed-write preservation, symlink rejection, and disposable
+backup behavior. Both normal and optimized backup commands pass all eight cases.
+A synthetic symlinked temporary ancestor passes in both modes and is cleaned up;
+owned child/database symlinks remain rejected. A new native macOS CI job must
+pass before claiming macOS acceptance. This slice alone does not repair risk
+verdicts or lift the beta hold.
+
+### Historical local-beta checkpoint
 
 - Local Linux/Python 3.10.20: 1109 pytest cases passed. The suite invokes 78 Node
   controller tests, which also passed independently.
