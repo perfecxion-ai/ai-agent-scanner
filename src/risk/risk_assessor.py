@@ -31,6 +31,20 @@ from src.frameworks.mitre_atlas import (
 
 SEVERITY_SCORES = {'critical': 90.0, 'high': 70.0, 'medium': 40.0, 'low': 15.0, 'info': 1.0}
 
+
+def risk_level_for_score(risk_score: float) -> str:
+    """Apply the current policy's level thresholds without recalculating a score."""
+    if risk_score >= 80:
+        return 'critical'
+    if risk_score >= 60:
+        return 'high'
+    if risk_score >= 30:
+        return 'medium'
+    if risk_score >= 10:
+        return 'low'
+    return 'minimal'
+
+
 class RiskAssessment:
     """
     Comprehensive risk assessment engine for AI agents with vulnerability scoring.
@@ -275,16 +289,7 @@ class RiskAssessment:
     
     def _determine_risk_level(self, risk_score: float) -> str:
         """Determine risk level category from numerical score"""
-        if risk_score >= 80:
-            return 'critical'
-        elif risk_score >= 60:
-            return 'high'
-        elif risk_score >= 30:
-            return 'medium'
-        elif risk_score >= 10:
-            return 'low'
-        else:
-            return 'minimal'
+        return risk_level_for_score(risk_score)
     
     def _generate_risk_summary(self, vulnerabilities: List[Dict[str, Any]], risk_score: float) -> str:
         """Generate human-readable risk summary"""
