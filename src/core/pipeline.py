@@ -73,6 +73,9 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
                     result.update(status="failed", error="Invalid security check result", vulnerabilities=[], checks=[])
             else:
                 result["checks"] = missing_checks([], "No check-level evidence supplied")
+            if result.get("status") == "completed" and not any(
+                    check["responses_evaluated"] for check in result["checks"]):
+                result.update(status="partial", reason="No security checks evaluated a response")
             if not risk_assessment_eligible(result):
                 result["overall_risk_score"] = None
                 if "risk_level" in result:
@@ -81,13 +84,13 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
             secrets.update(collect_secrets(result))
             security_results.append(result)
     completed = [result for result in security_results if result["status"] == "completed"]
-    eligible = [result for result in completed if risk_assessment_eligible(result)]
+    eligible = [result for result in security_results if risk_assessment_eligible(result)]
     risk_status = "not_assessed" if completed and not eligible else "not_run"
     risks = []
     if eligible:
         try:
             risks = await risk.assess_risks(eligible)
-            risk_status = "completed"
+            risk_status = "partial" if any(item["status"] != "completed" for item in eligible) else "completed"
         except Exception:
             risk_status = "failed"
     tests_by_id = {result["agent_id"]: result for result in security_results}
@@ -108,9 +111,11 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         assessment = risks_by_id.get(agent["id"], {})
         agent["security_status"] = test.get("status", "not_tested")
         agent["vulnerabilities"] = test.get("vulnerabilities", [])
+        agent["observations"] = test.get("observations", [])
         agent["checks"] = test.get("checks", missing_checks([], "Security testing was not requested"))
         agent["risk_score"] = assessment.get("overall_risk_score")
         agent["risk_level"] = assessment.get("risk_level", "unknown")
+        agent["risk_coverage_status"] = assessment.get("coverage_status", "not_assessed")
         public_agents.append(agent)
     observations = public_agents
     findings = [finding for agent in observations for finding in agent["vulnerabilities"]]
@@ -124,7 +129,7 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         "check_schema_version": CHECK_SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": scan_type,
-        "status": "partial" if failed or partial or transport_incomplete or risk_status == "failed" else "completed",
+        "status": "partial" if failed or partial or skipped or transport_incomplete or risk_status == "failed" else "completed",
         "transport_incomplete": transport_incomplete,
         "risk_assessment_status": risk_status,
         "agents": observations,
@@ -158,6 +163,8 @@ def to_sarif(result):
     complete = result.get("status") == "completed" and not any(
         summary.get(key, 0) for key in ("agents_failed", "agents_partial", "agents_skipped", "agents_not_tested")
     )
+    if result.get("source_inventory", {}).get("coverage_complete") is False:
+        complete = False
     report["runs"][0]["invocations"][0]["executionSuccessful"] = complete
     report["runs"][0]["properties"] = {
         "scan_status": result.get("status"), "summary": summary,
@@ -165,4 +172,6 @@ def to_sarif(result):
         "checks": [{"agent_id": agent["id"], **check}
                    for agent in result.get("agents", []) for check in agent.get("checks", [])],
     }
+    if "source_inventory" in result:
+        report["runs"][0]["properties"]["source_inventory"] = deepcopy(result["source_inventory"])
     return report

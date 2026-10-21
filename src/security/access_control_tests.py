@@ -22,10 +22,11 @@ import logging
 import base64
 from http.cookies import SimpleCookie, CookieError
 from typing import List, Dict, Any, Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 import uuid
 from datetime import datetime, timezone
-from src.core.contracts import checked, has_canary, record_interaction
+from src.core.contracts import checked, has_canary, record_interaction, usable_model_response
+from src.utils.request_builder import construct_agent_request
 
 
 def _authentication_prerequisite(agent):
@@ -108,6 +109,8 @@ class AccessControlTester:
             return []
         
         self.logger.info(f"Testing agent {agent.get('name', 'unknown')} for access control vulnerabilities")
+
+        vulnerabilities.extend(await self._test_unauthenticated_inference(agent))
         
         # Test 1: Authentication bypass
         auth_vulns = await self._test_authentication_bypass(agent)
@@ -134,6 +137,45 @@ class AccessControlTester:
         vulnerabilities.extend(session_vulns)
         
         return vulnerabilities
+
+    @checked("unauthenticated_inference", "anonymous-model-call-v1",
+             prerequisite=lambda agent: "Anonymous inference requires a query-free endpoint"
+             if urlsplit(agent.get('endpoint', '')).query else None,
+             absence_reason="No anonymous inference response observed; authorization policy is not established")
+    async def _test_unauthenticated_inference(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Observe open inference separately from proven access to protected data."""
+        request = construct_agent_request(agent, "Reply with the word hello.")
+        if request is None:
+            return []
+        # Explicitly omit every credential-bearing header, including auto-resolved keys.
+        try:
+            async with SafeSession(timeout=self.session_timeout) as session:
+                async with session.request(request['method'], request['url'],
+                                           headers={'Content-Type': 'application/json'},
+                                           json=request['json'], allow_redirects=False) as response:
+                    text = await response.text()
+                    if response.status in (401, 403):
+                        record_interaction(True)
+                        return []
+                    usable = 200 <= response.status < 300 and usable_model_response(text)
+                    record_interaction(usable)
+                    if not usable:
+                        return []
+                    return [{
+                        'id': str(uuid.uuid4()), 'agent_id': agent.get('id'),
+                        'vulnerability_type': 'unauthenticated_inference', 'severity': 'info',
+                        'evidence_status': 'heuristic', 'title': 'Anonymous Inference Observed',
+                        'description': 'A model response was returned without scanner credentials. '
+                                       'Review intended access policy; protected-resource access is not proven.',
+                        'authentication_requirement_declared': agent.get('authentication_required') is True,
+                        'status_code': response.status, 'confidence': 1.0,
+                        'timestamp': datetime.now(timezone.utc).isoformat(),
+                        'remediation': 'Review network exposure, authentication, and inference quotas.'
+                    }]
+        except Exception:
+            record_interaction(False)
+            self.logger.debug('Anonymous inference request failed')
+            return []
     
     @checked("authentication_bypass", "18-header-variations-denied-control-v1",
              prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
@@ -223,7 +265,7 @@ class AccessControlTester:
                             'method': test['name'],
                             'headers_used': test['headers'],
                             'status_code': response.status,
-                            'response_excerpt': response_text.replace(agent['protected_response_marker'], '[MARKER_REDACTED]')[:300],
+                            'response_excerpt': '[RESPONSE_TEXT_OMITTED]',
                             'timestamp': datetime.now(timezone.utc).isoformat(),
                             'confidence': 0.9,
                             'remediation': "Implement proper authentication checks and validate all authorization headers."
@@ -387,7 +429,7 @@ class AccessControlTester:
                                 'path': path,
                                 'full_url': test_url,
                                 'status_code': response.status,
-                                'response_excerpt': response_text.replace(marker, '[MARKER_REDACTED]')[:300],
+                                'response_excerpt': '[RESPONSE_TEXT_OMITTED]',
                                 'timestamp': datetime.now(timezone.utc).isoformat(),
                                 'confidence': 0.7,
                                 'remediation': "Implement proper authorization checks for all admin endpoints."
@@ -467,7 +509,7 @@ class AccessControlTester:
             # Test session fixation and cookie security
             async with SafeSession(timeout=self.session_timeout) as session:
                 async with session.get(endpoint) as response:
-                    record_interaction(200 <= response.status < 300)
+                    record_interaction(response.status in (401, 403) or 200 <= response.status < 300)
                     
                     # Check cookie security attributes
                     if 'set-cookie' in response.headers:

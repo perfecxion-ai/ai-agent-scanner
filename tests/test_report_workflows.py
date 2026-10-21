@@ -53,7 +53,8 @@ def test_completed_same_asset_resolves_but_missing_asset_does_not():
                                    'probe_version': '1:fixture', 'status': 'completed',
                                    'outcome': 'passed', 'responses_evaluated': 1, 'requests_attempted': 1,
                                    'evidence_context_id': 'lab-policy-v1'}]
-    assert len(compare_reports(before, after)['resolved']) == 1
+    assert compare_reports(before, after)['resolved'] == []
+    assert len(compare_reports(before, after)['resolution_unverified']) == 1
     after['agents'] = []
     result = compare_reports(report(), after)
     assert result['resolved'] == []

@@ -19,7 +19,7 @@ PLANNED_RULES = tuple("prompt_injection." + category for category in (
     "authentication_bypass", "weak_credentials", "weak_api_key", "authorization_bypass",
     "no_rate_limiting", "insecure_session_management", "pii_disclosure",
     "tenant_isolation_violation", "data_retention", "privacy_transparency_issue",
-    "information_disclosure_in_errors")
+    "information_disclosure_in_errors", "unauthenticated_inference")
 CheckStatus = Literal["completed", "skipped", "failed"]
 EvidenceOutcome = Literal["passed", "confirmed", "heuristic", "inconclusive", "not_evaluated"]
 
@@ -153,7 +153,7 @@ def usable_model_response(text):
     return isinstance(body, dict) and bool(extract_response_text(text).strip())
 
 
-def checked(rule, spec, prerequisite=None, oracle=None, coverage=None):
+def checked(rule, spec, prerequisite=None, oracle=None, coverage=None, absence_reason=None):
     """Track a probe group without storing prompts, credentials, or response bodies."""
     def decorate(method):
         @wraps(method)
@@ -198,6 +198,8 @@ def checked(rule, spec, prerequisite=None, oracle=None, coverage=None):
                     status = "completed"
                     outcome = ("confirmed" if "confirmed" in evidence else "heuristic" if evidence else
                                "passed" if oracle and oracle(agent) and execution.decisive else "inconclusive")
+                    if outcome == "inconclusive" and absence_reason:
+                        reason = absence_reason
                 record = CheckRecord(rule_id, probe_id, version, status, outcome,
                                      attempts, execution.evaluated, reason,
                                      agent.get("evidence_context_id"))
@@ -234,6 +236,12 @@ def missing_checks(records, reason):
 
 
 def proves_absence(check, finding):
+    # Finite stochastic samples cannot establish remediation of a disclosure.
+    rule = finding.get("rule_id", finding.get("vulnerability_type", ""))
+    if not isinstance(rule, str):
+        return False
+    if rule == "prompt_injection" or rule.startswith("prompt_injection.") or rule == "tenant_isolation_violation":
+        return False
     try:
         record = CheckRecord(**check)
     except (TypeError, ValueError):
@@ -249,16 +257,30 @@ def proves_absence(check, finding):
 
 
 def risk_assessment_eligible(result):
-    """New assessments require valid, conclusive check-level evidence."""
-    if result.get("status") != "completed" or result.get("check_schema_version") != CHECK_SCHEMA_VERSION:
+    """Confirmed evidence survives incomplete coverage; absence needs completion."""
+    if result.get("status") not in {"completed", "partial", "failed"} or result.get("check_schema_version") != CHECK_SCHEMA_VERSION:
         return False
     try:
         validate_checks(result.get("checks", []))
     except (TypeError, ValueError):
         return False
-    return any(
-        check.get("status") == "completed" and check.get("outcome") in {"passed", "confirmed"}
+    confirmed = confirmed_findings(result)
+    if confirmed:
+        return True
+    return result.get("status") == "completed" and any(
+        check.get("status") == "completed" and check.get("outcome") == "passed"
+        and not check.get("rule_id", "").startswith("prompt_injection")
+        and check.get("rule_id") != "tenant_isolation_violation"
         for check in result.get("checks", []))
+
+
+def confirmed_findings(result):
+    """Select findings with matching versioned confirmed check evidence."""
+    identities = {(check.get("rule_id"), check.get("probe_id"), check.get("probe_version"))
+                  for check in result.get("checks", []) if check.get("outcome") == "confirmed"}
+    return [finding for finding in result.get("vulnerabilities", [])
+            if finding.get("evidence_status") == "confirmed"
+            and (finding.get("rule_id"), finding.get("probe_id"), finding.get("probe_version")) in identities]
 
 
 def validate_scan_result(result):

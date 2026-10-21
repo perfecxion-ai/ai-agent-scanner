@@ -133,7 +133,7 @@ def test_offline_operator_template_schedule_and_reports(offline_operator):
         wait_for(module, lambda: client.get(f'/api/scans/{scan_id}/status', headers=headers),
                  lambda data: data['status'] in module.TERMINAL_STATES)
         status = request('GET', f'/api/scans/{scan_id}/status')
-        assert status['status'] == 'completed' and status['agents_discovered'] == 1
+        assert status['status'] == 'partial' and status['agents_discovered'] == 1
         result = request('GET', f'/api/scans/{scan_id}/results')['results']
         report = request('GET', f'/api/scans/{scan_id}/report?format=json')
         assert result['pipeline'] == report
@@ -153,7 +153,7 @@ def test_offline_operator_template_schedule_and_reports(offline_operator):
         assert sarif['runs'][0]['properties']['summary'] == report['summary']
         audit = request('GET', f'/api/scans/{scan_id}/audit')['events']
         assert [event['event'] for event in audit] == ['admitted', 'claimed', 'terminal']
-        assert audit[-1]['status'] == 'completed'
+        assert audit[-1]['status'] == 'partial'
         return report
 
     manual_report = inspect_completed(manual_id)

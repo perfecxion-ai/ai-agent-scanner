@@ -27,7 +27,7 @@ import uuid
 from datetime import datetime, timezone
 
 from src.utils.request_builder import construct_agent_request, extract_response_text
-from src.core.contracts import checked, has_canary, record_interaction, usable_model_response
+from src.core.contracts import checked, record_interaction, usable_model_response
 
 
 class PromptInjectionTester:
@@ -278,8 +278,8 @@ class PromptInjectionTester:
         return vulnerabilities
     
     @checked(lambda self, category, payloads: "prompt_injection." + category,
-             lambda self, category, payloads: payloads[:5],
-             oracle=lambda agent: has_canary(agent, 'system_prompt_canary'))
+             lambda self, category, payloads: {"semantics": "nondisclosure-inconclusive-v2", "payloads": payloads[:5]},
+             absence_reason="No protected disclosure observed in this finite sample; canary seeding and safety are not established")
     async def _test_injection_category(self, agent: Dict[str, Any],
                                      category: str, payloads: List[str]) -> List[Dict[str, Any]]:
         """Test a specific category of injection attacks"""
@@ -328,9 +328,7 @@ class PromptInjectionTester:
                         return None
                     response_text = await response.text()
                     usable = usable_model_response(response_text)
-                    record_interaction(usable,
-                                       has_canary(agent, 'system_prompt_canary')
-                                       and agent['system_prompt_canary'] not in payload)
+                    record_interaction(usable)
                     if not usable:
                         return None
                     
@@ -392,7 +390,7 @@ class PromptInjectionTester:
                 'title': 'Protected System Canary Disclosure' if confirmed else 'Unverified Prompt Injection Indicator',
                 'description': 'Configured protected canary was returned.' if confirmed else 'Response text requires validation against target policy; it does not establish a bypass.',
                 'payload': payload,
-                'response_excerpt': (response_text.replace(canary, '[CANARY_REDACTED]') if confirmed else response_text)[:500],
+                'response_excerpt': '[GENERATED_TEXT_OMITTED]',
                 'detected_patterns': detected_patterns,
                 'status_code': status_code,
                 'timestamp': datetime.now(timezone.utc).isoformat(),
