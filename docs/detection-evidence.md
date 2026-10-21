@@ -6,8 +6,11 @@ A model's refusal, claimed persona, generated sample record, or mention of an
 administrative feature is not proof of a security boundary violation.
 
 The following optional fields belong to the agent configuration passed to the
-Python security engine. Discovery does not populate them automatically, and the
-CLI does not yet expose an evidence configuration file.
+Python security engine or explicit `agents` entries in `scan --config FILE`.
+Discovery does not populate them automatically. The CLI config accepts these
+fields, `model`, `api_key_env`, and a public `evidence_context_id`; do not place
+credentials in the JSON. Model overrides for discovered assets select only a
+model and never enable evidence or authentication controls.
 
 | Field | Required setup |
 | --- | --- |

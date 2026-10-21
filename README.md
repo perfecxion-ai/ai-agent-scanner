@@ -5,6 +5,10 @@ single-operator web application. Findings carry evidence; uncertain indicators
 remain observations. This project is a beta, not a compliance certification or
 a comprehensive test of every AI attack surface.
 
+Beta release is held while the [lab findings are remediated](docs/BETA_REMEDIATION.md).
+Earlier infrastructure acceptance does not establish risk-verdict accuracy or
+production readiness. Do not interpret zero findings as a clean security verdict.
+
 ## Install and try locally
 
 Python 3.10 through 3.13 are supported.
@@ -27,7 +31,7 @@ ai-agent-scanner evaluate --output fixture-metrics.json
 To discover an already running local Ollama service, scan only its host:
 
 ```bash
-ai-agent-scanner discover --network 127.0.0.1/32 --output local-inventory.json
+ai-agent-scanner discover --network 127.0.0.1/32 --allow-loopback --output local-inventory.json
 ```
 
 This runs network discovery, not model generation or a complete vulnerability
@@ -36,8 +40,12 @@ Ollama's default port. It samples read-only model inventories and identifies
 protocol compatibility, not vendor ownership. See [network discovery boundaries](docs/network-discovery.md).
 A missing service can produce an empty inventory.
 The shared scan budget defaults to 500 DNS/TCP/HTTP attempts and a 1 MiB
-response limit; exhausted budgets produce incomplete results. Local CLI targets
-are operator-selected. Server scans additionally require explicit allowlists.
+response limit; exhausted budgets produce incomplete results. `discover` and
+`scan` expose `--max-requests` (1-10000), `--max-response-bytes` (1-16777216),
+and `--timeout-seconds` (1-3600, default 300). Loopback requires
+`--allow-loopback`; metadata and reserved address classes remain forbidden.
+Local CLI targets are operator-selected. Server scans additionally require
+explicit allowlists and enforce their own configured budgets.
 
 ## Supported workflows
 
@@ -83,6 +91,15 @@ Explicit agent entries require `id`, `name`, `endpoint`, and `provider`. Active
 model probes also require an explicitly selected model and a supported protocol;
 missing configuration produces skipped results. See [provider adapters](docs/provider-adapters.md)
 for model and environment-based credential configuration.
+For discovered endpoints, first run `discover` and select a stable `agents[].id`
+from its JSON. Then pass repeatable `--model-override ASSET_ID=MODEL` flags to
+`scan` with the same target scope. IDs must match exactly and uniquely; unknown
+or ambiguous IDs fail before active security probes. Selection binds only the
+model, never credentials or evidence controls. Models are not guessed or shared
+across providers. A scan with assets but no completed security checks exits
+nonzero and retains its report for inspecting skipped prerequisites.
+The deprecated `python cli.py` entry point forwards to this same CLI; legacy
+target flags forward to `discover` and accept the same budgets.
 Protected canaries and response markers are optional evidence configuration;
 the scanner cannot infer their provenance. See [scan configuration](docs/scan-results.md)
 and [detection evidence](docs/detection-evidence.md) before active testing.
