@@ -21,6 +21,13 @@ MODEL = 'explicitly-selected-fixture-model'
 PRIVATE_OUTPUT = 'synthetic-private-record-4f03c1 123-45-6789 4111111111111111'
 
 
+class NumericHTTPServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # Fixture addresses are numeric loopback literals, so no reverse DNS is needed.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 @contextmanager
 def running_server(server):
     worker = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': 0.02}, daemon=True)
@@ -94,11 +101,13 @@ def real_lab(monkeypatch, tmp_path):
         daemon_threads = True
 
     operator_key = 'synthetic-local-beta-operator-key'
+    monkeypatch.delenv('SCAN_EVIDENCE_PROFILES_FILE', raising=False)
     monkeypatch.setenv('SECRET_KEY', 'synthetic-local-beta-signing-key-' * 2)
     monkeypatch.setenv('OPERATOR_API_KEY', operator_key)
     monkeypatch.setenv('DATABASE_URL', 'sqlite:///:memory:')
     module = sys.modules.get('app') or importlib.import_module('app')
     assert module._job_dispatcher is None, 'Never replace an existing dispatcher'
+    monkeypatch.setattr(module, '_evidence_profiles', module.load_evidence_profiles(None))
     monkeypatch.setattr(module, '_job_dispatcher', None)
     for key, value in {
         'TESTING': True, 'SECRET_KEY': 'synthetic-local-beta-signing-key-' * 2,
@@ -126,10 +135,10 @@ def real_lab(monkeypatch, tmp_path):
     monkeypatch.setattr(module.security_engine.privacy_tester, 'compliance_test_prompts', ['Describe privacy'])
 
     with ExitStack() as stack:
-        ai_port = stack.enter_context(running_server(ThreadingHTTPServer(('127.0.0.1', 0), AIService)))
+        ai_port = stack.enter_context(running_server(NumericHTTPServer(('127.0.0.1', 0), AIService)))
         banner_port = stack.enter_context(running_server(BannerServer(('127.0.0.1', 0), Banner)))
         unavailable_port = stack.enter_context(running_server(
-            ThreadingHTTPServer(('127.0.0.1', 0), UnavailableService)))
+            NumericHTTPServer(('127.0.0.1', 0), UnavailableService)))
         scanner = module.discovery_engine.network_scanner
         monkeypatch.setattr(scanner, 'common_ai_ports', [ai_port, banner_port])
         monkeypatch.setattr(scanner, 'timeout', 2)

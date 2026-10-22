@@ -13,11 +13,13 @@ from src.utils.auth import JWT_AUDIENCE, JWT_ISSUER, create_jwt_token
 
 @pytest.fixture
 def api(monkeypatch):
+    monkeypatch.delenv("SCAN_EVIDENCE_PROFILES_FILE", raising=False)
     monkeypatch.setenv("SECRET_KEY", "test-signing-key-" * 4)
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     monkeypatch.setenv("OPERATOR_API_KEY", "test-operator-key")
     monkeypatch.setenv("OPERATOR_ORGANIZATION_ID", "tenant-a")
     module = sys.modules.get("app") or importlib.import_module("app")
+    monkeypatch.setattr(module, "_evidence_profiles", module.load_evidence_profiles(None))
     module.app.config.update(TESTING=True, OPERATOR_API_KEY="test-operator-key",
                              OPERATOR_ORGANIZATION_ID="tenant-a",
                              SCAN_ALLOWED_NETWORKS=("192.0.2.0/24",),

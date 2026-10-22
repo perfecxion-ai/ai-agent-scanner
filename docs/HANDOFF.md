@@ -379,6 +379,19 @@ implementation priorities, not additional deployment or publication authority.
 
 ## Verification and review
 
+Synthetic API/local-lab/offline-operator fixtures exclude inherited operator
+registry settings and temporarily isolate cached registries. Queue and backup
+acceptance runners clear that setting before app import and reject a cached
+nonempty registry before database access. Backup's outer child-environment filter
+remains in place. Eight bounded regressions cover forbidden private-file access,
+cached rejection, and parent environment/registry restoration. Loopback HTTP
+fixtures bind numeric names without reverse DNS; their fresh/cached setup is
+tested with reverse lookups forbidden. A Linux symlink-ancestor regression checks
+owned temporary-root canonicalization without weakening database leaf guards.
+The browser fixture has equivalent isolation
+in its presentation slice. These are local harness guards, not secret-manager or
+runtime deployment changes. See [validation](VALIDATION.md#synthetic-evaluation-registry-isolation).
+
 ```bash
 python -m pytest tests/
 ruff check .

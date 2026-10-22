@@ -42,10 +42,14 @@ def number_between(low, high):
 
 def run(args, database):
     # These are process-local synthetic settings, never the operator's database.
+    os.environ.pop("SCAN_EVIDENCE_PROFILES_FILE", None)
     os.environ.update(SECRET_KEY="synthetic-queue-benchmark-key-" * 2,
                       OPERATOR_API_KEY="", FLASK_DEBUG="false",
                       DATABASE_URL=f"sqlite:///{database}")
     import app as server
+
+    if server._evidence_profiles._profiles:
+        raise ValueError("Queue benchmark requires an empty evidence registry")
 
     counters = {"active": 0, "peak": 0, "claims": []}
     lock = threading.Lock()

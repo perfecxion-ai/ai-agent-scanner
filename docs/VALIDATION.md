@@ -702,5 +702,38 @@ identity; global identity is unchanged.
   audit acceptance remain pending. Known SQLite upgrade tests and a synthetic
   queue workload do not close these release-level gaps.
 
+## Synthetic evaluation registry isolation
+
+The optional queue benchmark and API/local-lab/offline-operator fixtures must not
+inherit or reuse an operator's startup evidence registry. Standalone queue and
+backup runners clear the registry-path setting and reject a cached nonempty
+registry before app-context, database, or schema access. Unit fixtures also
+isolate cached registry objects and restore their original environment/object
+on teardown. Normal configured server behavior is unchanged. Backup acceptance
+retains its outer `SCAN_` child-environment filter; the inner entrypoint now also
+clears the registry setting for direct child invocations.
+
+Eight new bounded regressions cover missing/private paths with forbidden-open
+guards, fresh imports, cached fixtures, restoration, and direct backup children.
+The native macOS diagnostic run located a 20-second fixture timeout at the first
+HTTP server constructor. That fixture now binds numeric server names without
+reverse DNS; fresh and cached setup run with `getfqdn` and `gethostbyaddr`
+forbidden. The 20-second child deadline and bounded traceback diagnostics remain.
+A Linux symlink-ancestor regression verifies canonicalization of the owned
+temporary root while preserving database leaf guards; native CI remains pending.
+Before one additional quoted-identifier regression, the isolation branch passed
+1566 full-suite cases with warnings treated as errors and an inherited nonexistent
+registry path. Independent review passed 177 relevant cases. A final 55-case
+backup/isolation/workflow gate includes the hostile-identifier and symlink regressions and
+passes. Expanded Bandit covers both helpers; one narrow B608 suppression documents
+the existing escaped SQLite identifier query, with a regression proving hostile
+table-name text cannot alter other fixture tables. Ruff and whitespace checks pass.
+The reporting slice contributes its own separately recorded tests; branch counts
+should not be added as independent runs. Final combined CI, including native
+macOS, remains required before acceptance.
+This does not use an operator registry, database, or target, and does not replace
+the separate browser isolation regression. All eight PR/post-merge CI jobs are
+required on the final source before acceptance.
+
 See [engineering milestones](ENGINEERING_PLAN.md), [development checks](DEVELOPMENT.md),
 and [persistent job constraints](jobs.md).
