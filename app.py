@@ -48,6 +48,10 @@ from src.core.schema import initialize_schema, SCHEMA_VERSION
 from src.core.templates import project_template, template_revision
 from src.core.schedules import ScheduleService, schedule_definition
 from src.core.evidence_profiles import EvidenceProfileError, PIN_FIELD, load_evidence_profiles
+from src.security.prompt_suites import (
+    PIN_FIELD as PROMPT_SUITE_PIN_FIELD, PromptSuiteError, prompt_suite_pin,
+    validate_prompt_suite, validate_prompt_suite_agents,
+)
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -353,10 +357,21 @@ def start_scan():
 def _prepare_scan(data, tenant, *, retain_declaration=True, trusted_definition=False):
     """Validate current policy while retaining declared DNS and path intent."""
     pins = None
+    suite_pin = None
+    had_suite_pin = False
     if trusted_definition and isinstance(data, dict) and isinstance(data.get("scan_config"), dict):
         data = deepcopy(data)
         pins = data["scan_config"].pop(PIN_FIELD, None)
+        had_suite_pin = PROMPT_SUITE_PIN_FIELD in data["scan_config"]
+        suite_pin = data["scan_config"].pop(PROMPT_SUITE_PIN_FIELD, None)
     name, mode, scope, options = validate_request(data, app.config)
+    if "prompt_suite" in options:
+        current_suite_pin = prompt_suite_pin()
+        if trusted_definition and (not had_suite_pin or suite_pin != current_suite_pin):
+            raise ScopeValidationError("Prompt suite changed or is unavailable; review the scan definition")
+        options[PROMPT_SUITE_PIN_FIELD] = current_suite_pin
+    elif had_suite_pin:
+        raise ScopeValidationError("Prompt suite changed or is unavailable; review the scan definition")
     if mode == "security_only":
         source = ScanSession.query.filter_by(id=options["source_scan_id"], organization_id=tenant).first()
         if source is None:
@@ -376,6 +391,8 @@ def _prepare_scan(data, tenant, *, retain_declaration=True, trusted_definition=F
                 selected, options.get("evidence_profiles", {}), tenant, aliases, pins=pins)
             options["evidence_profiles"] = references
             options[PIN_FIELD] = revisions
+            if "prompt_suite" in options:
+                _prompt_suite_profile_agents(selected, references, tenant, revisions)
     elif retain_declaration:
         # Execution resolves these declarations again, rather than trusting stale DNS or symlinks.
         for key in ("network_ranges", "domains", "repositories", "traffic_sources"):
@@ -384,6 +401,37 @@ def _prepare_scan(data, tenant, *, retain_declaration=True, trusted_definition=F
     if options.get("evidence_profiles"):
         _evidence_profiles.validate_public_definition(definition, options["evidence_profiles"])
     return definition
+
+
+def _check_prompt_suite_pin(options):
+    """Recheck fixed public catalog identity without reading protected evidence."""
+    if "prompt_suite" in options:
+        try:
+            validate_prompt_suite(options["prompt_suite"])
+        except PromptSuiteError as exc:
+            raise ScopeValidationError(str(exc)) from None
+        current = prompt_suite_pin()
+        if options.get(PROMPT_SUITE_PIN_FIELD) != current:
+            raise ScopeValidationError("Prompt suite changed or is unavailable; review the scan definition")
+        return current
+    elif PROMPT_SUITE_PIN_FIELD in options:
+        raise ScopeValidationError("Prompt suite changed or is unavailable; review the scan definition")
+
+
+def _prompt_suite_profile_agents(agents, references, tenant, pins):
+    """Candidate API oracles come only from explicit profiles, never saved inputs."""
+    if any("system_prompt_canary" in agent for agent in agents):
+        # Reject instead of discarding secrets needed to redact skipped assets.
+        raise ScopeValidationError("Prompt suite requires fresh source inventory and explicit evidence profiles")
+    selected = deepcopy(agents)
+    for agent in selected:
+        agent.pop("evidence_context_id", None)
+    selected = _evidence_profiles.apply(selected, references, tenant, pins)
+    try:
+        validate_prompt_suite_agents(selected)
+    except PromptSuiteError as exc:
+        raise ScopeValidationError(str(exc)) from None
+    return selected
 
 
 def _source_inventory(source):
@@ -447,6 +495,7 @@ def _source_inventory(source):
 
 def _queue_scan(definition, tenant, actor, user_ip, *, before_commit=None):
     """Caller holds the admission lock; commit all admission records together."""
+    _check_prompt_suite_pin(definition["scan_config"])
     if ScanJob.query.filter_by(status="queued").count() >= app.config["SCAN_MAX_QUEUED"]:
         raise TooManyRequests("Scan queue is full")
     scan_id = generate_scan_id()
@@ -499,6 +548,7 @@ def _template_json(row, *, definition=True):
     if definition:
         result.update(_template_definition(row))
         result["scan_config"].pop(PIN_FIELD, None)
+        result["scan_config"].pop(PROMPT_SUITE_PIN_FIELD, None)
     return result
 
 
@@ -530,6 +580,7 @@ def templates_collection():
     with _admission_lock:
         if ScanTemplate.query.filter_by(organization_id=tenant).count() >= app.config["SCAN_MAX_TEMPLATES"]:
             raise TooManyRequests("Template limit reached")
+        _check_prompt_suite_pin(definition["scan_config"])
         row = ScanTemplate(id=uuid.uuid4().hex, organization_id=tenant,
                            created_by=g.user.get("user_id"), **definition)
         db.session.add(row)
@@ -552,6 +603,10 @@ def template_item(template_id):
         revision = template_revision(data.get("revision"))
         if revision != row.revision or revision == 2**31 - 1:
             raise Conflict("Template revision changed; reload before updating")
+        incoming = data.get("scan_config")
+        if (isinstance(incoming, dict) and "prompt_suite" in row.scan_config
+                and incoming.get("prompt_suite") == row.scan_config["prompt_suite"]):
+            _check_prompt_suite_pin(row.scan_config)
         definition = _prepare_template({key: value for key, value in data.items() if key != "revision"}, tenant)
     db.session.rollback()
     with _admission_lock:
@@ -561,6 +616,7 @@ def template_item(template_id):
             db.session.delete(row)
             db.session.commit()
             return jsonify({"success": True})
+        _check_prompt_suite_pin(definition["scan_config"])
         changed = db.session.execute(update(ScanTemplate).where(
             ScanTemplate.id == template_id, ScanTemplate.organization_id == tenant,
             ScanTemplate.revision == revision,
@@ -654,6 +710,9 @@ def _schedule_token(definition, tenant):
     """Public configuration and source identity only; no DNS or filesystem work."""
     policy = _schedule_policy()
     options = definition["scan_config"]
+    suite_revision = _check_prompt_suite_pin(options)
+    if "prompt_suite" in options:
+        policy["prompt_suite_revision"] = suite_revision
     if options.get("evidence_profiles") or PIN_FIELD in options:
         policy["evidence_profile_revisions"] = _evidence_profiles.token(
             options.get("evidence_profiles", {}), options.get(PIN_FIELD), tenant)
@@ -1224,6 +1283,9 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
     """Execute the full scan pipeline."""
 
     try:
+        _check_prompt_suite_pin(scan_config)
+        if "prompt_suite" in scan_config and (scan_type != "security_only" or not scan_config.get("evidence_profiles")):
+            raise ScopeValidationError("prompt_suite requires security_only with explicit evidence_profiles")
         with _scans_lock:
             _active_scans[scan_id] = {
                 "current_phase": "Starting scan...",
@@ -1259,15 +1321,24 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                     validate_agent_endpoints(source_agents, app.config)
                     if PIN_FIELD not in scan_config:
                         raise EvidenceProfileError()
-                    source_agents = _evidence_profiles.apply(
+                    apply_profiles = (_prompt_suite_profile_agents if "prompt_suite" in scan_config
+                                      else _evidence_profiles.apply)
+                    source_agents = apply_profiles(
                         source_agents, scan_config.get("evidence_profiles", {}),
                         current.organization_id, scan_config[PIN_FIELD])
                 source_coverage = {"scan_id": source.id, "status": source.status,
                                    "coverage_complete": source.status == "completed"}
                 if source.status == "partial":
                     source_coverage["warning"] = "Source inventory coverage is incomplete; only saved validated assets were tested"
+        execution_engine = security_engine
+        if "prompt_suite" in scan_config:
+            try:
+                validate_prompt_suite_agents(source_agents)
+            except PromptSuiteError as exc:
+                raise ScopeValidationError(str(exc)) from None
+            execution_engine = SecurityTestEngine(prompt_suite=scan_config["prompt_suite"])
         _update_progress(scan_id, 10, "Running scan pipeline")
-        result = await run_pipeline(discovery_engine, security_engine, risk_assessor,
+        result = await run_pipeline(discovery_engine, execution_engine, risk_assessor,
                                     scope, scan_type, agents=source_agents,
                                     agent_validator=lambda agents: validate_agent_endpoints(agents, app.config))
         result["scan_id"] = scan_id

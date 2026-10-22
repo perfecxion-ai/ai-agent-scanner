@@ -390,6 +390,58 @@ score. Quiet model runs and a met negative-control expectation are not security
 passes. Gate completion is evidence completeness, not general sensitivity,
 independent provenance, privacy certification, or candidate promotion.
 
+### Normal-scan experimental-suite acceptance
+
+After the CLI/server integration has merged and passed CI, pin the exact supplied
+revision for both installed CLI and Gunicorn. This is operator-workflow validation,
+not another comparative accuracy experiment. Do not relabel benchmark reports as
+normal scan results or require a nondeterministic model to disclose in every run.
+No cloud execution or deployment is performed by this guide itself.
+
+Use a fresh private server database and a predeclared small case list: one
+deterministic disclosing control, one refusing control, and the two existing
+protected model targets. Freeze endpoint/model/profile/context bindings, available
+model digests and versions, generation settings, and state/reset policy before
+results. Keep unavailable provenance explicitly unknown. Do not change target
+instructions after observing outcomes. All marker and credential values stay
+outside the checkout, command arguments, logs, and return bundle.
+
+1. Run each case once through normal `scan --config PRIVATE_FILE --prompt-suite
+   protected-disclosure-v1` and once through the normal server profile workflow,
+   not `benchmark-prompt-leaks.py`. Use the same protected configuration and
+   request-ready models. Preserve commands without secret values, exit codes,
+   JSON reports, SARIF, and saved API responses. Predeclare limits such as 150
+   shared attempts and 300 seconds per normal scan; seven prompt groups still
+   cap at 35 prompt attempts, with access/privacy work counted separately.
+2. Require 70/high on deterministic disclosure and null/inconclusive on the
+   refusing control unless separate conclusive evidence justifies another score.
+   For real models, require truthful evidence and counters, not a fixed hit rate.
+   Confirm candidate payload-derived probe versions match the shared catalog,
+   nondisclosure creates no passed prompt checks, and all response excerpts are
+   omitted. Record partial or skipped work without retrying it into acceptance.
+3. Exercise saved-template create, read, name-only update, and run with the public
+   selection retained and hidden pins absent from returned definitions. Capture
+   source reports before/after to establish immutability. Run one ordinary scan
+   without the option and verify it still selects the unchanged default prompts.
+4. Verify unknown selections, discovery-only selection, absent/mismatched profiles,
+   and caller-supplied internal pins fail without admissions. Preserve actual
+   response bodies and before/after job counts, not only assertion summaries.
+   Reuse one finalized partial source and confirm its coverage warning survives.
+5. Capture results, JSON/SARIF, inventory, high-risk filters, and audit bodies before
+   and after restart. Compare them with saved pipelines; do not claim missing
+   bodies were independently checked. Live schedule enablement is optional and
+   requires explicit authorization; otherwise record NOT RUN. Local tests cover
+   queue/catalog drift and schedule races without changing lab services.
+
+The driver must propagate every failed assertion and scanner exit appropriately;
+an expected partial scan needs an explicit expected-exit assertion, not a wrapper
+that swallows all failures. Sweep every returned file, including summaries, with
+all actual marker values available privately. Record which values and files were
+covered without printing values. Report runner and target retention/cleanup
+separately: a marker file on the runner is not target-only storage. Preserve
+failed setup attempts and driver revisions; do not replace them with a green
+summary. Use new job/output names and retain original artifacts.
+
 ### Return bundle
 
 Return a brief report with the exact SHA, commands, exit codes, environment/model

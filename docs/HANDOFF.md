@@ -140,9 +140,27 @@ configuration errors before candidate requests. Both the benchmark and candidate
 tester use the same frozen payloads and existing probe versions. Default catalogs,
 sampling, scope, scoring, and deadlines are unchanged. Independent copies and
 cross-asset collision checks protect concurrent use and public evidence identity.
-CLI/API selection, saved-definition pins, and operator workflow acceptance remain
-the next integration slice, not capabilities claimed by this foundation alone.
+CLI/API selection, saved-definition pins, and operator workflow acceptance are
+separately described in the integration slice below.
 See [local validation](VALIDATION.md#shared-experimental-prompt-catalog).
+
+Normal CLI and API scans now expose explicit `protected-disclosure-v1` selection.
+The CLI requires an explicit agents configuration kept private by the operator;
+server security-only scans require
+selected startup profiles for every request-ready model. Saved raw canaries
+cannot substitute for profiles. Source records stay unchanged. Jobs/templates
+pin the public catalog, reject caller pins and drift, and schedules revalidate
+before admission. Candidate engines are scan-local; defaults and shared budgets
+remain unchanged. JSON/SARIF labels identify selection, not successful execution.
+The complete template JSON editor preserves the option; the new-scan form does
+not enable it. See [operator setup](detection-evidence.md#experimental-prompt-suite).
+
+After local acceptance, independent review, and all required PR/post-merge CI,
+request only the [normal-workflow GCP retest](BETA_TESTING.md#normal-scan-experimental-suite-acceptance)
+on the final merged revision. Do not repeat the paired accuracy cohort merely to
+validate these entry points. Preserve failed assertions and capture bodies, state
+uncertainty, and complete privacy-sweep coverage. No deployment, publication,
+cloud startup, or live schedule enablement is implied by this integration.
 
 O3 now has conservative dashboard-only finding groups: 18 sample occurrences
 can display as seven groups while original JSON/SARIF, score 70, all occurrence

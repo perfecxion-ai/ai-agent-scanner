@@ -110,6 +110,16 @@ for server setup. Returned definitions omit internal pins so they can be edited
 and resubmitted. Runs revalidate bindings; an unavailable or changed profile
 requires operator review rather than silently using a different policy.
 
+An explicit `scan_config.prompt_suite: "protected-disclosure-v1"` selects the
+experimental prompt sample for a protected `security_only` recipe. Include the
+normal source, model, and profile references; every request-ready model needs
+selected protected evidence. The complete dashboard JSON editor preserves the
+option, while the simpler new-scan form leaves it absent. Internal public-catalog
+pins are hidden and not editable. Changed catalog identity rejects replay or an
+unchanged-selection update rather than silently changing the saved test. Existing
+recipes without the option retain their original behavior. See
+[selection and bounds](detection-evidence.md#experimental-prompt-suite).
+
 Template operations do not append definition contents to scan audit history.
 Successful runs use the existing admission/claim/cancellation/terminal events.
 This history is operational and is not tamper-resistant.

@@ -538,6 +538,58 @@ the checkout. This is synthetic local contract acceptance, not a new real-model
 measurement, CLI/API selection, package publication, or deployment. Operator
 workflow integration and a targeted final-revision retest remain separate work.
 
+### Normal-scan experimental prompt integration
+
+The CLI flag and `scan_config.prompt_suite` accept only explicit
+`protected-disclosure-v1`; omission preserves existing execution and report shape.
+CLI scans require explicit agents and reject discovery-only selection
+before execution. Invalid values and `--skip-security` are rejected before
+loading target configuration. Server selection requires security-only source reuse and
+explicit startup profiles for every request-ready model. Unknown values/types,
+misplaced options, external pins, unavailable profiles, and public marker
+collisions fail closed. Historical raw-canary source fields cannot substitute for
+profile evidence or lose redaction provenance when copied; candidate admission
+and workers reject those fields before model requests. Sources remain unchanged.
+
+Queued jobs and templates pin only public catalog content/semantics. Admission,
+trusted replay, unchanged-selection updates, and schedule tokens reject missing
+or changed pins; returned template JSON hides them. Schedule races pause without
+admission. Per-scan candidate engines never mutate the legacy global engine.
+Only one 35-request prompt suite runs, with other checks and shared transport
+limits unchanged. JSON/SARIF suite labels mean selected, not completed: the check
+ledger remains authoritative. No new pass, scoring rule, or in-flight cancellation
+recovery is introduced.
+
+The combined local Linux/Python 3.10 gate passes 2,049 tests with warnings as errors
+and an inherited registry-path sentinel. This includes the 237 core suite cases,
+38 new server cases, 15 new CLI workflow cases, and ten additional actual-profile
+dispatcher cases. These overlap the focused gates and are not model observations.
+The 125 Node controller tests pass, including full JSON-template selection
+preservation. Ruff, configured Bandit, pip check, and whitespace checks pass.
+
+Actual loopback CLI runs use the complete candidate catalog and real engines,
+adapters, transport, pipeline, and JSON/SARIF exports. Only pacing is shortened.
+Deterministic disclosure retains 70/high; refusal and an unseeded marker remain
+null/inconclusive; leak-then-503 retains partial high and a nonzero CLI exit.
+Positive/negative exits and execution status are explicitly asserted, not hidden
+by report creation. Payloads, seven five-attempt prompt groups, and probe versions
+match the benchmark. Synthetic markers and response text are absent from reports,
+captured requests, logs, and stdout; output files remain private.
+
+The real file-backed SQLite/API/dispatcher fixture independently exercises normal
+profile/template input with full candidate sampling, 70 versus null, source
+immutability, matching saved pipelines and public results, SARIF, inventory,
+audit, and database-byte secret omission. Concurrency, template/pin drift, and
+schedule races also have isolated regressions. Mixed actual-dispatcher inventories
+preserve unmodelled/unsupported entries as skipped/null alongside the protected
+target without making additional model requests. Installed-wheel smoke checks the
+flag and static invalid-selection rejection outside the checkout. These local
+fixtures do not establish real-model sensitivity, full browser accessibility,
+deployed compatibility, or enterprise readiness. Require independent review,
+all PR/post-merge checks, and the targeted normal-workflow lab retest on the final
+merged revision before claiming external acceptance. No cloud target was accessed,
+service deployed, or package published for this slice.
+
 ### Finding presentation grouping
 
 The O3 slice changes only dashboard presentation and synthetic browser fixtures.

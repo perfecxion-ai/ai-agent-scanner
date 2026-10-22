@@ -194,6 +194,8 @@ class ScopePolicy:
 def validate_request(data, config, resolver=None):
     if not isinstance(data, dict):
         raise ScopeValidationError("JSON object required")
+    if set(data) & {"prompt_suite", "_prompt_suite_pin"}:
+        raise ScopeValidationError("Use scan_config.prompt_suite; prompt suite pins are server-managed")
     if set(data) & {"system_prompt_canary", "system_prompt_canary_env", "cross_tenant_canary",
                     "evidence_context_id", "evidence_profiles", "evidence_profiles_file",
                     "profiles_file", "SCAN_EVIDENCE_PROFILES_FILE", "_evidence_profile_pins"}:
@@ -208,8 +210,16 @@ def validate_request(data, config, resolver=None):
     options = data.get("scan_config", {})
     if not isinstance(scope, dict) or not isinstance(options, dict):
         raise ScopeValidationError("target_scope and scan_config must be JSON objects")
-    if set(options) - {"source_scan_id", "timeout_seconds", "model_overrides", "evidence_profiles"}:
+    if set(options) - {"source_scan_id", "timeout_seconds", "model_overrides", "evidence_profiles", "prompt_suite"}:
         raise ScopeValidationError("Unsupported scan_config field")
+    if "prompt_suite" in options:
+        from src.security.prompt_suites import PromptSuiteError, validate_prompt_suite
+        try:
+            validate_prompt_suite(options["prompt_suite"])
+        except PromptSuiteError as exc:
+            raise ScopeValidationError(str(exc)) from None
+        if scan_type != "security_only" or not options.get("evidence_profiles"):
+            raise ScopeValidationError("prompt_suite requires security_only with explicit evidence_profiles")
     if set(scope) - {*_TARGET_FIELDS, "cloud_accounts", "include_network",
                      "include_repositories", "include_traffic", "include_cloud"}:
         raise ScopeValidationError("Unsupported target_scope field")

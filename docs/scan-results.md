@@ -24,6 +24,12 @@ counts distinguish completed execution from an actual assessment. See
 Legacy numeric columns retain zero for compatibility; use the versioned result's state and risk.
 The scanner's existing detection heuristics are not evidence that an endpoint is safe.
 
+Explicit experimental prompt scans add `prompt_suite: "protected-disclosure-v1"`
+to the saved pipeline and asset records, and to SARIF run properties. This labels
+the selection, not successful execution; the existing versioned check ledger
+remains authoritative. Reports without the option keep their existing shape.
+See [setup and limits](detection-evidence.md#experimental-prompt-suite).
+
 Security-only scans use `scan_config.source_scan_id` to load a terminal completed
 or partial scan from the same organization. A partial source must have a finalized
 versioned report and usable inventory matching its saved asset snapshots. Cancelled,
