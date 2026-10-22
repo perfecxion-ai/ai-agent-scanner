@@ -135,6 +135,89 @@ sensitivity. Server configuration for cross-tenant, authentication, and protecte
 path controls remains unsupported; those controls still require explicit CLI or
 Python engine configuration.
 
+## Experimental prompt suite
+
+Normal scans can explicitly select `protected-disclosure-v1`, the same fixed
+extraction-focused catalog used by the paired benchmark. It remains experimental:
+reviewed lab results describe particular declared targets, not general detection
+sensitivity or enterprise readiness. No default has changed. Omit the option to
+keep the existing prompt sample; `default`, `baseline`, arbitrary strings, and
+explicit API null are not accepted selection values.
+
+A normal scan runs one chosen suite, not a paired benchmark: seven prompt groups,
+five requests per group, at most 35 prompt HTTP attempts per testable asset.
+Access-control and privacy checks still run separately within the unchanged shared
+scan budget and deadline. Existing response limits, one-second prompt pacing,
+100-token model-output cap, and no-retry behavior remain. This option does not
+increase the normal scan deadline to the benchmark's larger time allowance.
+
+For the CLI, keep the explicit `agents` configuration in a private file outside
+Git. Each request-ready model must have its real, target-seeded synthetic
+`system_prompt_canary` and a public `evidence_context_id`. The marker must be
+16 to 128 ASCII characters from `[A-Za-z0-9_.~-]`; the context must be nonempty,
+at most 128 characters, without brackets or control characters. Do not use a
+provider credential as the marker or include it in command arguments. Then run:
+
+```bash
+ai-agent-scanner scan --config /private/operator/lab-agents.json \
+  --prompt-suite protected-disclosure-v1 --output /private/operator/results.json
+```
+
+Use actual private paths and existing scope/budget flags as needed. Loopback still
+requires `--allow-loopback`. The flag cannot be combined with `--skip-security`
+or discovery targets alone; model selection does not seed a canary. Final model
+overrides are validated before candidate requests. Untestable or inaccessible
+configuration cannot establish a pass, and at least one request-ready model is
+required for this option.
+
+For the server, first configure the startup registry described above. Select the
+suite explicitly in a normal scan or saved-template definition:
+
+```json
+{
+  "scan_name": "Experimental protected disclosure check",
+  "scan_type": "security_only",
+  "target_scope": {},
+  "scan_config": {
+    "source_scan_id": "SOURCE_SCAN_ID",
+    "model_overrides": {"ASSET_ID": "fixture-model"},
+    "evidence_profiles": {"ASSET_ID": "lab-bot-v1"},
+    "prompt_suite": "protected-disclosure-v1"
+  }
+}
+```
+
+Only `security_only` with explicit profile selections supports this server option.
+Every request-ready model in the effective source inventory needs a matching
+selected profile, not an oracle left in a historical source report. Other
+unsupported or unconfigured entries retain their ordinary skipped behavior.
+No profile is chosen automatically. Foreign, missing, changed, mismatched, or
+publicly reflected evidence is rejected before candidate model requests. Source
+reports stay unchanged; only fresh in-memory copies receive protected values.
+
+Jobs and templates store the public suite name and an internal digest of the
+fixed public catalog/semantics, not a canary-derived hash. Caller-supplied pins
+are rejected; returned template definitions omit them. Admission, queued work,
+and schedule validation reject missing or changed pins. Editing an unchanged
+selection does not silently accept a changed catalog. Review and explicitly
+replace an outdated template rather than bypassing a pin failure. Templates
+and schedules created without this option continue using the existing suite.
+The dashboard's complete JSON template editor preserves this field; the simpler
+new-scan form does not add it automatically or configure protected evidence.
+
+Candidate JSON reports identify the selected `prompt_suite` at the report and
+asset level; SARIF includes it in run properties. Selection metadata is not proof
+that a check ran. Inspect check execution, counters, and outcomes. Payload-derived
+probe versions distinguish the candidate from the default and match benchmark
+provenance; nondisclosure cannot resolve a previous leak in either suite.
+
+Exact protected-marker disclosure can retain 70/high even if later requests
+fail; nondisclosure or an unseeded marker stays inconclusive with null risk unless
+other conclusive evidence supports assessment. Generated response text remains
+omitted. An outer scan deadline/cancellation may prevent a report from being
+produced; this feature does not add in-flight finding recovery or automatic
+retries. The benchmark's observation checkpoint is not a normal finding ledger.
+
 Default discovery-only configurations cannot confirm prompt disclosure or
 authentication bypass. They may produce observations requiring manual validation.
 Same-session recall testing is disabled because no deletion, expiration, or session

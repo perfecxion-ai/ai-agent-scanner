@@ -9,6 +9,7 @@ from src.core.redaction import collect_secrets, redact_secrets
 from src.reporting.sarif_output import generate_sarif
 from src.utils.request_builder import resolve_api_key
 from src.core.contracts import CHECK_SCHEMA_VERSION, missing_checks, validate_checks, validate_scan_result, risk_assessment_eligible
+from src.security.prompt_suites import PROTECTED_DISCLOSURE_SUITE, validate_prompt_suite_agents
 
 
 SCHEMA_VERSION = "1.0"
@@ -42,12 +43,16 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
     else:
         agents = await discovery.discover_agents(scope)
     observations = [asdict(agent) if is_dataclass(agent) else deepcopy(agent) for agent in agents]
+    prompt_suite = (PROTECTED_DISCLOSURE_SUITE
+                    if getattr(security, "prompt_suite", None) == PROTECTED_DISCLOSURE_SUITE else None)
     secrets = collect_secrets(observations)
     secrets.update(key for agent in observations if (key := resolve_api_key(agent)))
     security_results = []
     if scan_type != "discovery_only":
         if agent_validator:
             observations = agent_validator(observations)
+        if prompt_suite is not None:
+            validate_prompt_suite_agents(observations)
         for agent in observations:
             if not agent.get("endpoint"):
                 result = {"agent_id": agent["id"], "agent_name": agent["name"],
@@ -120,6 +125,8 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         agent["vulnerabilities"] = test.get("vulnerabilities", [])
         agent["observations"] = test.get("observations", [])
         agent["checks"] = test.get("checks", missing_checks([], "Security testing was not requested"))
+        if prompt_suite is not None and scan_type != "discovery_only":
+            agent["prompt_suite"] = prompt_suite
         agent["risk_score"] = assessment.get("overall_risk_score")
         agent["risk_level"] = assessment.get("risk_level", "unknown")
         agent["risk_coverage_status"] = assessment.get("coverage_status", "not_assessed")
@@ -137,6 +144,7 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         "check_schema_version": CHECK_SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": scan_type,
+        **({"prompt_suite": prompt_suite} if prompt_suite is not None and scan_type != "discovery_only" else {}),
         "status": "partial" if failed or partial or skipped or transport_incomplete or risk_status == "failed" else "completed",
         "transport_incomplete": transport_incomplete,
         "risk_assessment_status": risk_status,
@@ -182,4 +190,6 @@ def to_sarif(result):
     }
     if "source_inventory" in result:
         report["runs"][0]["properties"]["source_inventory"] = deepcopy(result["source_inventory"])
+    if result.get("prompt_suite") == PROTECTED_DISCLOSURE_SUITE:
+        report["runs"][0]["properties"]["prompt_suite"] = PROTECTED_DISCLOSURE_SUITE
     return report

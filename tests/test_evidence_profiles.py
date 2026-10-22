@@ -467,12 +467,28 @@ print("startup-ok")
 
 
 @pytest.mark.parametrize("disclose", [False, True])
-def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch, tmp_path, caplog, disclose):
+@pytest.mark.parametrize("prompt_suite", [None, "protected-disclosure-v1"])
+@pytest.mark.parametrize("inventory_kind", ["single", "unmodelled", "unsupported"])
+def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch, tmp_path, caplog,
+                                                       disclose, prompt_suite, inventory_kind):
     module, client, operator_key, calls, _, _ = real_lab
     import tests.test_beta_lab_workflow as lab_module
     monkeypatch.setattr(lab_module, "PRIVATE_OUTPUT", CANARY if disclose else "Nothing protected was disclosed")
     login = client.post("/api/auth/token", json={"api_key": operator_key})
     auth = {"Authorization": "Bearer " + login.json["token"]}
+    if inventory_kind != "single":
+        from dataclasses import asdict, is_dataclass
+        discover = module.discovery_engine.discover_agents
+
+        async def mixed_inventory(scope):
+            discovered = await discover(scope)
+            extra = asdict(discovered[0]) if is_dataclass(discovered[0]) else deepcopy(discovered[0])
+            extra.update(id="synthetic-skipped-asset", name="Synthetic untestable inventory entry", model=None)
+            if inventory_kind == "unsupported":
+                extra.update(provider="unsupported-fixture-provider", model="unsupported-fixture-model")
+            return [*discovered, extra]
+
+        monkeypatch.setattr(module.discovery_engine, "discover_agents", mixed_inventory)
 
     def request(method, path, expected=200, definition=None):
         module.db.session.remove()
@@ -493,7 +509,7 @@ def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch,
     source_id = request("POST", "/api/scans", 202, {"scan_type": "discovery_only", "target_scope": {
         "network_ranges": ["127.0.0.1/32"]}})["scan_id"]
     source = finish(source_id)
-    assert len(source["agents"]) == 1
+    assert len(source["agents"]) == (1 if inventory_kind == "single" else 2)
     agent = source["agents"][0]
     original = deepcopy(source)
     monkeypatch.setenv(ENV, CANARY)
@@ -501,23 +517,41 @@ def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch,
     private.write_text(json.dumps(document(endpoint=agent["endpoint"], model=MODEL, tenant="local-beta-operator")))
     private.chmod(0o600)
     monkeypatch.setattr(module, "_evidence_profiles", load_evidence_profiles(str(private)))
-    inventory = request("GET", f"/api/scans/{source_id}/results")["results"]["agents"][0]
+    inventory = next(item for item in request("GET", f"/api/scans/{source_id}/results")["results"]["agents"]
+                     if item["asset_id"] == agent["id"])
     definition = {"scan_type": "security_only", "scan_config": {
         "source_scan_id": source_id, "model_overrides": {inventory["id"]: MODEL},
         "evidence_profiles": {inventory["id"]: "fixture-v1"}}}
+    if prompt_suite is not None:
+        definition["scan_config"]["prompt_suite"] = prompt_suite
     template = request("POST", "/api/templates", 201, definition)["template"]
     assert PIN_FIELD not in template["scan_config"]
+    assert "_prompt_suite_pin" not in template["scan_config"]
+    assert template["scan_config"].get("prompt_suite") == prompt_suite
     scan_id = request("POST", f"/api/templates/{template['id']}/run", 202, {})["scan_id"]
     assessed = finish(scan_id)
     expected = 70.0 if disclose else None
     assert assessed["summary"]["overall_risk_score"] == expected
     assert assessed["agents"][0]["risk_score"] == expected
+    if inventory_kind != "single":
+        skipped = next(item for item in assessed["agents"] if item["id"] == "synthetic-skipped-asset")
+        assert skipped["security_status"] == "skipped" and skipped["risk_score"] is None
+        assert all(check["status"] == "skipped" for check in skipped["checks"])
+        assert not skipped["vulnerabilities"]
     prompt_checks = [check for check in assessed["agents"][0]["checks"]
                      if check["rule_id"].startswith("prompt_injection.") and check["status"] != "skipped"]
     assert prompt_checks and all(check["outcome"] == ("confirmed" if disclose else "inconclusive")
                                  for check in prompt_checks)
     assert all(check["evidence_context_id"] == "synthetic-profile-policy-v1" for check in prompt_checks)
     assert not any(check["outcome"] == "passed" for check in prompt_checks)
+    if prompt_suite is not None:
+        from src.security.prompt_suites import candidate_payloads
+        assert assessed["prompt_suite"] == assessed["agents"][0]["prompt_suite"] == prompt_suite
+        assert len(prompt_checks) == 7
+        assert all(check["requests_attempted"] == check["responses_evaluated"] == 5 for check in prompt_checks)
+        posts = [body for method, _, body in calls if method == "POST"]
+        assert [body["messages"][0]["content"] for body in posts[:35]] == [
+            payload for values in candidate_payloads().values() for payload in values]
     assert request("GET", f"/api/scans/{source_id}/report?format=json") == original
     results = request("GET", f"/api/scans/{scan_id}/results")["results"]
     assert results["summary"]["overall_risk_score"] == expected
@@ -525,6 +559,9 @@ def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch,
     public = [source, assessed, results, request("GET", "/api/agents"),
               request("GET", f"/api/scans/{scan_id}/report?format=sarif"),
               request("GET", f"/api/scans/{scan_id}/audit"), template]
+    if prompt_suite is not None:
+        assert results["pipeline"] == assessed
+        assert public[4]["runs"][0]["properties"]["prompt_suite"] == prompt_suite
     assert CANARY not in json.dumps(public) and ENV not in json.dumps(public)
     assert CANARY not in caplog.text and ENV not in caplog.text
     posts = [body for method, _, body in calls if method == "POST"]
@@ -536,3 +573,5 @@ def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch,
     database_bytes = Path(module.db.engine.url.database).read_bytes()
     assert CANARY.encode() not in database_bytes and ENV.encode() not in database_bytes
     assert PIN_FIELD in next(scan for scan in scans if scan.id == scan_id).scan_config
+    if prompt_suite is not None:
+        assert "_prompt_suite_pin" in next(scan for scan in scans if scan.id == scan_id).scan_config

@@ -11,6 +11,10 @@ import click
 
 from src.discovery.discovery_engine import DiscoveryEngine, DiscoveryScope
 from src.security.security_engine import SecurityTestEngine
+from src.security.prompt_suites import (
+    PROTECTED_DISCLOSURE_SUITE, PromptSuiteError,
+    validate_prompt_suite, validate_prompt_suite_agents,
+)
 from src.risk.risk_assessor import RiskAssessment
 from src.frameworks.owasp_llm_top10 import get_coverage_summary
 from src.core.pipeline import run_pipeline, to_sarif
@@ -168,11 +172,22 @@ def discover(network, domain, repository, traffic, config, output, verbose,
 @click.option('--format', '-f', 'fmt', type=click.Choice(['json', 'sarif']), default='json')
 @click.option('--verbose', '-v', is_flag=True, help='Show completion details')
 @click.option('--skip-security', is_flag=True, help='Discovery only')
+@click.option('--prompt-suite', metavar=PROTECTED_DISCLOSURE_SUITE,
+              help='Experimental protected-disclosure suite; requires explicit agents with canaries and public contexts')
 def scan(network, domain, repository, traffic, config, output, fmt, verbose, skip_security,
          model_override, max_requests, max_response_bytes, timeout_seconds, allow_loopback,
-         request_timeout_seconds):
+         request_timeout_seconds, prompt_suite):
     """Run shared discovery, security, risk, and report pipeline."""
+    if prompt_suite is not None:
+        try:
+            validate_prompt_suite(prompt_suite)
+        except PromptSuiteError as exc:
+            raise click.UsageError(str(exc)) from None
+        if skip_security:
+            raise click.UsageError('--prompt-suite requires security testing')
     scope, agents = load_targets(network, domain, repository, traffic, config, allow_loopback)
+    if prompt_suite is not None and agents is None:
+        raise click.UsageError('--prompt-suite requires explicit agents with protected canaries and public evidence contexts')
     if agents is not None and skip_security:
         raise click.ClickException("Explicit agents cannot be combined with --skip-security")
     selections = {}
@@ -187,21 +202,27 @@ def scan(network, domain, repository, traffic, config, output, fmt, verbose, ski
         raise click.UsageError(str(exc)) from exc
     if selections and skip_security:
         raise click.UsageError('--model-override requires security testing')
+    if prompt_suite is not None:
+        try:
+            validate_prompt_suite_agents(apply_model_overrides(agents, selections) if selections else agents)
+        except PromptSuiteError as exc:
+            raise click.UsageError(str(exc)) from None
     mode = 'security_only' if agents is not None else ('discovery_only' if skip_security else 'full')
     asyncio.run(_execute(scope, agents, output, fmt, mode, verbose,
                          max_requests, max_response_bytes, timeout_seconds, allow_loopback, selections,
-                         request_timeout_seconds))
+                         request_timeout_seconds, prompt_suite=prompt_suite))
 
 
 async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
                    max_response_bytes=1048576, timeout_seconds=300, allow_loopback=False,
-                   selections=None, request_timeout_seconds=30):
+                   selections=None, request_timeout_seconds=30, prompt_suite=None):
     try:
         with scan_transport(ScanBudget(max_requests=max_requests, max_response_bytes=max_response_bytes,
                                        allow_loopback=allow_loopback,
                                        request_timeout_seconds=request_timeout_seconds)):
+            security = SecurityTestEngine(prompt_suite=prompt_suite) if prompt_suite is not None else SecurityTestEngine()
             result = await asyncio.wait_for(
-                run_pipeline(DiscoveryEngine(), SecurityTestEngine(), RiskAssessment(),
+                run_pipeline(DiscoveryEngine(), security, RiskAssessment(),
                              scope, mode, agents=agents,
                              agent_validator=(lambda values: apply_model_overrides(values, selections))
                              if selections else None), timeout=timeout_seconds)

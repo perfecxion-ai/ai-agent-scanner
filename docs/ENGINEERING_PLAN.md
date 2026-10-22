@@ -43,8 +43,14 @@ production defaults remain unchanged.
 The shared-catalog foundation now exposes explicit Python constructor selection
 with strict protected-evidence prerequisites, isolated catalogs, unchanged probe
 hashes, and an order-sensitive public catalog digest. CLI/API and saved-definition
-integration remain separate follow-up work; this foundation does not change normal
+integration have separate acceptance below; this foundation does not change normal
 operator defaults or establish additional model accuracy.
+The normal-scan integration adds exact opt-in CLI/API selection, protected profile
+coverage, private catalog pins, per-scan engine isolation, and saved-template /
+schedule revalidation. Existing scans remain unchanged when the field is omitted.
+No benchmark checkpoint or heuristic can become fabricated finding evidence.
+The next external checkpoint validates these actual operator paths at the final
+merged revision, not general accuracy or enterprise readiness.
 The dashboard now groups compatible prompt occurrences for display only, with
 original records available in bounded details. Raw findings, scores, exports,
 and lifecycle IDs remain unchanged.

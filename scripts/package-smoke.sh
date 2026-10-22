@@ -12,6 +12,8 @@ unset PYTHONPATH
 "$smoke_dir/venv/bin/python" -m pip check
 "$smoke_dir/venv/bin/ai-agent-scanner" --version
 "$smoke_dir/venv/bin/ai-agent-scanner" --help
+"$smoke_dir/venv/bin/ai-agent-scanner" scan --help
+"$smoke_dir/venv/bin/python" -c 'from click.testing import CliRunner; from scanner_cli import cli; runner = CliRunner(); assert "--prompt-suite" in runner.invoke(cli, ["scan", "--help"]).output; assert "--prompt-suite" not in runner.invoke(cli, ["discover", "--help"]).output; result = runner.invoke(cli, ["scan", "--prompt-suite", "unsupported-private-input-71403"]); assert result.exit_code == 2 and "unsupported-private-input-71403" not in result.output'
 "$smoke_dir/venv/bin/ai-agent-scanner" coverage
 "$smoke_dir/venv/bin/ai-agent-scanner" mcp --help
 "$smoke_dir/venv/bin/ai-agent-scanner" mcp-live --help

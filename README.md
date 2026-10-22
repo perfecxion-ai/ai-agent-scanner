@@ -22,6 +22,12 @@ A reviewed single-target comparison observed 10/10 candidate detections versus
 predeclared reports and positive/negative controls without invoking targets.
 Production scan defaults remain unchanged.
 
+Normal CLI and server security-only scans also offer the experimental
+`protected-disclosure-v1` suite through an explicit option. It replaces the
+35-request prompt sample, not the other security checks, and requires protected
+canary configuration plus a public evidence context. Omitting the option keeps
+the existing behavior. See [setup, selection, and limits](docs/detection-evidence.md#experimental-prompt-suite).
+
 ## Install and try locally
 
 Python 3.10 through 3.13 are supported.

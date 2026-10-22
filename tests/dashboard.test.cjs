@@ -711,7 +711,8 @@ test('invalid source models and missing targets cannot save or scan', async () =
 test('complete definition editor preserves advanced targets and source models on update', async () => {
     const calls = [];
     const definition = savedTemplate({scan_type: 'security_only', target_scope: {},
-        scan_config: {source_scan_id: 'source', model_overrides: {asset: 'model'}, timeout_seconds: 180, advanced_future_field: false}});
+        scan_config: {source_scan_id: 'source', model_overrides: {asset: 'model'}, timeout_seconds: 180,
+            evidence_profiles: {asset: 'fixture-v1'}, prompt_suite: 'protected-disclosure-v1', advanced_future_field: false}});
     const {app} = fixture(async (path, options) => {
         calls.push({path, options});
         return response(path.includes('?') ? {templates: [], total: 0} : {template: {...definition, revision: 4}});
