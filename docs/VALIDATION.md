@@ -223,6 +223,81 @@ unchanged. The next accuracy step is a frozen, independent multi-model replicati
 with explicit positive/negative controls, target provenance, and preserved capture
 bodies. Publication, deployment, and cloud execution need separate authorization.
 
+### Frozen paired-cohort retest
+
+An operator-supplied private bundle covers exact runtime revision
+`4070eed89e17daf3d5273d63b9ff99dfd3996194`. Three independent artifact reviews
+checked the frozen plan, four reports, job logs, supplied driver source, and
+current validator without executing supplied scripts or contacting lab targets.
+The shipped plan's hash prefix matches the setup log before the first benchmark;
+predeclaration and target provenance remain operator assertions, not independently
+attested facts. Logs record 329 passing targeted Linux/Python 3.11 cases, not a
+new full-suite run. The setup's outside-checkout import check is not a separately
+built-wheel smoke test.
+
+- The repository's offline CLI independently returns exit 0, both normally and
+  with an empty inherited environment. Recomputed output exactly matches the
+  archived summary: four completed cases and promotion `not_decided`. Current
+  manifests, versions, bindings, seeded order, check ledgers, and checkpoints
+  validate. The local focused regression gate passes 227 cases with warnings
+  treated as errors and an inherited registry-path sentinel.
+- Both deterministic controls meet their declared expectations in one pair each:
+  both arms detect the disclosing fixture, neither detects the refusing fixture.
+  Neither result is a security pass. All 308 check records across the cohort
+  retain confirmed, heuristic, or inconclusive outcomes; none is passed.
+- Each of the two declared model targets completes ten pairs, twenty arms, with
+  five baseline-first and five candidate-first pairs. On the seeded local-model
+  target, baseline detects in 5/10 runs and candidate in 10/10, with five
+  candidate-only pairs. On the support-bot target, baseline detects in 1/10 and
+  candidate in 10/10, with nine candidate-only pairs. Neither target has a
+  baseline-only or incomplete pair. Candidate detects in 5/5 runs for each
+  ordering group on each target. These are per-target observations, not a pooled
+  accuracy score or independent-trial reliability estimate.
+- The 44 arms attempt and evaluate 1,540 benchmark requests with no retries:
+  70 per control and 700 per model target. Setup, health, model creation, and
+  benign validation calls are additional lab traffic, not included in that count.
+  Reported arm and cohort times remain within their configured budgets.
+- Preserve setup exit 2 for an incompatible model-create request and the first
+  controls job's readiness abort at exit 3. The corrected seed job succeeds
+  before the model's benchmark, reusing the same frozen plan; the other model's
+  completed report is retained. Target setup was corrected after the other
+  model's results were available. This supports a predeclared report plan, not
+  independent proof that every target configuration was frozen before all
+  outcomes. The final gate job explicitly exits with the
+  captured CLI status, so its exit zero is not masked by later commands. The
+  claimed superseded no-op gate exit and the other model's job script are not
+  archived; do not describe the bundle as a complete execution audit trail.
+
+The supplied report overstates twenty pairs per target and independence. The
+correct denominator is ten pairs per model target. One target declares stateless
+requests; the other explicitly declares persistent or unknown state. Balanced
+ordering does not exclude carryover. Distinct provider/model labels satisfy the
+structural gate but do not establish distinct model weights or backend
+independence. Model identity, seeding, generation settings, and actual target
+revisions remain operator-attested. Actual protected values, the support-bot
+implementation, immutable model digests, and full runtime generation/state
+records are excluded; the control fixture and model-seeding driver are supplied.
+This is improved observed yield on two declared targets, not
+general sensitivity or enterprise acceptance.
+
+Strict report validation confirms only public static probe payloads and bounded
+check observations, with no generated-response fields. Logged literal-secret
+sweeps report zero matches, but actual protected values are excluded. The final
+sweep does not enumerate the fresh fixture/model markers; an earlier sweep covers
+those markers in three reports, not every plan/summary input. The final driver
+also loads the lab environment before invoking the gate, contrary to the report's
+clean-environment claim. The gate does not read those secrets, and the independent
+empty-environment replay succeeds. The model-seeding driver retains a private
+marker file on the runner with no cleanup shown, so target-only secret retention
+is not established. Private file modes, secret absence, VM shutdown, and final lab
+cleanup remain operator attestations. No private artifact is added to Git.
+
+This accepts the scoped cohort accounting and per-case observations. Production
+prompts, request budgets, and scan defaults remain unchanged. Candidate adoption
+needs a separate reviewed product decision and normal CLI/API workflow validation;
+it is not implied by a completed evidence gate. Documentation-only acceptance
+does not require another cloud run or authorize deployment or publication.
+
 ## Automated checks
 
 ### Operator feedback diagnostics
