@@ -279,6 +279,112 @@ are not 35 independent trials. Nondisclosure never becomes a security pass.
 Do not promote the experimental suite based on fixture success or a favorable
 single run. Review the paired model evidence before changing production defaults.
 
+### Offline multi-model evidence gate
+
+`scripts/check-prompt-cohort.py` validates a predeclared collection of the paired
+benchmark reports above. It makes no target requests, reads no credential or
+canary environment variables, imports no server app, and runs no supplied script.
+It does not seed targets, start cloud resources, authorize more model requests,
+or decide whether candidate prompts should replace production defaults.
+
+Freeze the private plan before collecting any results. Preserve independent
+checkout, target/model revision, protected-canary placement, generation settings,
+and state/reset records outside the public repository. The gate checks declared
+bindings and internal evidence consistency; it cannot prove those assertions or
+when the plan was written. Different provider/model labels are not proof of
+independent backends. Keep the same target configuration across both arms.
+
+The plan requires one positive control, one negative control, and at least two
+distinct declared provider/model tuples in model cases. It accepts 4-10 cases,
+one pair per control and ten pairs per model. Controls must have genuinely seeded
+protected canaries outside user input: the positive fixture discloses its marker,
+while the negative fixture must withhold it. A made-up marker is not a negative
+control. No new target-side configuration is authorized by this guide.
+
+This is a complete plan shape. Replace the scanner SHA and all fixture/model
+labels, revisions, and public contexts with the frozen actual configuration;
+the placeholder SHA is deliberately invalid until replaced. Report names are
+unique simple `.json` basenames under the one explicit report directory.
+No endpoints, prompts, protected markers, credentials, secret references, or
+canary hashes belong in the plan.
+
+```json
+{
+  "schema_version": "1.0",
+  "protocol": "prompt-leak-cohort-v1",
+  "operator_asserted_revision": "<PINNED_SCANNER_SHA>",
+  "operator_asserted_predeclared": true,
+  "cases": [
+    {"case_id": "disclose-control", "role": "positive_control", "report": "positive.json",
+     "provider": "openai-compatible", "model": "fixture-model", "evidence_context_id": "disclose-v1",
+     "pairs": 1, "seed": 0, "operator_asserted_target_revision": "fixture-v1",
+     "operator_asserted_model_revision": "fixture-v1", "operator_asserted_canary_seeded": true,
+     "state_policy": "stateless_requests"},
+    {"case_id": "refusal-control", "role": "negative_control", "report": "negative.json",
+     "provider": "openai-compatible", "model": "fixture-model", "evidence_context_id": "refuse-v1",
+     "pairs": 1, "seed": 0, "operator_asserted_target_revision": "fixture-v1",
+     "operator_asserted_model_revision": "fixture-v1", "operator_asserted_canary_seeded": true,
+     "state_policy": "stateless_requests"},
+    {"case_id": "model-a", "role": "model", "report": "model-a.json",
+     "provider": "ollama", "model": "model-a", "evidence_context_id": "model-a-context-v1",
+     "pairs": 10, "seed": 0, "operator_asserted_target_revision": "wrapper-v1",
+     "operator_asserted_model_revision": "model-a-v1", "operator_asserted_canary_seeded": true,
+     "state_policy": "stateless_requests"},
+    {"case_id": "model-b", "role": "model", "report": "model-b.json",
+     "provider": "openai-compatible", "model": "model-b", "evidence_context_id": "model-b-context-v1",
+     "pairs": 10, "seed": 0, "operator_asserted_target_revision": "wrapper-v1",
+     "operator_asserted_model_revision": "model-b-v1", "operator_asserted_canary_seeded": true,
+     "state_policy": "stateless_requests"}
+  ]
+}
+```
+
+`state_policy` is an operator assertion: `stateless_requests`, `reset_between_arms`,
+or `persistent_or_unknown`. The last value is permitted and remains visible in
+the summary; a completed evidence set does not establish independence or exclude
+carryover. Revisions are nonempty opaque ASCII version labels, not private prompt
+contents. Every field is required; unknown fields are rejected.
+
+Use canonical physical paths with no symlink components. The plan, report, and
+output parent directories must be service-owned mode 0700. Inputs must be owned,
+single-link regular files at 0400 or 0600. The gate never chmods or sanitizes
+existing inputs. Keep the original driver captures; make private reviewed copies
+deliberately if their original permissions differ. File bounds are 64 KiB for the
+plan and 1 MiB per report, with JSON depth/node/string/integer limits. Duplicate
+keys, nonfinite numbers, changing files, symlinks, FIFOs, and traversal are refused.
+
+Run this directly as the final job command, or explicitly propagate its exit
+status. Do not mask failure with a later `echo`, privacy command, or shell wrapper.
+If a logging pipeline is necessary, check the validator and logger statuses.
+
+```sh
+python scripts/check-prompt-cohort.py \
+  --plan "$cohort_private_plan" \
+  --reports-dir "$cohort_private_reports" \
+  --output "$cohort_new_private_summary"
+```
+
+Exit zero means all declared reports are present, internally consistent, complete,
+and meet the declared control expectations. Missing, invalid, partial, or
+control-failing cases remain in the summary and produce exit 1. Invalid plans,
+unsafe output paths, and parser errors cannot publish a successful summary.
+Existing output files or symlinks are never overwritten; new summaries are 0600.
+
+The gate validates the exact current payload manifests, probe versions, bindings,
+budgets, seeded pair order, check ledgers, and detection checkpoints, then
+recomputes counts and exploratory intervals rather than trusting aggregate fields.
+Reported arm/cohort elapsed times have a five-second cleanup/timing tolerance;
+file validation does not independently measure actual traffic or runtime.
+
+Summaries contain generated case ordinals in plan order, fixed role/state-policy
+enums, statuses, and recomputed metrics. They do not copy supplied case IDs, model
+or context labels, report paths, payloads, secret references, or hashes. Keep the
+private plan for interpretation. Unplanned files are not discovered or executed.
+Results stay per case, without pooling heterogeneous models into one accuracy
+score. Quiet model runs and a met negative-control expectation are not security
+passes. Gate completion is evidence completeness, not general sensitivity,
+independent provenance, privacy certification, or candidate promotion.
+
 ### Return bundle
 
 Return a brief report with the exact SHA, commands, exit codes, environment/model

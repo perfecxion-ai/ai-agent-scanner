@@ -19,6 +19,7 @@ unset PYTHONPATH
 "$smoke_dir/venv/bin/python" -c 'from src.mcp.live import PROTOCOL_VERSION, inventory; assert PROTOCOL_VERSION == "2026-07-28"; assert callable(inventory)'
 "$smoke_dir/venv/bin/python" -c 'from src.mcp.policy import check, load_policy; assert callable(check) and callable(load_policy)'
 "$smoke_dir/venv/bin/python" -c 'from src.evaluation.prompt_benchmark import BenchmarkConfig, benchmark; assert callable(BenchmarkConfig) and callable(benchmark)'
+"$smoke_dir/venv/bin/python" -c 'from src.evaluation.benchmark_validation import validate_report; from src.evaluation.benchmark_cohort import evaluate_cohort; assert callable(validate_report) and callable(evaluate_cohort)'
 "$smoke_dir/venv/bin/python" -c 'from src.core.schedules import ScheduleService, schedule_definition; assert callable(ScheduleService); assert schedule_definition({"template_id": "fixture", "template_revision": 1, "interval_seconds": 60, "total_runs": 1})["total_runs"] == 1'
 "$smoke_dir/venv/bin/ai-agent-scanner" diff --help
 "$smoke_dir/venv/bin/ai-agent-scanner" triage --help
