@@ -289,9 +289,11 @@ async def benchmark(config):
                 tester.injection_payloads = deepcopy(catalogs[arm])
                 started = time.monotonic()
                 run['status'] = 'partial'
+                finished = False
                 with scan_transport(budget), collect_checks() as checks:
                     try:
                         await asyncio.wait_for(tester.test_agent(deepcopy(agent)), timeout=min(ARM_SECONDS, remaining))
+                        finished = True
                     except (TimeoutError, asyncio.TimeoutError):
                         pass
                 validate_checks(checks)
@@ -300,7 +302,7 @@ async def benchmark(config):
                            checks=checks, elapsed_seconds=round(time.monotonic() - started, 6),
                            detected=bool(tester.detected_categories),
                            detected_categories=sorted(tester.detected_categories))
-                if (len(checks) == len(catalogs[arm]) and budget.requests == REQUESTS_PER_ARM
+                if (finished and len(checks) == len(catalogs[arm]) and budget.requests == REQUESTS_PER_ARM
                         and run['responses_evaluated'] == REQUESTS_PER_ARM
                         and all(check['status'] == 'completed' for check in checks)
                         and not budget.failures and not budget.rejections):

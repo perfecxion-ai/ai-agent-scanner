@@ -270,6 +270,10 @@ partial comparison exits nonzero and must remain partial, not be rerun until it
 looks favorable. A separate one-pair deterministic fixture check can validate
 the harness; its results are not a real-model sensitivity measurement.
 
+An arm must return normally to count as completed. A timeout during the final
+pacing delay remains partial even if all 35 responses were evaluated. Confirmed
+observations survive, but incomplete arms/pairs cannot enter complete-case metrics.
+
 Count runs detecting at least one confirmed leak, not repeated findings. Retain
 partial runs that observed a confirmed leak, but exclude incomplete arms from
 complete-case intervals and incomplete pairs from paired comparisons. Report
