@@ -10,12 +10,14 @@ from src.risk.risk_assessor import SEVERITY_SCORES
 from .prompt_injection_tests import PromptInjectionTester
 from .access_control_tests import AccessControlTester
 from .data_privacy_tests import DataPrivacyTester
+from .prompt_suites import validate_prompt_suite_agents
 
 class SecurityTestEngine:
     """Comprehensive security testing for discovered AI agents"""
     
-    def __init__(self):
-        self.prompt_tester = PromptInjectionTester()
+    def __init__(self, *, prompt_suite=None):
+        self.prompt_tester = PromptInjectionTester(prompt_suite=prompt_suite)
+        self.prompt_suite = self.prompt_tester.prompt_suite
         self.access_tester = AccessControlTester()
         self.privacy_tester = DataPrivacyTester()
         
@@ -27,6 +29,8 @@ class SecurityTestEngine:
         
         results = []
         total_agents = len(agents)
+        if self.prompt_suite is not None:
+            validate_prompt_suite_agents(agents, require_target=False)
         
         for i, agent in enumerate(agents):
             if progress_callback:
@@ -62,6 +66,9 @@ class SecurityTestEngine:
         }
         test_results['check_schema_version'] = CHECK_SCHEMA_VERSION
         test_results['checks'] = []
+        marker = agent.get('system_prompt_canary')
+        if self.prompt_suite is not None and not (isinstance(marker, str) and marker and marker in self.prompt_suite):
+            test_results['prompt_suite'] = self.prompt_suite
         environment = agent.get('metadata', {}).get('environment')
         if environment in ('production', 'development', 'staging', 'test'):
             test_results['metadata']['environment'] = environment

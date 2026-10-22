@@ -485,6 +485,59 @@ absence in arbitrary supplied files. A fresh authorized multi-model measurement
 with preserved captures is still required before candidate adoption. All eight
 PR/post-merge CI jobs remain required before acceptance.
 
+### Shared experimental prompt catalog
+
+The fixed candidate catalog is shared by the paired benchmark and explicit Python
+tester/engine constructor selection. Default construction preserves all legacy
+payloads and first-five sampling; candidate requests retain the exact measured
+payloads and payload-derived probe versions. A separate order-sensitive digest
+binds public catalog semantics without using protected values or credentials.
+Each tester receives an independent catalog; selecting one suite does not run
+both or reset the shared transport budget.
+
+Active candidate checks require a request-ready target with an opaque protected
+canary and public context. Whole-inventory validation requires at least one such
+target; engine calls for individual unsupported or unmodelled assets retain their
+existing skipped/null behavior. Their declared markers still undergo collision
+validation, even when there is no testable target in that per-asset call. Pure local validation
+checks all declared canaries against public inventory, static field/identity
+descriptors, every target's requests and normalized URLs, resolved credentials,
+and computed probe versions before candidate HTTP. Unsupported entries cannot
+hide a declared canary collision. Configuration failures expose static errors,
+not supplied values. Missing or unseeded evidence never becomes a security pass.
+
+The full local Linux/Python 3.10 suite passes 1,986 cases with warnings treated as
+errors, including 237 new suite cases. Independent focused acceptance passes 464
+combined catalog/benchmark/validator/cohort cases. Frozen catalog and manifest hashes,
+unchanged defaults, constructor isolation, mixed-inventory collisions, and actual
+local HTTP disclosure/refusal/unseeded/denied/malformed/leak-then-failure cases
+pass. Existing finite budgets remain enforced and partial confirmed high risk
+survives ordinary failed requests. This does not add recovery for cancellation
+inside an unfinished category or an outer scan deadline.
+
+Final mixed-inventory review reproduced an extra per-asset presence check turning
+unmodelled entries into failures. The engine now preserves those entries as
+skipped without weakening the strict whole-scan prerequisite or any privacy
+guard. Actual loopback regression retains three skipped/null entries, one
+confirmed target, 35 prompt requests, and zero failed assets. Normal scan coverage
+remains partial when assets are skipped.
+
+Review reproduced and closed static report-key, tuple-label, and skipped-asset
+marker collisions. A bounded public-descriptor guard includes emitted schema,
+pattern, policy, and SARIF identities; maintenance tests audit current output
+source constants so new opaque labels cannot silently bypass that guard. Generic
+redaction and report schemas are unchanged. The earlier private cohort still
+passes the strict offline CLI with an identical recomputed summary; this checks
+catalog compatibility, not a fresh target measurement. Ruff, configured Bandit,
+distribution build, and Twine metadata checks pass.
+
+Independent review accepted the core changes. The complete PR/post-merge CI
+matrix remains required.
+Installed-wheel smoke now constructs both default and selected engines outside
+the checkout. This is synthetic local contract acceptance, not a new real-model
+measurement, CLI/API selection, package publication, or deployment. Operator
+workflow integration and a targeted final-revision retest remain separate work.
+
 ### Finding presentation grouping
 
 The O3 slice changes only dashboard presentation and synthetic browser fixtures.
