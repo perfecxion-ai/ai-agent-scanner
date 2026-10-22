@@ -282,6 +282,64 @@ async def test_actual_cli_publishes_private_report_and_nonzero_for_partial(targe
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('disclose', [False, True])
+async def test_final_pacing_timeout_keeps_full_ledger_partial(disclose, tmp_path, monkeypatch, capsys):
+    import asyncio
+    import sys
+    from src.core.contracts import record_interaction
+    from src.core.transport import current_budget
+
+    calls = {'responses': 0, 'pauses': 0}
+
+    async def response(self, agent, category, payload):
+        current_budget().reserve('http://127.0.0.1:1')
+        calls['responses'] += 1
+        record_interaction(True)
+        text = CANARY if disclose and calls['responses'] % 35 == 0 else 'No disclosure.'
+        return self._analyze_response(agent, category, payload, json.dumps({'response': text}), 200)
+
+    async def pause(seconds):
+        calls['pauses'] += 1
+        if calls['pauses'] % 35 == 0:
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr(PromptInjectionTester, '_test_single_payload', response)
+    monkeypatch.setattr(module.ScopePolicy, 'addresses', lambda *args: ['127.0.0.1'])
+    monkeypatch.setattr('asyncio.sleep', pause)
+    monkeypatch.setattr(module, 'ARM_SECONDS', 0.5)
+    script = Path(__file__).parents[1] / 'scripts/benchmark-prompt-leaks.py'
+    spec = importlib.util.spec_from_file_location('prompt_benchmark_pacing_script', script)
+    loaded = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(loaded)
+    output = tmp_path / 'pacing-result.json'
+    monkeypatch.setattr(sys, 'argv', [str(script), '--endpoint', 'http://127.0.0.1:1',
+        '--provider', 'ollama', '--model', 'fixture-model', '--evidence-context-id', 'fixture-context-v1',
+        '--canary-env', ENV, '--revision', 'a' * 40, '--allow-network', '127.0.0.1/32',
+        '--allow-loopback', '--pairs', '1', '--output', str(output)])
+    assert await asyncio.to_thread(loaded.main) == 1
+    result = json.loads(output.read_text())
+    assert calls == {'responses': 70, 'pauses': 70}
+    assert result['status'] == 'partial'
+    for run in result['runs']:
+        assert run['status'] == 'partial' and run['detected'] is disclose
+        assert run['requests_attempted'] == run['responses_evaluated'] == 35
+        assert len(run['checks']) == 7
+        assert all(check['status'] == 'completed' and check['outcome'] == 'inconclusive'
+                   and check['responses_evaluated'] == 5 for check in run['checks'])
+        assert run['detected_categories'] == (['payload_injection'] if disclose else [])
+    for metrics in result['metrics']['arms'].values():
+        assert metrics['completed'] == 0 and metrics['partial'] == 1
+        assert metrics['partial_detected'] == int(disclose)
+        assert metrics['complete_case_hit_fraction'] is None
+        assert metrics['complete_case_wilson_95'] is None
+    assert result['metrics']['paired_complete_cases']['incomplete'] == 1
+    assert output.stat().st_mode & 0o777 == 0o600
+    assert all(value not in json.dumps(result) for value in (CANARY, ENV))
+    assert capsys.readouterr().out == ''
+    assert not list(tmp_path.glob('.prompt-benchmark-*'))
+
+
+@pytest.mark.asyncio
 async def test_explicit_issued_key_is_only_a_header(target):
     endpoint, state = target
     result = await module.benchmark(replace(config(endpoint), api_key_env=KEY_ENV))

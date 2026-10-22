@@ -77,6 +77,12 @@ before requesting authorized operator execution on the final pinned revision.
 Do not start cloud resources, change deployed services, or invent target-side
 canaries to obtain a positive result. Freeze setup and sample counts before runs.
 
+A benchmark-only follow-up requires normal tester return before labeling an arm
+completed. Timeout during the final pacing delay remains partial even with all
+35 responses evaluated; analyzer confirmations survive without manufacturing
+complete-case observations. Production prompts and sampling are unchanged. See
+[the regression scope](VALIDATION.md#benchmark-final-pacing-timeout-follow-up).
+
 The supplied retest of `4f03d6350058c40ad1cdba1d73b16d22a4fa1575` now supports
 the normal server profile workflow without stored-report edits. Six pipelines,
 40 agent projections, SARIF, and restart inventory agree. The experimental prompt

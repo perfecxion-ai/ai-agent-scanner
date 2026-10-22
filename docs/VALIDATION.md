@@ -351,6 +351,24 @@ supported real-server profile workflow and frozen paired model comparison.
 No cloud model was exercised here, and no experimental prompt has been promoted
 to production based on fixture results.
 
+### Benchmark final-pacing timeout follow-up
+
+Offline-validator review reproduced a benchmark-only completion defect: timeout
+during the 35th pacing delay could leave seven completed check records and 35
+evaluations while the interrupted category never returned its findings. Counts
+alone incorrectly labeled that arm completed. Completion now also requires a
+normal return from the tester. Positive analyzer observations survive as partial;
+incomplete arms/pairs stay out of complete-case fractions and intervals.
+
+Two regressions exercise actual check decorators, analyzer, observation checkpoint,
+CLI, and private export with deterministic HTTP stubs, for both disclosure and
+nondisclosure on the final response. The focused benchmark gate passes 57 cases
+with warnings treated as errors; the full local suite passes 1579 cases. Ruff and
+configured Bandit also pass. Production prompt catalogs, scoring, and sampling
+are unchanged. The supplied earlier GCP arms completed well below their deadlines;
+this fix does not establish new model sensitivity or invalidate those observations.
+Independent review and all eight PR/post-merge CI jobs remain required.
+
 ### Finding presentation grouping
 
 The O3 slice changes only dashboard presentation and synthetic browser fixtures.
