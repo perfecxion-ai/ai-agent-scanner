@@ -103,6 +103,19 @@ explicit controls and target provenance before adopting a candidate or increasin
 sampling. Production defaults remain unchanged. Keep raw-score schema migration,
 broader authorization controls, and enterprise readiness as separate reviewed work.
 
+The offline cohort gate now makes the next evidence collection reproducible from
+an explicit private plan. It checks current manifests, ordered pairs, check
+provenance, counters, checkpoints, timing consistency, and recomputed metrics.
+Every declared positive/negative control and model case remains visible; missing,
+invalid, partial, and failed-control evidence produce nonzero exit. Inputs are
+bounded private files, and atomic no-clobber summaries omit supplied labels,
+paths, payloads, secret references, and hashes. There is no network or app startup.
+This accepts internally consistent files and declared controls, not actual target
+identity, preregistration, privacy, independence, or model safety. State policies
+remain visible operator assertions. See [usage and limits](BETA_TESTING.md#offline-multi-model-evidence-gate).
+Production defaults stay unchanged; the existing one-target bundle is not a new
+multi-model replication.
+
 O3 now has conservative dashboard-only finding groups: 18 sample occurrences
 can display as seven groups while original JSON/SARIF, score 70, all occurrence
 IDs, check counts, suppression keys, and resolution behavior remain unchanged.

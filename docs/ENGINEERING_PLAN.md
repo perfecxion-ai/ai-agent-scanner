@@ -23,6 +23,14 @@ The next accuracy priority is independent frozen multi-model replication with
 explicit controls and target provenance before candidate adoption. Production
 defaults remain unchanged. PR #51 addresses O1/O2/O4/O5/O6 without changing evidence
 verdicts or claiming stronger detection.
+
+The offline cohort gate supports that replication without executing targets. It
+requires predeclared positive/negative controls and at least two declared model
+identities, validates current paired-report ledgers, and preserves missing,
+invalid, partial, and failed-control cases with nonzero exit. Its private summary
+does not pool targets or promote a candidate. Plan timing, model identity, canary
+placement, and state/reset policy remain operator assertions, not verified facts.
+See [the protocol](BETA_TESTING.md#offline-multi-model-evidence-gate).
 The dashboard now groups compatible prompt occurrences for display only, with
 original records available in bounded details. Raw findings, scores, exports,
 and lifecycle IDs remain unchanged.

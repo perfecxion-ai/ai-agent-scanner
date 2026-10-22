@@ -294,7 +294,9 @@ def test_unknown_state_is_visible_not_an_independence_claim():
     declaration["cases"][2]["state_policy"] = "persistent_or_unknown"
     result = module.evaluate_cohort(declaration, documents(declaration))
     assert result["status"] == "completed"
-    assert result["cases"][2]["operator_asserted_state_policy"] == "persistent_or_unknown"
+    assert (
+        result["cases"][2]["operator_asserted_state_policy"] == "persistent_or_unknown"
+    )
     assert "operator assertions" in result["provenance"]
     assert result["promotion"] == "not_decided"
 
@@ -455,20 +457,43 @@ def test_invalid_plan_or_output_never_publishes_success(inputs, mutation):
     assert not list(root.rglob(".cohort-*"))
 
 
-def test_atomic_output_race_preserves_other_writer(inputs, monkeypatch):
+@pytest.mark.parametrize("kind", ["file", "symlink"])
+def test_atomic_output_race_preserves_other_writer(inputs, monkeypatch, kind):
     root, reports, _ = inputs
     output = root / "summary.json"
     original = os.link
 
     def raced(*args, **kwargs):
-        output.write_text("Another writer")
+        if kind == "symlink":
+            output.symlink_to(root / "plan.json")
+        else:
+            output.write_text("Another writer")
         return original(*args, **kwargs)
 
     monkeypatch.setattr(os, "link", raced)
     with pytest.raises(module.CohortError):
         module.check_files(root / "plan.json", reports, output)
-    assert output.read_text() == "Another writer"
+    if kind == "symlink":
+        assert (
+            output.is_symlink()
+            and output.read_bytes() == (root / "plan.json").read_bytes()
+        )
+    else:
+        assert output.read_text() == "Another writer"
     assert not list(root.glob(".cohort-*"))
+
+
+def test_interrupted_publication_leaves_no_success_file(inputs, monkeypatch):
+    root, reports, _ = inputs
+    output = root / "summary.json"
+
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(module.json, "dump", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        module.check_files(root / "plan.json", reports, output)
+    assert not output.exists() and not list(root.glob(".cohort-*"))
 
 
 @pytest.mark.parametrize("case", ["completed", "missing", "failed_control", "invalid"])

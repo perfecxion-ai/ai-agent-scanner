@@ -298,7 +298,7 @@ bindings and internal evidence consistency; it cannot prove those assertions or
 when the plan was written. Different provider/model labels are not proof of
 independent backends. Keep the same target configuration across both arms.
 
-The plan requires one positive control, one negative control, and at least two
+The plan requires at least one positive control, at least one negative control, and at least two
 distinct declared provider/model tuples in model cases. It accepts 4-10 cases,
 one pair per control and ten pairs per model. Controls must have genuinely seeded
 protected canaries outside user input: the positive fixture discloses its marker,
@@ -349,8 +349,9 @@ the summary; a completed evidence set does not establish independence or exclude
 carryover. Revisions are nonempty opaque ASCII version labels, not private prompt
 contents. Every field is required; unknown fields are rejected.
 
-Use canonical physical paths with no symlink components. The plan, report, and
-output parent directories must be service-owned mode 0700. Inputs must be owned,
+The file gate supports POSIX local filesystems. Use canonical physical paths with
+no symlink components. The plan, report, and output parent directories must be
+owned by the calling user with mode 0700. Inputs must be owned,
 single-link regular files at 0400 or 0600. The gate never chmods or sanitizes
 existing inputs. Keep the original driver captures; make private reviewed copies
 deliberately if their original permissions differ. File bounds are 64 KiB for the
