@@ -213,6 +213,45 @@ def test_at_least_one_supported_adapter_target_required(value):
         suites.validate_prompt_suite_agents(value)
 
 
+@pytest.mark.parametrize('flag', [None, 0, 1, '', [], {}])
+def test_internal_target_requirement_flag_is_strict_boolean(flag):
+    with pytest.raises(suites.PromptSuiteError):
+        suites.validate_prompt_suite_agents([agent()], require_target=flag)
+
+
+def test_relaxed_internal_requirement_keeps_all_secret_collision_guards(monkeypatch):
+    skipped = dict(agent(), provider='unsupported')
+    suites.validate_prompt_suite_agents([skipped], require_target=False)
+    suites.validate_prompt_suite_agents([], require_target=False)
+    with pytest.raises(suites.PromptSuiteError):
+        suites.validate_prompt_suite_agents([skipped])
+    for marker in ('protected_canary', SUITE, 'response_excerpt', suites.prompt_suite_pin()[:24]):
+        with pytest.raises(suites.PromptSuiteError):
+            suites.validate_prompt_suite_agents([dict(skipped, system_prompt_canary=marker)], require_target=False)
+    skipped.update(api_key_env='SUITE_SKIPPED_CREDENTIAL')
+    monkeypatch.setenv('SUITE_SKIPPED_CREDENTIAL', 'issued-key-' + CANARY)
+    with pytest.raises(suites.PromptSuiteError):
+        suites.validate_prompt_suite_agents([skipped], require_target=False)
+
+
+@pytest.mark.asyncio
+async def test_per_asset_candidate_engine_preserves_untestable_skips_without_calls(monkeypatch):
+    engine = SecurityTestEngine(prompt_suite=SUITE)
+    call = AsyncMock(side_effect=AssertionError('Unsupported targets must not call a model'))
+    for tester in (engine.prompt_tester, engine.access_tester, engine.privacy_tester):
+        monkeypatch.setattr(tester, 'test_agent', call)
+    cases = [dict(agent(), provider='unsupported'), dict(agent(), model=None), dict(agent(), endpoint=None)]
+    assert await engine.test_agents([]) == []
+    for item in cases:
+        result, = await engine.test_agents([item])
+        assert result['status'] == 'skipped' and result['overall_risk_score'] is None
+        assert all(check['status'] == 'skipped' and check['outcome'] == 'not_evaluated'
+                   for check in result['checks'])
+        with pytest.raises(suites.PromptSuiteError):
+            suites.validate_prompt_suite_agents([item])
+    call.assert_not_called()
+
+
 def test_missing_credentials_skip_but_marker_reuse_cannot_evade_validation(monkeypatch):
     missing = dict(agent(), api_key_env='SUITE_MISSING_CREDENTIAL')
     monkeypatch.delenv('SUITE_MISSING_CREDENTIAL', raising=False)
@@ -299,6 +338,37 @@ async def test_normal_pipeline_actual_http_conservative_bounded_and_secret_free(
     rendered = json.dumps(result) + caplog.text
     assert CANARY not in rendered and PRIVATE_TEXT not in rendered
     assert all(CANARY not in json.dumps(body) for body, _ in state['calls'])
+
+
+@pytest.mark.asyncio
+async def test_mixed_pipeline_preserves_skipped_assets_and_single_ready_target_budget(target, monkeypatch):
+    endpoint, state = target
+    engine = SecurityTestEngine(prompt_suite=SUITE)
+    monkeypatch.setattr(engine.access_tester, 'test_agent', AsyncMock(return_value=[]))
+    monkeypatch.setattr(engine.privacy_tester, 'test_agent', AsyncMock(return_value=[]))
+    ready = agent(endpoint)
+    skipped = [dict(agent(endpoint), id='unsupported', provider='unsupported'),
+               dict(agent(endpoint), id='unmodelled', model=None),
+               dict(agent(), id='no-endpoint', endpoint=None)]
+    for item in skipped:
+        item.pop('system_prompt_canary')
+        item.pop('evidence_context_id')
+    inventory = [ready, *skipped]
+    before = deepcopy(inventory)
+    suites.validate_prompt_suite_agents(inventory)
+    budget = ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True, max_requests=35)
+    with scan_transport(budget):
+        result = await run_pipeline(None, engine, RiskAssessment(), None, 'security_only', agents=inventory)
+    assert inventory == before
+    assert budget.requests == len(state['calls']) == 35
+    assert result['agents'][0]['risk_score'] == 70
+    assert result['agents'][0]['risk_level'] == 'high'
+    assert [item['security_status'] for item in result['agents'][1:]] == ['skipped'] * 3
+    assert all(item['risk_score'] is None and item['risk_level'] == 'unknown' for item in result['agents'][1:])
+    assert all(check['status'] == 'skipped' and check['outcome'] == 'not_evaluated'
+               for item in result['agents'][1:] for check in item['checks'])
+    assert result['summary']['agents_skipped'] == 3 and result['summary']['agents_failed'] == 0
+    assert result['status'] == 'partial'
 
 
 @pytest.mark.asyncio

@@ -30,7 +30,7 @@ class SecurityTestEngine:
         results = []
         total_agents = len(agents)
         if self.prompt_suite is not None:
-            validate_prompt_suite_agents(agents)
+            validate_prompt_suite_agents(agents, require_target=False)
         
         for i, agent in enumerate(agents):
             if progress_callback:

@@ -155,10 +155,11 @@ def _adapter_target(agent):
         raise PromptSuiteError() from None
 
 
-def validate_prompt_suite_agents(agents):
+def validate_prompt_suite_agents(agents, *, require_target=True):
     """Validate all testable targets and requests locally before candidate I/O."""
     try:
-        if not isinstance(agents, list) or not agents or not all(isinstance(agent, dict) for agent in agents):
+        if (type(require_target) is not bool or not isinstance(agents, list)
+                or not all(isinstance(agent, dict) for agent in agents)):
             raise PromptSuiteError()
         public = _public_inventory(agents)
         reserved = [PROTECTED_DISCLOSURE_SUITE, PIN_FIELD, prompt_suite_pin(), _ERROR,
@@ -183,7 +184,7 @@ def validate_prompt_suite_agents(agents):
                     or context != context.strip() or any(char in context for char in '[]')
                     or any(ord(char) < 32 or ord(char) == 127 for char in context)):
                 raise PromptSuiteError()
-        if not targets:
+        if require_target and not targets:
             raise PromptSuiteError()
         requests, versions = [], []
         for agent in targets:
