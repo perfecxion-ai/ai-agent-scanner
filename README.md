@@ -7,17 +7,20 @@ a comprehensive test of every AI attack surface.
 
 The [lab remediation gate](docs/BETA_REMEDIATION.md) is closed for limited
 single-operator beta testing on runtime revision `82ee7d5`. This is not
-production or enterprise approval. Detection sensitivity remains unvalidated;
+production or enterprise approval. General detection sensitivity remains unvalidated;
 zero findings and inconclusive results are not clean security verdicts. Server
 security-only scans support operator-configured system-prompt canary references;
 this closes an input gap, not the detection-sensitivity gap. See
 [evidence setup and limits](docs/detection-evidence.md).
 
-An opt-in [paired detector benchmark](docs/BETA_TESTING.md#equal-budget-prompt-comparison)
+An opt-in [paired prompt benchmark](docs/BETA_TESTING.md#equal-budget-prompt-comparison)
 compares the production prompt sample with an experimental extraction-focused
 suite at equal request budgets. It requires a controlled protected-canary lab.
-Fixture tests validate its accounting and privacy, not improved model hit rates;
-the experimental suite does not change production scan defaults.
+A reviewed single-target comparison observed 10/10 candidate detections versus
+2/10 for the legacy suite, not general accuracy. An
+[offline cohort gate](docs/BETA_TESTING.md#offline-multi-model-evidence-gate) checks
+predeclared reports and positive/negative controls without invoking targets.
+Production scan defaults remain unchanged.
 
 ## Install and try locally
 

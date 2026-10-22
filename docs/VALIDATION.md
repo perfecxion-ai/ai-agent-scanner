@@ -369,6 +369,47 @@ are unchanged. The supplied earlier GCP arms completed well below their deadline
 this fix does not establish new model sensitivity or invalidate those observations.
 Independent review and all eight PR/post-merge CI jobs remain required.
 
+### Offline paired-cohort evidence gate
+
+The strict report validator binds the current schema, exact prompt manifests and
+probe versions, provider/model/context/revision, seeded order, pair cardinality,
+check ledgers, counters, and observation checkpoints before recomputing metrics.
+It rejects substituted aggregate scores, duplicate/missing arms, boolean counters,
+nonfinite values, unknown fields, and inconsistent completed observations. Partial
+checkpoint positives can survive an interrupted final category without fabricating
+confirmed checks. Reported arm/cohort elapsed time has five seconds of cleanup/
+timing tolerance, not a larger execution budget or independent wire measurement.
+
+The offline cohort CLI uses an explicit operator-declared plan with positive and
+negative controls plus at least two distinct declared model identities. It keeps
+all planned cases, including missing/invalid/partial/control-failing inputs, and
+returns nonzero for incomplete evidence. Completed nondisclosure is not a security
+pass. Results remain per case; no heterogeneous accuracy score or promotion
+decision is produced. State/reset policies are visible assertions, not proof of
+independence. Old single-target results do not satisfy a new predeclared cohort.
+
+Private bounded file loaders reject symlink ancestors/leaves, FIFOs, hard links,
+foreign owners, unsafe permissions, changing files, duplicate keys, excessive
+JSON depth/nodes/strings/integers, and malformed UTF-8. Directory descriptors pin
+reads and atomic no-clobber 0600 output. Summary fields are fixed enums, generated
+ordinals, and recomputed metrics, not supplied labels, paths, prompts, or hashes.
+No target, credential environment, server app, database, or supplied script is
+used. The installed-wheel smoke imports both new modules outside the checkout.
+
+Independent reviews accepted the schema/ledger, filesystem, control, privacy,
+and documentation contracts. The final combined Linux/Python 3.10 suite passes
+1749 cases with warnings as errors and an inherited registry-path sentinel.
+This includes 112 new validator and 58 new cohort/CLI cases; the focused combined
+benchmark gate passes 227 cases. Ruff, configured Bandit, pip check, build,
+Twine, and installed-wheel smoke pass. These counts describe overlapping gates,
+not additional independent model observations. Synthetic fixtures exercise actual CLI subprocess
+exit codes, missing evidence, failed controls, malformed inputs, no-clobber races,
+and ignored inherited registry configuration. These checks validate offline
+accounting, not real-model sensitivity, truthful operator attestations, or secret
+absence in arbitrary supplied files. A fresh authorized multi-model measurement
+with preserved captures is still required before candidate adoption. All eight
+PR/post-merge CI jobs remain required before acceptance.
+
 ### Finding presentation grouping
 
 The O3 slice changes only dashboard presentation and synthetic browser fixtures.
