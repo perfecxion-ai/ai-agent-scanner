@@ -31,6 +31,15 @@ invalid, partial, and failed-control cases with nonzero exit. Its private summar
 does not pool targets or promote a candidate. Plan timing, model identity, canary
 placement, and state/reset policy remain operator assertions, not verified facts.
 See [the protocol](BETA_TESTING.md#offline-multi-model-evidence-gate).
+The supplied `4070eed` cohort now passes independent offline replay: both controls
+meet expectations, and each declared model completes ten balanced-order pairs.
+Candidate observes disclosure in 10/10 runs on each target versus baseline 5/10
+and 1/10 at equal request budgets. This accepts per-target observations and
+accounting, not general sensitivity, backend independence, or candidate promotion.
+State, provenance, setup failures, incomplete audit captures, and privacy limits
+remain explicit in [the reviewed retest](VALIDATION.md#frozen-paired-cohort-retest).
+A separately reviewed opt-in normal-scan workflow is the next product decision;
+production defaults remain unchanged.
 The dashboard now groups compatible prompt occurrences for display only, with
 original records available in bounded details. Raw findings, scores, exports,
 and lifecycle IDs remain unchanged.

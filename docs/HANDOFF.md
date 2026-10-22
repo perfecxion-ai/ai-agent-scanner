@@ -113,8 +113,26 @@ paths, payloads, secret references, and hashes. There is no network or app start
 This accepts internally consistent files and declared controls, not actual target
 identity, preregistration, privacy, independence, or model safety. State policies
 remain visible operator assertions. See [usage and limits](BETA_TESTING.md#offline-multi-model-evidence-gate).
-Production defaults stay unchanged; the existing one-target bundle is not a new
+Production defaults stay unchanged; the earlier one-target bundle is not a new
 multi-model replication.
+
+The supplied frozen-cohort retest of `4070eed` now passes independent offline
+replay with a summary identical to the archived output. Both declared controls
+meet expectations; each declared model target completes ten balanced-order pairs.
+Candidate observes disclosure in 10/10 runs on each target versus baseline 5/10
+and 1/10, respectively, at equal 35-request arm budgets. All 1,540 benchmark
+requests are accounted for, and nondisclosure never becomes a security pass.
+These are per-target measurements, not pooled accuracy or proof of independent
+backends. One target's state is explicitly unknown. Preserve the failed setup,
+corrected seeding, missing audit artifacts, and privacy-sweep/retention limits in
+[the reviewed acceptance](VALIDATION.md#frozen-paired-cohort-retest).
+
+This closes collection of an internally consistent declared cohort, not candidate
+promotion or enterprise readiness. The next product step is a separate reviewed
+decision on explicit opt-in candidate use in normal scans, with unchanged default
+prompts, bounded requests, versioned provenance, conservative evidence, and
+CLI/API workflow regressions. No new cloud run is needed for this documentation
+checkpoint; runtime changes need their own scoped validation.
 
 O3 now has conservative dashboard-only finding groups: 18 sample occurrences
 can display as seven groups while original JSON/SARIF, score 70, all occurrence
