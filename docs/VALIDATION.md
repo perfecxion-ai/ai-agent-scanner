@@ -688,16 +688,18 @@ on teardown. Normal configured server behavior is unchanged. Backup acceptance
 retains its outer `SCAN_` child-environment filter; the inner entrypoint now also
 clears the registry setting for direct child invocations.
 
-Seven new bounded regressions cover missing/private paths with forbidden-open
+Eight new bounded regressions cover missing/private paths with forbidden-open
 guards, fresh imports, cached fixtures, restoration, and direct backup children.
 The native macOS diagnostic run located a 20-second fixture timeout at the first
 HTTP server constructor. That fixture now binds numeric server names without
 reverse DNS; fresh and cached setup run with `getfqdn` and `gethostbyaddr`
 forbidden. The 20-second child deadline and bounded traceback diagnostics remain.
+A Linux symlink-ancestor regression verifies canonicalization of the owned
+temporary root while preserving database leaf guards; native CI remains pending.
 Before one additional quoted-identifier regression, the isolation branch passed
 1566 full-suite cases with warnings treated as errors and an inherited nonexistent
-registry path. Independent review passed 177 relevant cases. A final 54-case
-backup/isolation/workflow gate includes the hostile-identifier regression and
+registry path. Independent review passed 177 relevant cases. A final 55-case
+backup/isolation/workflow gate includes the hostile-identifier and symlink regressions and
 passes. Expanded Bandit covers both helpers; one narrow B608 suppression documents
 the existing escaped SQLite identifier query, with a regression proving hostile
 table-name text cannot alter other fixture tables. Ruff and whitespace checks pass.

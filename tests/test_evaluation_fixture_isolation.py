@@ -23,8 +23,7 @@ def benchmark_module():
     return loaded
 
 
-@pytest.mark.parametrize("fixture", ["api", "real_lab", "offline_operator"])
-def test_unit_fixtures_ignore_inherited_and_cached_operator_registry(tmp_path, fixture):
+def check_unit_fixture_isolation(tmp_path, fixture, temporary_parent=None):
     private_path = str(tmp_path / "private-operator-profiles.json")
     program = r'''
 import faulthandler
@@ -66,13 +65,14 @@ module_name = {
 phase("import-factory")
 factory = getattr(importlib.import_module(module_name), name).__wrapped__
 with patch.object(os, "open", protected_open), tempfile.TemporaryDirectory(prefix="scanner-isolation-") as directory:
+    directory = Path(directory).resolve(strict=True)
     for cached in (False, True):
         label = "cached" if cached else "fresh"
         if cached:
             server = sys.modules["app"]
             operator_registry = OperatorRegistry()
             server._evidence_profiles = operator_registry
-        fixture_directory = Path(directory) / str(cached)
+        fixture_directory = directory / str(cached)
         fixture_directory.mkdir()
         with pytest.MonkeyPatch.context() as changes:
             if name == "real_lab":
@@ -99,6 +99,8 @@ print("isolated-fixture-ok")
 '''
     environment = {"PATH": os.defpath, "PYTHONDONTWRITEBYTECODE": "1",
                    "SCAN_EVIDENCE_PROFILES_FILE": private_path}
+    if temporary_parent is not None:
+        environment["TMPDIR"] = str(temporary_parent)
     try:
         completed = subprocess.run([sys.executable, "-c", program, fixture], cwd=ROOT, env=environment,
                                    capture_output=True, text=True, timeout=20, check=False)
@@ -110,6 +112,20 @@ print("isolated-fixture-ok")
     assert "fixture-isolation-phase: done" in completed.stderr
     assert private_path not in completed.stdout + completed.stderr
     assert not Path(private_path).exists()
+
+
+@pytest.mark.parametrize("fixture", ["api", "real_lab", "offline_operator"])
+def test_unit_fixtures_ignore_inherited_and_cached_operator_registry(tmp_path, fixture):
+    check_unit_fixture_isolation(tmp_path, fixture)
+
+
+def test_offline_fixture_with_symlinked_temp_ancestor(tmp_path):
+    real_temp = tmp_path / "real-temp"
+    real_temp.mkdir()
+    alias = tmp_path / "temp-alias"
+    alias.symlink_to(real_temp, target_is_directory=True)
+    check_unit_fixture_isolation(tmp_path, "offline_operator", temporary_parent=alias)
+    assert alias.is_symlink() and not list(real_temp.iterdir())
 
 
 def test_queue_benchmark_ignores_inherited_registry_on_fresh_import(tmp_path):
