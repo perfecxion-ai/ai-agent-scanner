@@ -134,6 +134,16 @@ prompts, bounded requests, versioned provenance, conservative evidence, and
 CLI/API workflow regressions. No new cloud run is needed for this documentation
 checkpoint; runtime changes need their own scoped validation.
 
+The shared-catalog foundation adds explicit Python constructor selection for
+`protected-disclosure-v1`, with protected-canary/context prerequisites and static
+configuration errors before candidate requests. Both the benchmark and candidate
+tester use the same frozen payloads and existing probe versions. Default catalogs,
+sampling, scope, scoring, and deadlines are unchanged. Independent copies and
+cross-asset collision checks protect concurrent use and public evidence identity.
+CLI/API selection, saved-definition pins, and operator workflow acceptance remain
+the next integration slice, not capabilities claimed by this foundation alone.
+See [local validation](VALIDATION.md#shared-experimental-prompt-catalog).
+
 O3 now has conservative dashboard-only finding groups: 18 sample occurrences
 can display as seven groups while original JSON/SARIF, score 70, all occurrence
 IDs, check counts, suppression keys, and resolution behavior remain unchanged.

@@ -40,6 +40,11 @@ State, provenance, setup failures, incomplete audit captures, and privacy limits
 remain explicit in [the reviewed retest](VALIDATION.md#frozen-paired-cohort-retest).
 A separately reviewed opt-in normal-scan workflow is the next product decision;
 production defaults remain unchanged.
+The shared-catalog foundation now exposes explicit Python constructor selection
+with strict protected-evidence prerequisites, isolated catalogs, unchanged probe
+hashes, and an order-sensitive public catalog digest. CLI/API and saved-definition
+integration remain separate follow-up work; this foundation does not change normal
+operator defaults or establish additional model accuracy.
 The dashboard now groups compatible prompt occurrences for display only, with
 original records available in bounded details. Raw findings, scores, exports,
 and lifecycle IDs remain unchanged.
