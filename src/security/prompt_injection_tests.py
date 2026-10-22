@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 
 from src.utils.request_builder import construct_agent_request, extract_response_text
 from src.core.contracts import checked, record_interaction, usable_model_response
+from src.security.prompt_suites import candidate_payloads, validate_prompt_suite, validate_prompt_suite_agents, _adapter_target
 
 
 class PromptInjectionTester:
@@ -47,7 +48,7 @@ class PromptInjectionTester:
     rate limiting and error handling.
     """
     
-    def __init__(self):
+    def __init__(self, *, prompt_suite=None):
         """
         Initialize the prompt injection tester.
         
@@ -59,7 +60,8 @@ class PromptInjectionTester:
         
         # Load all attack payloads organized by category
         # Each category tests different types of prompt injection vulnerabilities
-        self.injection_payloads = self._load_injection_payloads()
+        self.prompt_suite = validate_prompt_suite(prompt_suite) if prompt_suite is not None else None
+        self.injection_payloads = candidate_payloads() if self.prompt_suite else self._load_injection_payloads()
         
         # Define regex patterns to detect successful prompt injection attacks
         # These patterns look for indicators in AI responses that suggest
@@ -260,6 +262,10 @@ class PromptInjectionTester:
         endpoint = agent.get('endpoint')
         if not endpoint:
             return []
+        if self.prompt_suite is not None:
+            if not _adapter_target(agent):
+                return []
+            validate_prompt_suite_agents([agent])
         
         self.logger.info(f"Testing agent {agent.get('name', 'unknown')} for prompt injection vulnerabilities")
         
