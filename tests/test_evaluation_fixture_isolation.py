@@ -27,10 +27,16 @@ def benchmark_module():
 def test_unit_fixtures_ignore_inherited_and_cached_operator_registry(tmp_path, fixture):
     private_path = str(tmp_path / "private-operator-profiles.json")
     program = r'''
+import faulthandler
+faulthandler.dump_traceback_later(8, repeat=True)
+import sys
+def phase(value):
+    print("fixture-isolation-phase: " + value, file=sys.stderr, flush=True)
+
+phase("import-support")
 import importlib
 import os
 from pathlib import Path
-import sys
 import tempfile
 from unittest.mock import patch
 import pytest
@@ -49,9 +55,11 @@ class OperatorRegistry:
 
 name = sys.argv[1]
 module_name = "tests.test_api_auth" if name == "api" else "tests.test_beta_lab_workflow"
+phase("import-factory")
 factory = getattr(importlib.import_module(module_name), name).__wrapped__
 with patch.object(os, "open", protected_open), tempfile.TemporaryDirectory(prefix="scanner-isolation-") as directory:
     for cached in (False, True):
+        label = "cached" if cached else "fresh"
         if cached:
             server = sys.modules["app"]
             operator_registry = OperatorRegistry()
@@ -61,14 +69,21 @@ with patch.object(os, "open", protected_open), tempfile.TemporaryDirectory(prefi
         with pytest.MonkeyPatch.context() as changes:
             generator = factory(changes) if name == "api" else factory(changes, fixture_directory)
             try:
+                phase(label + "-setup")
                 server = next(generator)[0]
+                phase(label + "-yielded")
                 assert "SCAN_EVIDENCE_PROFILES_FILE" not in os.environ
                 assert not server._evidence_profiles._profiles
             finally:
+                phase(label + "-teardown")
                 generator.close()
+                phase(label + "-closed")
         assert os.environ["SCAN_EVIDENCE_PROFILES_FILE"] == private_path
         if cached:
             assert server._evidence_profiles is operator_registry
+        phase(label + "-restored")
+phase("done")
+faulthandler.cancel_dump_traceback_later()
 print("isolated-fixture-ok")
 '''
     environment = {"PATH": os.defpath, "PYTHONDONTWRITEBYTECODE": "1",
@@ -77,6 +92,7 @@ print("isolated-fixture-ok")
                                capture_output=True, text=True, timeout=20, check=False)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert completed.stdout.strip() == "isolated-fixture-ok"
+    assert "fixture-isolation-phase: done" in completed.stderr
     assert private_path not in completed.stdout + completed.stderr
     assert not Path(private_path).exists()
 
