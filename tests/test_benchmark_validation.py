@@ -246,9 +246,44 @@ def test_run_counters_strict(report, field, value):
     assert_invalid(report)
 
 
-@pytest.mark.parametrize('value', [True, -1, float('nan'), float('inf'), 6601, MARKER])
+@pytest.mark.parametrize('value', [True, -1, float('nan'), float('inf'), 1205.000001, 6601, MARKER])
 def test_elapsed_bounded(report, value):
     report['runs'][0]['elapsed_seconds'] = value
+    assert_invalid(report)
+
+
+def test_bounded_timing_grace_and_cohort_total(report):
+    report['runs'][0]['elapsed_seconds'] = 1205
+    assert validator.validate_report(report, EXPECTED)['status'] == 'completed'
+    expected = dict(EXPECTED, pairs=10)
+    original = {run['arm']: deepcopy(run) for run in report['runs']}
+    report.update(scheduled_pairs=10, runs=[])
+    report['budgets']['max_requests'] = 700
+    for pair, order in enumerate(producer.paired_order(10, expected['seed'])):
+        for arm in order:
+            run = deepcopy(original[arm])
+            run.update(pair=pair, elapsed_seconds=270.25)
+            report['runs'].append(run)
+    refresh(report)
+    assert validator.validate_report(report, expected)['status'] == 'completed'
+    report['runs'][0]['elapsed_seconds'] += 0.000001
+    assert_invalid(report, expected)
+
+
+@pytest.mark.parametrize('mutation', ['unvisited', 'earlier_unconfirmed', 'zero_evaluated'])
+def test_partial_checkpoint_only_last_interrupted_evaluated_category(report, mutation):
+    run = report['runs'][0]
+    run.update(status='partial', detection_outcome='shared_analyzer_observation')
+    if mutation == 'unvisited':
+        run.update(checks=run['checks'][:1], requests_attempted=5, responses_evaluated=5,
+                   detected_categories=['instruction_bypass', 'system_prompt_extraction'])
+    elif mutation == 'earlier_unconfirmed':
+        run['checks'][0].update(outcome='inconclusive', reason=validator._ABSENCE)
+    else:
+        run['checks'][0].update(status='failed', outcome='inconclusive', reason=validator._FAILURE,
+                                responses_evaluated=0)
+        run['responses_evaluated'] -= 5
+    refresh(report)
     assert_invalid(report)
 
 
