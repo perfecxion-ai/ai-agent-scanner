@@ -495,22 +495,32 @@ binds public catalog semantics without using protected values or credentials.
 Each tester receives an independent catalog; selecting one suite does not run
 both or reset the shared transport budget.
 
-Candidate execution requires at least one request-ready target, and every such
-target needs an opaque protected canary and public context. Pure local validation
+Active candidate checks require a request-ready target with an opaque protected
+canary and public context. Whole-inventory validation requires at least one such
+target; engine calls for individual unsupported or unmodelled assets retain their
+existing skipped/null behavior. Their declared markers still undergo collision
+validation, even when there is no testable target in that per-asset call. Pure local validation
 checks all declared canaries against public inventory, static field/identity
 descriptors, every target's requests and normalized URLs, resolved credentials,
 and computed probe versions before candidate HTTP. Unsupported entries cannot
 hide a declared canary collision. Configuration failures expose static errors,
 not supplied values. Missing or unseeded evidence never becomes a security pass.
 
-The full local Linux/Python 3.10 suite passes 1,977 cases with warnings treated as
-errors, including 228 new suite cases. Independent focused acceptance passes 455
+The full local Linux/Python 3.10 suite passes 1,986 cases with warnings treated as
+errors, including 237 new suite cases. Independent focused acceptance passes 464
 combined catalog/benchmark/validator/cohort cases. Frozen catalog and manifest hashes,
 unchanged defaults, constructor isolation, mixed-inventory collisions, and actual
 local HTTP disclosure/refusal/unseeded/denied/malformed/leak-then-failure cases
 pass. Existing finite budgets remain enforced and partial confirmed high risk
 survives ordinary failed requests. This does not add recovery for cancellation
 inside an unfinished category or an outer scan deadline.
+
+Final mixed-inventory review reproduced an extra per-asset presence check turning
+unmodelled entries into failures. The engine now preserves those entries as
+skipped without weakening the strict whole-scan prerequisite or any privacy
+guard. Actual loopback regression retains three skipped/null entries, one
+confirmed target, 35 prompt requests, and zero failed assets. Normal scan coverage
+remains partial when assets are skipped.
 
 Review reproduced and closed static report-key, tuple-label, and skipped-asset
 marker collisions. A bounded public-descriptor guard includes emitted schema,
