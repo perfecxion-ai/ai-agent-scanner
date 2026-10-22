@@ -77,11 +77,25 @@ before requesting authorized operator execution on the final pinned revision.
 Do not start cloud resources, change deployed services, or invent target-side
 canaries to obtain a positive result. Freeze setup and sample counts before runs.
 
-The next priority is reviewing those paired real-model measurements before
-adopting a candidate or increasing sampling. The server input gap is separate
-from detection yield: no stronger real-model hit rate is established here. Keep
-raw-score schema migration, broader authorization controls, and enterprise
-readiness as separate reviewed work.
+The supplied retest of `4f03d6350058c40ad1cdba1d73b16d22a4fa1575` now supports
+the normal server profile workflow without stored-report edits. Six pipelines,
+40 agent projections, SARIF, and restart inventory agree. The experimental prompt
+suite observes disclosure in 10/10 completed runs versus 2/10 for the legacy suite
+on one operator-attested target, across ten balanced-order pairs and 700 requests.
+This is target-specific evidence, not general sensitivity or enterprise acceptance.
+See [reviewed evidence and qualifications](VALIDATION.md#supported-server-canary-and-paired-prompt-retest).
+
+The server driver retains one incorrect null expectation and exits 1 despite its
+wrapper's exit zero. Per-scan restart bodies, high-risk filter captures, and some
+negative response bodies are missing; schedules were not run. Private-secret
+sweeps and database modes remain operator attestations. Benchmark manifests
+include static attack payloads but omit generated responses. Preserve these
+limits rather than calling the whole lab gate green.
+
+The next accuracy step is an independent frozen multi-model replication with
+explicit controls and target provenance before adopting a candidate or increasing
+sampling. Production defaults remain unchanged. Keep raw-score schema migration,
+broader authorization controls, and enterprise readiness as separate reviewed work.
 
 O3 now has conservative dashboard-only finding groups: 18 sample occurrences
 can display as seven groups while original JSON/SARIF, score 70, all occurrence

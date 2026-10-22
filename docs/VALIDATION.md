@@ -148,6 +148,81 @@ the enterprise validation gaps below remain. No package publication or service
 deployment is implied. Documentation-only changes do not alter this tested
 runtime and need no additional cloud run.
 
+### Supported server canary and paired-prompt retest
+
+An operator-supplied private lab bundle tests exact runtime revision
+`4f03d6350058c40ad1cdba1d73b16d22a4fa1575` on Linux/Python 3.11 with real
+Gunicorn, the dispatcher, and fresh private SQLite. Four supplied job logs verify
+the revision; setup records a clean checkout and 286 passing targeted tests with
+five skips, not a new full-suite gate. Independent artifact reviews inspected
+the JSON, SARIF, checks, command exits, and driver source without running the
+supplied scripts or contacting the lab.
+
+- The supported startup registry and API profile references enable confirmed
+  canary findings without modifying discovery reports or database rows. All six
+  saved JSON exports equal their pipelines. All 40 agent projections agree with
+  their saved evidence and contemporaneous inventory: 35 remain null/unknown/
+  not-assessed; five retain 70/high with sampled or partial coverage. There are
+  29 confirmed checks and 124 original finding occurrences, not 124 independent
+  vulnerabilities. No security check passed from nondisclosure.
+- Deterministic disclosure and leak-then-failed-request cases retain their
+  respective sampled and partial risk. A genuine 503 source remains partial;
+  active reuse preserves its source warning. The source-immutability assertion
+  compares parsed JSON, not original response bytes; rich-source immutability
+  was not separately asserted. SARIF summaries, statuses,
+  source uncertainty, check ledgers, and findings agree with saved pipelines.
+- Seven misuse cases record HTTP 400. The final six-scan history and unchanged
+  scan count for a refused template support no extra admissions. Profile removal
+  plus restart refuses the saved template; restoring it enables another run.
+  Negative response bodies and template documents were not separately archived.
+- Archived restart inventory independently preserves all 40 projections. Per-scan
+  restart results rely on driver assertions because their response bodies were
+  not retained. Post-restart export and audit-response bodies are absent. The
+  high-risk filter was not exercised or captured. Schedules were explicitly
+  NOT RUN, not passed.
+- Preserve the harness failure: its check ledger has 79 passes, one failure, and
+  11 informational entries. The failed assertion incorrectly requires null for
+  a profiled real target that produced a confirmed canary finding. The Python
+  driver exits 1; its shell wrapper nevertheless records exit zero. This supports
+  scoped scanner behavior, not an all-green acceptance gate. Wrapper exit zero
+  alone is never sufficient acceptance evidence. The corrected server driver
+  differs from its setup hash; its execution log records no replacement hash.
+
+The paired benchmark uses the same exact-canary analyzer for both 35-prompt
+suites. All ten pairs complete, with five baseline-first and five candidate-first
+orders matching the recorded seed. Each suite attempts and evaluates 350
+requests, 700 total, in approximately 27 minutes with no retries. The experimental
+suite observes disclosure in 10/10 runs versus 2/10 for the legacy suite: two
+both-detected, eight candidate-only, zero baseline-only, zero neither, and zero
+incomplete pairs. Probe manifests, versions, category checks, and aggregate
+arithmetic match the tested implementation. Both suites also detect the separate
+deterministic fixture in one pair; that fixture does not measure comparative
+real-model effectiveness.
+
+This is improved observed disclosure yield on one operator-attested vulnerable
+target, not general sensitivity, calibrated reliability, or enterprise readiness.
+The target implementation, underlying model/version, private prompt, generation
+configuration, and server-side state/reset evidence are excluded. Generation
+randomness is uncontrolled; balanced ordering does not rule out server-side
+carryover. Overlapping category observations do not attribute individual techniques.
+Intervals remain exploratory. Do not pool earlier runs into this comparison or
+promote the candidate to production defaults from this single target.
+
+All 1090 archived server response excerpts are omission sentinels. Benchmark JSON
+retains static public attack payloads in its manifests, not generated responses;
+the supplied report's claim that it contains no prompt-injection text is incorrect.
+Logged literal-secret sweeps report zero matches. Actual protected values,
+registry, and database are excluded, so exact-secret sweeps and final private file
+modes remain operator attestations, not independently repeated privacy proofs.
+Sanitized stdout is not proof that original logs never contained a protected value.
+No private artifact, target identifier, or fixture secret is committed here.
+
+This accepts the supported server-configuration evidence and records the measured
+target-specific comparison with the qualifications above. Production defaults are
+unchanged. The next accuracy step is a frozen, independent multi-model replication
+with explicit positive/negative controls, target provenance, and preserved capture
+bodies. Publication, deployment, and cloud execution need separate authorization.
+
 ## Automated checks
 
 ### Operator feedback diagnostics

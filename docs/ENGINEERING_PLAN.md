@@ -12,12 +12,17 @@ correctness; direct modification of stored reports is not a supported workflow.
 Other server authorization evidence inputs and enterprise secret management
 remain outside this slice.
 
-The next product priority is a measured, bounded prompt/sampling improvement.
-The paired prompt benchmark compares the unchanged production sample with an
-experimental extraction-focused suite at equal budgets; real-model measurement
-is still required before adopting it. The server canary input has local fixture
-acceptance, not a real-model sensitivity result. PR #51 addresses O1/O2/O4/O5/O6
-without changing evidence verdicts or claiming stronger detection.
+The bounded prompt benchmark now has a reviewed target-specific lab comparison:
+the experimental extraction-focused suite observes disclosure in 10/10 completed
+runs versus 2/10 for the unchanged production sample, at equal 35-request budgets.
+This is one operator-attested vulnerable target, not general sensitivity. The
+supported server canary input also has real-server lab evidence without report
+edits. The harness retains one incorrect assertion, and missing capture bodies
+limit acceptance; see [reviewed qualifications](VALIDATION.md#supported-server-canary-and-paired-prompt-retest).
+The next accuracy priority is independent frozen multi-model replication with
+explicit controls and target provenance before candidate adoption. Production
+defaults remain unchanged. PR #51 addresses O1/O2/O4/O5/O6 without changing evidence
+verdicts or claiming stronger detection.
 The dashboard now groups compatible prompt occurrences for display only, with
 original records available in bounded details. Raw findings, scores, exports,
 and lifecycle IDs remain unchanged.
