@@ -1,6 +1,6 @@
 """The acceptance command never accepts an operator database path."""
 
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 import importlib.util
 import io
 import json
@@ -31,6 +31,19 @@ def owned_directory(case="v1"):
         directory = Path(root).resolve(strict=True) / case
         directory.mkdir(mode=0o700)
         yield directory
+
+
+def test_snapshot_quotes_hostile_fixture_identifiers():
+    with owned_directory() as directory:
+        database = directory / "source.sqlite"
+        with closing(sqlite3.connect(database)) as connection, connection:
+            connection.execute('CREATE TABLE audit_event (id INTEGER)')
+            connection.execute('INSERT INTO audit_event VALUES (1)')
+            connection.execute('CREATE TABLE "odd""; DROP TABLE audit_event; --" (value TEXT)')
+            connection.execute('INSERT INTO "odd""; DROP TABLE audit_event; --" VALUES (?)', ('retained',))
+        rows = acceptance.snapshot(database)["rows"]
+        assert rows['odd"; DROP TABLE audit_event; --'] == [('retained',)]
+        assert rows['audit_event'] == [(1,)]
 
 
 @pytest.mark.parametrize("optimized", [False, True])
@@ -109,7 +122,8 @@ def test_foreign_dialect_and_cached_app_rejected_before_seed(monkeypatch):
         context = Mock()
         context.__enter__ = Mock(return_value=None)
         context.__exit__ = Mock(return_value=False)
-        server = SimpleNamespace(app=SimpleNamespace(app_context=lambda: context), db=SimpleNamespace(engine=cached))
+        server = SimpleNamespace(app=SimpleNamespace(app_context=lambda: context), db=SimpleNamespace(engine=cached),
+                                 _evidence_profiles=SimpleNamespace(_profiles={}))
         monkeypatch.setitem(sys.modules, "app", server)
         seeded = Mock(side_effect=AssertionError("Must not seed"))
         monkeypatch.setattr(acceptance, "seed", seeded)
@@ -125,6 +139,47 @@ def test_foreign_dialect_and_cached_app_rejected_before_seed(monkeypatch):
         with pytest.raises(RuntimeError, match="owned temporary"):
             acceptance.guard_database(foreign, directory / "source.sqlite")
         cached.dispose()
+
+
+def test_cached_operator_registry_rejected_before_context_or_database(monkeypatch):
+    enter = Mock(side_effect=AssertionError("Database access must not begin"))
+    registry = SimpleNamespace(_profiles={"operator-only": object()})
+    server = SimpleNamespace(app=SimpleNamespace(app_context=enter), _evidence_profiles=registry)
+    monkeypatch.setitem(sys.modules, "app", server)
+    with owned_directory() as directory:
+        environment, search_path = os.environ.copy(), sys.path.copy()
+        with patch.dict(os.environ), patch.object(sys, "path", sys.path.copy()):
+            with pytest.raises(RuntimeError, match="empty evidence registry"):
+                acceptance.run_case(directory, "v1", 5)
+        assert os.environ == environment and sys.path == search_path
+        assert server._evidence_profiles is registry
+        enter.assert_not_called()
+        assert not list(directory.iterdir())
+
+
+def test_direct_child_ignores_inherited_operator_registry(tmp_path, monkeypatch):
+    private_path = str(tmp_path / "private-operator-profiles.json")
+    monkeypatch.setenv("SCAN_EVIDENCE_PROFILES_FILE", private_path)
+    code = r'''
+import os
+import runpy
+private_path = os.environ["SCAN_EVIDENCE_PROFILES_FILE"]
+original_open = os.open
+def protected_open(path, *args, **kwargs):
+    if os.fspath(path) == private_path:
+        raise AssertionError("Operator registry must not be opened")
+    return original_open(path, *args, **kwargs)
+os.open = protected_open
+'''
+    code += "raise SystemExit(runpy.run_path(" + repr(str(SCRIPT)) + ")[\"child_main\"]())"
+    with owned_directory() as directory:
+        returncode, stdout = acceptance.child_output([sys.executable, "-c", code],
+            {"directory": str(directory), "case": "v1", "timeout": 5}, os.environ.copy(), 10)
+        output = json.loads(stdout)
+        assert returncode == 0 and output["accepted"] is True, output
+        assert output["assertions"] == acceptance.expected_assertions("v1")
+    assert os.environ["SCAN_EVIDENCE_PROFILES_FILE"] == private_path
+    assert private_path not in stdout and not Path(private_path).exists()
 
 
 def test_owned_paths_reject_foreign_nested_names_and_symlinks(tmp_path):

@@ -15,6 +15,7 @@ from sqlalchemy import create_engine
 @pytest.fixture
 def offline_operator(monkeypatch, tmp_path):
     operator_key = 'synthetic-operator-workflow-key'
+    monkeypatch.delenv('SCAN_EVIDENCE_PROFILES_FILE', raising=False)
     monkeypatch.setenv('SECRET_KEY', 'synthetic-workflow-signing-key-' * 2)
     monkeypatch.setenv('OPERATOR_API_KEY', operator_key)
     monkeypatch.setenv('DATABASE_URL', 'sqlite:///:memory:')
@@ -38,6 +39,7 @@ def offline_operator(monkeypatch, tmp_path):
     monkeypatch.setattr(socket, 'getaddrinfo', forbidden)
     monkeypatch.setattr(subprocess, 'Popen', forbidden)
     assert module._job_dispatcher is None, 'Do not replace an existing dispatcher'
+    monkeypatch.setattr(module, '_evidence_profiles', module.load_evidence_profiles(None))
     monkeypatch.setattr(module, '_job_dispatcher', None)
     repository = tmp_path / 'repository'
     repository.mkdir()

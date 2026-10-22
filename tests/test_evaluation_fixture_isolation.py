@@ -23,7 +23,7 @@ def benchmark_module():
     return loaded
 
 
-@pytest.mark.parametrize("fixture", ["api", "real_lab"])
+@pytest.mark.parametrize("fixture", ["api", "real_lab", "offline_operator"])
 def test_unit_fixtures_ignore_inherited_and_cached_operator_registry(tmp_path, fixture):
     private_path = str(tmp_path / "private-operator-profiles.json")
     program = r'''
@@ -37,6 +37,7 @@ phase("import-support")
 import importlib
 import os
 from pathlib import Path
+import socket
 import tempfile
 from unittest.mock import patch
 import pytest
@@ -53,8 +54,15 @@ class OperatorRegistry:
     def __getattr__(self, name):
         raise AssertionError("Cached operator registry must not be used")
 
+def forbidden_reverse_dns(*args, **kwargs):
+    raise AssertionError("Loopback fixture must not resolve a reverse DNS name")
+
 name = sys.argv[1]
-module_name = "tests.test_api_auth" if name == "api" else "tests.test_beta_lab_workflow"
+module_name = {
+    "api": "tests.test_api_auth",
+    "real_lab": "tests.test_beta_lab_workflow",
+    "offline_operator": "tests.test_operator_workflow",
+}[name]
 phase("import-factory")
 factory = getattr(importlib.import_module(module_name), name).__wrapped__
 with patch.object(os, "open", protected_open), tempfile.TemporaryDirectory(prefix="scanner-isolation-") as directory:
@@ -67,6 +75,9 @@ with patch.object(os, "open", protected_open), tempfile.TemporaryDirectory(prefi
         fixture_directory = Path(directory) / str(cached)
         fixture_directory.mkdir()
         with pytest.MonkeyPatch.context() as changes:
+            if name == "real_lab":
+                changes.setattr(socket, "getfqdn", forbidden_reverse_dns)
+                changes.setattr(socket, "gethostbyaddr", forbidden_reverse_dns)
             generator = factory(changes) if name == "api" else factory(changes, fixture_directory)
             try:
                 phase(label + "-setup")
@@ -88,8 +99,12 @@ print("isolated-fixture-ok")
 '''
     environment = {"PATH": os.defpath, "PYTHONDONTWRITEBYTECODE": "1",
                    "SCAN_EVIDENCE_PROFILES_FILE": private_path}
-    completed = subprocess.run([sys.executable, "-c", program, fixture], cwd=ROOT, env=environment,
-                               capture_output=True, text=True, timeout=20, check=False)
+    try:
+        completed = subprocess.run([sys.executable, "-c", program, fixture], cwd=ROOT, env=environment,
+                                   capture_output=True, text=True, timeout=20, check=False)
+    except subprocess.TimeoutExpired as exc:
+        stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else exc.stderr or ""
+        pytest.fail("Fixture isolation exceeded its 20-second deadline.\n" + stderr, pytrace=False)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert completed.stdout.strip() == "isolated-fixture-ok"
     assert "fixture-isolation-phase: done" in completed.stderr

@@ -76,7 +76,8 @@ def snapshot(database):
         rows = {}
         for name in names:
             quoted = '"' + name.replace('"', '""') + '"'
-            rows[name] = sorted(connection.execute("SELECT * FROM " + quoted).fetchall(), key=repr)
+            # Owned fixture identifiers are escaped and double-quoted above.
+            rows[name] = sorted(connection.execute("SELECT * FROM " + quoted).fetchall(), key=repr)  # nosec B608
         return {"schema": schema, "rows": rows}
 
 
@@ -318,8 +319,10 @@ def run_case(directory, case, timeout):
     os.environ.update(SECRET_KEY=secrets.token_hex(32), OPERATOR_API_KEY="", FLASK_DEBUG="false",
                       DATABASE_URL="sqlite:///" + str(source), SCAN_ALLOWED_NETWORKS="",
                       SCAN_ALLOWED_PATH_ROOTS="", SCAN_ALLOW_LOOPBACK="false")
+    os.environ.pop("SCAN_EVIDENCE_PROFILES_FILE", None)
     sys.path.insert(0, str(ROOT))
     import app as server
+    require(not server._evidence_profiles._profiles, "Backup acceptance requires an empty evidence registry")
     from sqlalchemy import create_engine
     deadline = time.monotonic() + timeout
     checks = []

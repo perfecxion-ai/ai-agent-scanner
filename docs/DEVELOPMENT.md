@@ -30,6 +30,9 @@ restore it afterward; the standalone queue benchmark refuses a cached nonempty
 registry before database access. This is harness isolation, not a change to
 normal server startup or its configured profiles. Keep using the fixtures'
 private database and dispatcher guards; do not point tests at an operator app.
+Offline operator fixtures use the same isolation. Backup acceptance keeps its
+outer child-environment filter and also clears the registry at the inner entrypoint;
+cached nonempty registries are rejected before database access there as well.
 
 ## Optional Chromium dashboard checks
 

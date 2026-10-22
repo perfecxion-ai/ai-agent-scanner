@@ -366,11 +366,14 @@ implementation priorities, not additional deployment or publication authority.
 
 ## Verification and review
 
-Synthetic API/local-lab fixtures exclude inherited operator registry settings and
-temporarily isolate cached registries. The queue acceptance runner clears that
-setting before app import and rejects a cached nonempty registry before database
-access. Four bounded regressions cover forbidden private-file access and parent
-environment/registry restoration. The browser fixture has equivalent isolation
+Synthetic API/local-lab/offline-operator fixtures exclude inherited operator
+registry settings and temporarily isolate cached registries. Queue and backup
+acceptance runners clear that setting before app import and reject a cached
+nonempty registry before database access. Backup's outer child-environment filter
+remains in place. Seven bounded regressions cover forbidden private-file access,
+cached rejection, and parent environment/registry restoration. Loopback HTTP
+fixtures bind numeric names without reverse DNS; their fresh/cached setup is
+tested with reverse lookups forbidden. The browser fixture has equivalent isolation
 in its presentation slice. These are local harness guards, not secret-manager or
 runtime deployment changes. See [validation](VALIDATION.md#synthetic-evaluation-registry-isolation).
 
