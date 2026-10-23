@@ -340,13 +340,64 @@ request bytes; they are separate from real-HTTP acceptance. The combined 3,216-c
 gate and 793-case independent coverage review pass. Frozen prompts, probe hashes,
 and request budgets are unchanged. This is not an arbitrary-transformation proof.
 
-Legacy finalized prompt reports retain their existing numeric eligibility in this
-bounded increment. Two compatibility cases preserve the pre-receipt report shape,
+At that checkpoint, legacy finalized prompt reports retained numeric eligibility.
+Two compatibility cases preserved the pre-receipt report shape,
 stored/exported JSON, API scores, and unresolved lifecycle through nondisclosure;
-they do not attest historical request provenance. A separate historical prompt
-guard is required before nullable-score migration. Old benchmark observations also
+they did not attest historical request provenance. A separate historical prompt
+guard was required before nullable-score migration. Old benchmark observations also
 remain tied to their recorded producer revision, not upgraded to production
-receipt evidence or a new detection-effectiveness claim.
+receipt evidence or a new detection-effectiveness claim. The historical eligibility
+follow-up below supersedes that numeric-compatibility limitation without rewriting
+the archived evidence.
+
+### Historical prompt eligibility follow-up
+
+Current versioned scoring and canonical projections require supported source-2.0
+receipts for prompt confirmations even when the report has no receipt envelope.
+Matching old check/finding identities cannot supply missing request provenance.
+Both unsupported positive findings and unsupported positive check records make
+their asset's current numeric score unknown. A valid companion pass cannot turn
+the discarded claim into zero; a supported companion finding remains visible.
+Independent assets retain their valid scores and risk-filter membership. If the
+archived summary no longer matches the eligible asset maximum, it remains unknown.
+
+The guard does not change stored report JSON, original scores or finding IDs,
+archival JSON/SARIF exports, or comparison identities. Later nondisclosure cannot
+resolve a historical or current prompt finding. Invalid current receipt envelopes
+remain fail-closed; the change does not invent missing receipts, re-run old probes,
+or perform supported-subset historical score reconstruction. Standalone benchmark
+observation collection and the explicit unversioned low-level scorer API retain
+their separate compatibility contracts, not current canonical-risk eligibility.
+
+Pre-correction regression runs reproduce 19 failures in the 39-case core suite
+and 16 failures in the initial 20-case consumer suite. The final 39 core and 28
+consumer cases pass. They cover completed/partial history, check-only and
+finding-only positives, supported access companions, independent assets, current
+HTTP-produced receipts, stripped/draft/malformed provenance, filters, and archive
+immutability. These are overlapping synthetic regressions, not model-effectiveness
+observations.
+
+The complete Linux/Python 3.10 gate passes 3,281 tests with coverage and warnings
+treated as errors. Independent review passes 1,170 overlapping coverage cases.
+All 145 dashboard cases pass. Real Chromium at 320/390/1440 pixels shows archived
+prompt groups as Not assessed with their original occurrences and exports intact;
+a separately labeled generic partial-score fixture still displays 70. Actual
+source-2.0 prompt positives retain 70/high in the HTTP/API regressions. The owned
+browser process and temporary database were cleaned up.
+
+The grouping fixture now obtains 18 actual receipts across the 35 unchanged
+prompt requests. The partial-risk fixture obtains one receipt followed by four
+actual 503 responses, not an invented failed-request counter. Both preserve
+positive score and privacy assertions. Ruff, configured Bandit, whitespace and
+authored-text audits, build, Twine, and installed-wheel smoke pass; the changed
+runtime module matches its wheel bytes. Normal and optimized disposable
+backup/restore each pass all eight cases. Required PR/post-merge CI results are
+recorded on the delivery PR.
+
+Frozen prompt catalogs, probe hashes, request budgets, detector logic, database
+schema, and server policy are unchanged. No GCP service, operator data, deployment,
+or publication was used. Tenant evidence provenance, nullable storage, and the
+remaining R1 milestones are still separate work.
 
 ### Tenant evidence prerequisite for the next increment
 

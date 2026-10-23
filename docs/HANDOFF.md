@@ -61,9 +61,19 @@ audit held the merge. The correction now binds a private complete outbound reque
 to the response, rejecting case-changed request values and automatic-header echoes
 as confirmation evidence. The final local gate and independent review pass;
 PR #67 records required CI results for the corrected revision.
-Historical finalized prompt scores remain an explicit compatibility limitation,
-not reverified request-exclusion evidence; their guard precedes score migration.
+PR #67 merged as `17750e0` after all eight PR checks passed. All eight post-merge
+jobs pass too, with one unchanged macOS rerun after a SQLite contention test exceeded
+its wall-clock limit by 15 ms. Independent instrumentation verified the configured
+lock cap and restoration; no production timeout or assertion was relaxed.
 See the [reflection correction evidence](VALIDATION.md#prompt-request-reflection-correction).
+The historical prompt follow-up removes finalized-check fallback from current
+versioned prompt scoring. Unsupported positive checks/findings leave only their
+asset's numeric assessment unknown, including beside a valid access pass. Original
+reports and unresolved findings remain intact; supported independent assets remain
+assessed. Local acceptance passes 3,281 coverage tests, 1,170 overlapping independent
+cases, 145 dashboard cases, real Chromium, both backup modes, and installed-wheel
+smoke. See [historical prompt acceptance](VALIDATION.md#historical-prompt-eligibility-follow-up).
+Nullable-score migration and tenant provenance remain separate prerequisites.
 The next read-only review also reproduces an existing tenant false-confirmation
 path: a fixture echoing a model or credential equal to the foreign-tenant canary
 produces eligible confirmed findings without tenant data. Close this request

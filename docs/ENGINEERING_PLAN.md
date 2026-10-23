@@ -40,7 +40,7 @@ proposed calls and observed actions are distinct outcomes.
 | --- | --- | --- | --- |
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Merged in PR #64; local, independent, and all eight PR/post-merge CI gates passed |
 | R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence merged in PR #65 with all gates passed. Prompt-only within-check receipts in PR #67 pass local acceptance and focused review; required CI results are recorded on the PR. Tenant/access receipts and CLI crash recovery remain separate gates |
-| R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Protected-access prerequisite merged in PR #66 with all gates passed. Historical prompt eligibility still requires a guard before migration |
+| R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Protected-access prerequisite merged in PR #66 with all gates passed. Historical prompt guard passes local acceptance and independent review; tenant provenance and migration remain separate work |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | Planned |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | Planned |
 | R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
@@ -101,11 +101,13 @@ response. Receipts and finalized checks are distinct ledgers; `checks_unfinished
 counts receipt-backed checks lacking a terminal record, including after recovery.
 New-mode prompt confirmations require supported receipts even after completion;
 unsupported custom catalogs remain visible but cannot fall back to legacy scoring.
-Actual legacy reports and standalone benchmark execution retain their old contract.
-Their historical prompt confirmations do not acquire the new request-exclusion
-guarantee. Existing numeric eligibility for pre-receipt prompt reports remains an
-open historical-evidence guard prerequisite before the R1.3 nullable migration;
-preserve archive contents and never resolve those claims from nondisclosure.
+Historical reports and standalone benchmark observations remain readable, but
+matching finalized checks cannot replace source-2.0 receipts for current versioned
+prompt risk. The historical follow-up makes unsupported positive claims unknown
+per asset, without inventing zero from a companion pass or recalculating archived
+scores. Preserve archive contents and never resolve those claims from nondisclosure.
+The explicit unversioned low-level scorer compatibility API remains distinct from
+canonical current projections. See [acceptance](VALIDATION.md#historical-prompt-eligibility-follow-up).
 Privacy guards cover newly emitted descriptors before security work, and every
 projection uses the same secret basis. Acceptance must interrupt the same category
 after an acknowledged receipt, not merely stop a later category. Tenant/access
@@ -305,6 +307,11 @@ the strategic review does not retroactively expand any acceptance claim.
   [checkpoint acceptance](VALIDATION.md#finalized-check-checkpoint-local-acceptance),
   [compatibility acceptance](VALIDATION.md#historical-protected-access-compatibility-follow-up),
   and [prompt receipt acceptance](VALIDATION.md#within-check-prompt-receipt-local-acceptance).
+- Historical prompt eligibility now requires source-2.0 receipts for current
+  versioned assessments without rewriting archives or resolving old findings.
+  Local acceptance passes 3,281 coverage tests and 1,170 overlapping independent
+  cases; see [acceptance](VALIDATION.md#historical-prompt-eligibility-follow-up).
+  Tenant provenance and nullable-score storage are still open.
 - Evaluation completed by architecture, security, and delivery reviewers.
 - M1 has implemented operator authentication, scan ownership, package/CI repairs,
   persisted results, conservative evidence checks, and initial discovery fixes.

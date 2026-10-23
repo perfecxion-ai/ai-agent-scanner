@@ -204,16 +204,25 @@ canary seeding or cryptographic report authenticity.
 
 Only the frozen first-five baseline and opt-in protected-disclosure catalogs are
 supported. Their prompt bytes, probe versions, and request budgets are unchanged.
-New engine prompt confirmations require supported receipts even after their check
-finishes. Unsupported custom findings remain visible but cannot fall back to
-legacy numeric scoring. Historical reports and explicit legacy-only standalone
-adapters keep their earlier finalized-check contract; mixed adapter modes are
-rejected. Pre-receipt finalized prompt scores retain their prior numeric eligibility,
-an open historical-compatibility limitation, not reverified request-exclusion proof.
-Their findings remain unresolved after nondisclosure. Standalone benchmarks use
-the guarded analyzer but do not acquire production receipts; archived observations
-remain tied to their recorded producer revision. This is not a general plugin
-evidence protocol.
+Current versioned prompt assessments require supported source-2.0 receipts even
+after their check finishes, including when reading pre-receipt reports. Matching
+historical check/finding versions cannot substitute for missing request evidence.
+An unsupported positive prompt finding or check makes that asset's current numeric
+assessment unknown, even beside a valid protected-access pass or confirmation.
+Filtering an old positive must not turn it into zero, and a stored score may include
+unsupported contributions. Supported companion findings remain selectable in legacy
+mixed assets; malformed current receipt envelopes remain fail-closed. Independently
+eligible assets keep their scores. An archived aggregate inconsistent with the
+remaining supported scores stays unknown rather than being recalculated on read.
+
+Original report bodies, scores, finding IDs, JSON/SARIF exports, and unresolved
+lifecycle records remain unchanged. No historical receipt is synthesized. The
+dashboard uses canonical API projections, not archived numeric values. Standalone
+benchmarks still collect guarded analyzer observations without production receipts;
+their archived observations remain tied to the recorded producer revision. The
+explicit unversioned low-level scorer compatibility API is unchanged and does not
+establish current canonical risk. Mixed adapter evidence modes remain rejected.
+This is not a general plugin evidence protocol.
 
 The producer publishes before response/session cleanup or the next prompt await.
 Receipts and findings are immutable, append-only, and saved before asynchronous
