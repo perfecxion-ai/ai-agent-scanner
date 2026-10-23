@@ -1368,6 +1368,53 @@ test('canonical asset mapping is independent of snapshot ID and row order', asyn
     assert.ok(texts(app.el('assetList').children[1]).includes('Risk: Not assessed'));
 });
 
+test('historical prompt findings remain visible when the API withdraws their current score', async () => {
+    const report = promptReport([3]);
+    const results = projectedResults(report);
+    results.summary = {overall_risk_score: null, risk_assessment_status: 'not_assessed'};
+    Object.assign(results.agents[0], {risk_score: null, risk_level: 'unknown', risk_scoring_policy: null,
+        risk_assessment_status: 'not_assessed', risk_coverage_status: 'not_assessed'});
+    const original = JSON.stringify(results);
+    const {app} = fixture(async () => response({results}));
+    app.token = 'fixture'; app.scanId = 'scan';
+    await app.loadResults(app.selection);
+    assert.equal(app.el('riskScore').textContent, 'Not assessed');
+    assert.ok(texts(app.el('assetList')).includes('Risk: Not assessed'));
+    assert.equal(app.el('findingCount').textContent, '3');
+    assert.match(app.el('findingGroupingSummary').textContent, /3 sample occurrences/);
+    assert.match(app.el('reportNote').textContent, /stored scores are unverified/);
+    assert.match(app.el('reportNote').textContent, /original records, not new verdicts/);
+    assert.equal(app.el('jsonBtn').disabled, false);
+    assert.equal(app.el('sarifBtn').disabled, false);
+    assert.equal(JSON.stringify(results), original);
+});
+
+test('unsupported prompt history cannot hide a separately supported asset or manufacture an aggregate', async () => {
+    const report = promptReport([1]);
+    const current = JSON.parse(JSON.stringify(report.agents[0]));
+    current.id = 'current-fixture';
+    current.vulnerabilities[0].id = 'current-occurrence';
+    current.vulnerabilities[0].agent_id = current.id;
+    report.agents[0].risk_score = report.summary.overall_risk_score = 90;
+    report.agents.push(current);
+    const results = projectedResults(report);
+    results.summary = {overall_risk_score: null, risk_assessment_status: 'not_assessed'};
+    Object.assign(results.agents[0], {risk_score: null, risk_level: 'unknown', risk_scoring_policy: null,
+        risk_assessment_status: 'not_assessed', risk_coverage_status: 'not_assessed'});
+    results.agents.reverse();
+    const original = JSON.stringify(results);
+    const {app} = fixture(async () => response({results}));
+    app.token = 'fixture'; app.scanId = 'scan';
+    await app.loadResults(app.selection);
+    assert.equal(app.el('riskScore').textContent, 'Not assessed');
+    assert.ok(texts(app.el('assetList').children[0]).includes('Risk: Not assessed'));
+    assert.ok(texts(app.el('assetList').children[1]).includes('Risk: 70.0 / 100'));
+    assert.equal(app.el('findingCount').textContent, '2');
+    assert.equal(app.el('jsonBtn').disabled, false);
+    assert.equal(app.el('sarifBtn').disabled, false);
+    assert.equal(JSON.stringify(results), original);
+});
+
 for (const mutation of ['missing-results', 'missing-row', 'missing-id', 'wrong-id', 'duplicate-row',
     'duplicate-source', 'null-score', 'boolean-score', 'infinite-score', 'oversized-score',
     'old-policy', 'unknown-level', 'wrong-coverage', 'wrong-status', 'wrong-assessment']) {

@@ -467,6 +467,8 @@ def _protected_access_claim(value):
 
 
 def _supported_confirmation(check, finding, asset):
+    if prompt_claim(check) or prompt_claim(finding):
+        return False
     if _protected_access_claim(check) or _protected_access_claim(finding):
         context = _access_context(asset)
         return context is not None and protected_access_confirmation(check, finding, **context)
@@ -502,7 +504,22 @@ def evidence_findings(asset):
     except (TypeError, ValueError, KeyError):
         return []
     identifiers = {receipt['finding_id'] for receipt in asset.get('check_evidence', [])}
-    return [finding for finding in asset.get('vulnerabilities', []) if finding.get('id') in identifiers]
+    return [finding for finding in asset.get('vulnerabilities', [])
+            if isinstance(finding.get('id'), str) and finding['id'] in identifiers]
+
+
+def _unsupported_prompt_confirmation(result):
+    """An unsupported prompt positive cannot become zero after filtering."""
+    observed = {finding['id'] for finding in evidence_findings(result)}
+    for finding in result.get('vulnerabilities', []):
+        if (prompt_claim(finding) and finding.get('evidence_status') == 'confirmed'
+                and (not isinstance(finding.get('id'), str) or finding['id'] not in observed)):
+            return True
+    keys = ('rule_id', 'probe_id', 'probe_version', 'evidence_context_id')
+    supported = {tuple(receipt[key] for key in keys) for receipt in result.get('check_evidence', [])}
+    return any(prompt_claim(check) and check.get('outcome') == 'confirmed'
+               and tuple(check.get(key) for key in keys) not in supported
+               for check in result.get('checks', []))
 
 
 def unfinished_evidence_checks(asset):
@@ -559,7 +576,7 @@ def risk_assessment_eligible(result):
         validate_check_evidence(result)
     except (TypeError, ValueError):
         return False
-    if _unsupported_access_confirmation(result):
+    if _unsupported_access_confirmation(result) or _unsupported_prompt_confirmation(result):
         return False
     confirmed = confirmed_findings(result)
     if confirmed:
@@ -584,8 +601,8 @@ def confirmed_findings(result):
               for check in result.get("checks", []) if check.get("outcome") == "confirmed"}
     return [finding for finding in result.get("vulnerabilities", [])
             if finding.get("evidence_status") == "confirmed"
-            and (finding.get('id') in observed or (
-                not (has_evidence_contract(result) and prompt_claim(finding))
+            and (isinstance(finding.get('id'), str) and finding['id'] in observed or (
+                not prompt_claim(finding)
                 and (identity := (finding.get("rule_id"), finding.get("probe_id"), finding.get("probe_version"))) in checks
                 and _supported_confirmation(checks[identity], finding, result)))]
 

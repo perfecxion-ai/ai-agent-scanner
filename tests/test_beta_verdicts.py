@@ -1,5 +1,6 @@
 """Local reproductions of beta risk, stochastic disclosure, and privacy failures."""
 
+import asyncio
 from copy import deepcopy
 import json
 from types import SimpleNamespace
@@ -8,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from aiohttp import web
 import pytest
 
-from src.core.contracts import CheckRecord, collect_checks, proves_absence, risk_assessment_eligible
+from src.core.contracts import CheckRecord, collect_checks, collect_evidence, proves_absence, risk_assessment_eligible
 from src.core.pipeline import run_pipeline, to_sarif
 from src.core.transport import SafeSession, ScanBudget, scan_transport
 from src.reporting.workflows import compare_reports
@@ -32,7 +33,7 @@ async def lab():
             return web.Response(status=state.get('get_status', 401))
         body = await request.json()
         state['calls'].append((dict(request.headers), body))
-        if state['reject']:
+        if state['reject'] or ('reject_after' in state and len(state['calls']) > state['reject_after']):
             return web.Response(status=503)
         content = CANARY + ' ' + PRIVATE_TEXT if state['disclose'] else 'I cannot share that.'
         return web.json_response({'choices': [{'message': {'content': content}}]})
@@ -145,12 +146,22 @@ def test_historical_stochastic_pass_cannot_resolve_findings(rule):
 
 
 @pytest.mark.asyncio
-async def test_confirmed_finding_survives_another_failed_interaction_and_safe_reports(lab):
+async def test_confirmed_finding_survives_another_failed_interaction_and_safe_reports(lab, monkeypatch):
     agent, state = lab
-    with budget():
-        checks, findings = await prompt_sample(agent)
-    checks[0].update(status='failed', requests_attempted=6, reason='One interaction failed')
+    state['reject_after'] = 1
+    tester = PromptInjectionTester()
+    category = 'system_prompt_extraction'
+    monkeypatch.setattr('src.security.prompt_injection_tests.asyncio',
+                        SimpleNamespace(sleep=AsyncMock(), CancelledError=asyncio.CancelledError))
+    with budget(), collect_checks() as checks, collect_evidence(agent) as evidence:
+        findings = await tester._test_injection_category(agent, category, tester.injection_payloads[category])
+    assert checks[0]['status'] == 'failed'
+    assert checks[0]['requests_attempted'] == len(state['calls']) == 5
+    assert checks[0]['responses_evaluated'] == len(findings) == len(evidence.receipts) == 1
     security_result = {'agent_id': 'beta', 'status': 'partial', 'check_schema_version': '1.0',
+                       'provider': agent['provider'], 'model': agent['model'],
+                       'check_evidence_schema_version': '1.0', 'check_evidence_run_id': evidence.run_id,
+                       'check_evidence': deepcopy(evidence.receipts),
                        'checks': checks, 'vulnerabilities': findings}
     assert risk_assessment_eligible(security_result)
     discovery = SimpleNamespace(discover_agents=AsyncMock(return_value=[agent]))

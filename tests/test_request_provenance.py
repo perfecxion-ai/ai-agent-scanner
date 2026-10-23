@@ -237,7 +237,7 @@ async def test_actual_unsupported_body_encoding_never_gets_safe_snapshot(target,
 
 
 @pytest.mark.asyncio
-async def test_current_receipts_require_new_exclusion_source_version_but_legacy_stays_legacy(target, monkeypatch):
+async def test_current_receipts_require_new_exclusion_source_version_without_legacy_fallback(target, monkeypatch):
     endpoint, _ = target
     monkeypatch.setattr(asyncio, 'sleep', AsyncMock())
     item = {'id': 'fixture', 'provider': 'ollama', 'model': 'fixture', 'endpoint': endpoint,
@@ -264,7 +264,8 @@ async def test_current_receipts_require_new_exclusion_source_version_but_legacy_
     for finding in legacy['vulnerabilities']:
         finding.pop('check_evidence_id')
     # Archived finalized semantics are not retroactive proof of request exclusion.
-    assert risk_assessment_eligible(legacy)
+    assert validate_check_evidence(legacy) is legacy
+    assert not risk_assessment_eligible(legacy)
 
 
 @pytest.mark.asyncio

@@ -148,7 +148,8 @@ def main(directory):
                                            security_status="completed", checks=checks, vulnerabilities=[])],
                               security_results=[], summary=dict(agents_tested=0, overall_risk_score=0))
                 if status == "partial":
-                    check = dict(rule_id="prompt_injection.system_prompt_extraction", probe_id="fixture-sample",
+                    # A generic UI control, not a receipt-backed prompt claim.
+                    check = dict(rule_id="fixture.confirmed_boundary", probe_id="fixture.confirmed_boundary.sample",
                                  probe_version="fixture-v2", status="failed", outcome="confirmed",
                                  requests_attempted=2, responses_evaluated=1, reason="Synthetic partial coverage")
                     checks[0] = check

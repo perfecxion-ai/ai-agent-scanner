@@ -53,10 +53,10 @@ def historical(evidence):
 
 
 def generic_confirmation():
-    check = CheckRecord('prompt_injection.system_prompt_extraction', 'prompt.sample', 'fixture-v1',
+    check = CheckRecord('fixture.disclosure', 'fixture.sample', 'fixture-v1',
                         'completed', 'confirmed', 1, 1).to_dict()
     finding = {key: check[key] for key in ('rule_id', 'probe_id', 'probe_version', 'evidence_context_id')}
-    finding.update(evidence_status='confirmed', severity='high', vulnerability_type='system_prompt_extraction')
+    finding.update(evidence_status='confirmed', severity='high', vulnerability_type='fixture.disclosure')
     return check, finding
 
 
@@ -130,13 +130,13 @@ async def test_unsupported_or_unbound_claims_fail_closed(evidence_pair, mutation
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('companion', ['current_pass', 'prompt', 'unlinked_claim'])
+@pytest.mark.parametrize('companion', ['current_pass', 'other_confirmation', 'unlinked_claim'])
 async def test_unsupported_positive_claim_poison_is_asset_local(evidence_pair, companion):
     confirmed, passed = deepcopy(evidence_pair)
     old = historical(confirmed)
     if companion == 'unlinked_claim':
         old['vulnerabilities'] = []
-    if companion == 'prompt':
+    if companion == 'other_confirmation':
         check, finding = generic_confirmation()
         old['checks'].append(check)
         old['vulnerabilities'].append(finding)
