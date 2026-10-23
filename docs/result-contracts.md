@@ -128,6 +128,32 @@ Other eligible assets still contribute to the recomputed summary. Redaction is
 not weakened to retain a score. Modern direct scorer inputs without eligible evidence are rejected;
 they do not silently become numeric zero.
 
+Current tenant confirmations additionally require `tenant_control_version: 1`,
+the recognized `configured-tenant-controls-v1` probe definition, and successful
+owner, tested-principal, and invalid-credential controls. The public
+`tenant_target` binds the canonical endpoint, provider, model, and public context
+to the original asset fields. Consistent check/finding labels alone cannot supply
+that expected binding. A confirmation identifies `subject_control` or an `attack`
+with its zero-based index into the frozen five-prompt sample. The finalized check
+must account for those controls and observations within its eight-request limit.
+Failed checks can retain a supported earlier confirmation with partial coverage.
+
+Tenant controls attest observations under configured principals. The operator
+asserts the identity and authorization relationship; the fields are not signed
+proof of distinct tenants. Private request snapshots exclude bounded known
+marker representations, and earlier transmitted contamination prevents later
+confirmation. Arbitrary transformed echoes are outside this proof. The
+[configuration contract](detection-evidence.md#controlled-tenant-assessment)
+describes prerequisites and conservative control failures.
+
+Unsupported historical tenant positives in either checks or findings make that
+asset's current numeric assessment unknown. Filtering out an unsupported tenant
+claim cannot expose a zero from a companion access pass. Independently supported
+findings remain selectable, and other assets keep their eligible scores. Original
+archives, findings, and stored numeric columns remain untouched. Quiet tenant
+samples cannot resolve a prior leak. Tenant observations inside unfinished checks
+still lack prompt-style observation receipts.
+
 The `severity-floor-v2` policy uses a single 0-100 scale. Confirmed severity floors
 are critical 90, high 70, medium 40, low 15, and informational 1. The base is the
 highest severity, not a sum of repeated samples. Documented exposure/business

@@ -416,6 +416,76 @@ and define the tenant authorization/provenance contract before persisting these
 observations inside unfinished checks. Existing legacy findings must remain
 readable without being silently promoted to stronger current evidence.
 
+### Controlled tenant evidence local acceptance
+
+The tenant slice replaces scalar-canary confirmation with explicit CLI/Python
+owner/tested principal declarations, two seeded records, and an operator-attested
+authorization boundary. Three independent-session controls must succeed before
+the unchanged five attacks. Owner and tested records must be demonstrably
+available under their issued credentials; a fresh invalid credential must be
+denied without either marker in its body or headers. A leak in the tested control
+is held until all controls succeed. Nondisclosure never passes or resolves a leak.
+
+All keys, markers, and the invalid control credential are pinned before the first
+checkpoint. Known material is guarded before any active scan request, including
+requests outside the model adapter. Complete actual snapshots detect automatic
+header contamination and incomplete transmitted provenance. The private audit
+blocks subsequent tenant confirmation without deleting an earlier valid finding.
+Public findings carry recognized versioned controls and exact original endpoint,
+provider, model, and public-context binding. Raw responses and private declarations
+remain omitted. Server admission, saved source replay, queued definitions, and
+fresh discovery reject private tenant inputs before environment resolution.
+
+Local fixtures cover vulnerable and defended controls, stale or equal credentials,
+unseeded/overlapping markers, metadata-only observations, contaminated denials,
+request reflection, remembered earlier headers, session isolation, environment
+rotation, TLS prerequisites, shared budget exhaustion, and interrupted checks.
+Normal CLI scans keep every tester stage active and complete successfully with
+90/critical for a genuine controlled leak and null/unknown for nondisclosure.
+Only test-local pacing is shortened. Current completed and partial producer
+reports keep the same score in saved pipelines, API results, and inventory after
+fresh database reads. Historical positives remain downloadable and unresolved;
+companion access evidence cannot turn their asset into zero or inherit a score.
+
+The first full coverage run found one privacy regression: attaching the expected
+endpoint to every direct engine result exposed a private URL in a skipped
+missing-credential diagnostic. Independent review found the same defect. The
+correction limits those direct-result binding fields to prepared tenant inputs;
+the existing privacy assertion remains unchanged. The focused correction gate
+passes 120 cases.
+
+Final local acceptance for runtime commit `7e31584`:
+
+- Linux/Python 3.10.20: 3,515 tests pass with coverage and warnings treated as
+  errors in 195.55 seconds. The preceding diagnostic run had 3,514 passes and the
+  one corrected privacy failure; it is not treated as an accepted run.
+- Independent final review passes 247 overlapping cases with coverage and
+  warnings treated as errors, including all 17 adversarial regressions. Its
+  earlier broader run had 1,000 passes and the same corrected privacy failure.
+  Component gates also passed 446 core cases and 552 input/privacy cases.
+- All 145 dashboard unit cases pass. API tests use actual completed/partial
+  producer reports and fresh database reads. No new browser styling is included.
+- Normal and optimized disposable backup/restore commands each pass all eight
+  cases. Ruff, configured Bandit, whitespace, authored-punctuation, and scoped
+  private-identifier checks pass.
+- Distribution build, Twine metadata validation, and installed-wheel smoke
+  outside the checkout pass. All 12 changed packaged runtime files match the
+  source bytes. The local wheel SHA-256 is
+  `cde230c0c20fce50b4206e12d68507017f2109f47d3442fc9aea34cd0717aebd`.
+
+Independent runtime and documentation review approve the corrected slice.
+Required cross-platform PR and post-merge results are recorded on the delivery
+PR. The package version remains `1.1.0`; release identity is separate R1.5 work.
+
+Limits: principal identity and seed provenance are operator assertions; request
+snapshots exclude bounded known representations, not arbitrary transformations.
+Owner controls returning both markers remain unsupported/inconclusive. Tenant
+within-check receipts, CLI process-crash files, server tenant profiles, database
+score migration, and broader enterprise acceptance remain open. No real model,
+GCP service, deployed configuration, operator database, or package publication was
+used. The next external step is a pinned
+[tenant workflow retest](tenant-retest.md) against genuine tenant-aware fixtures.
+
 ## Exact-revision external retest
 
 The operator supplied a private live-lab retest for
