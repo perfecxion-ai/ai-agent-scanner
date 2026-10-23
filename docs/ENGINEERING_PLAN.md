@@ -51,6 +51,15 @@ schedule revalidation. Existing scans remain unchanged when the field is omitted
 No benchmark checkpoint or heuristic can become fabricated finding evidence.
 The next external checkpoint validates these actual operator paths at the final
 merged revision, not general accuracy or enterprise readiness.
+The supplied `ae1ba9b` retest now supports those normal CLI/server paths with
+independent artifact review and no new product blocker. Confirmed controls and
+both declared real targets retain 70/high; refusing and unseeded controls stay
+null. Complete inventory/filter/history documents survive restart, but missing
+per-scan restart/template/refusal/source captures and incomplete driver provenance
+prevent claiming the full external checklist. See the
+[qualified workflow acceptance](VALIDATION.md#normal-cli-and-server-experimental-suite-retest).
+This is not another accuracy cohort or default-promotion decision. Documentation
+acceptance needs no new cloud run; enterprise validation remains separate.
 The dashboard now groups compatible prompt occurrences for display only, with
 original records available in bounded details. Raw findings, scores, exports,
 and lifecycle IDs remain unchanged.

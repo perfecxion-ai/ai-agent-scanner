@@ -162,6 +162,24 @@ validate these entry points. Preserve failed assertions and capture bodies, stat
 uncertainty, and complete privacy-sweep coverage. No deployment, publication,
 cloud startup, or live schedule enablement is implied by this integration.
 
+The supplied normal-workflow retest of `ae1ba9b` supports the opt-in CLI/server
+paths. Three independent artifact reviews found no new product blocker. The final
+CLI driver records 165 passing assertions; the server records 181. Deterministic
+disclosure and both declared real targets retain 70/high; refusing and unseeded
+controls stay null. All eight server JSON/SARIF export pairs match their saved
+pipelines, and complete inventory/high-filter/history bodies match across restart.
+The local 453-case focused gate passes again with warnings treated as errors.
+
+This is scoped workflow acceptance, not completion of every requested capture.
+Per-scan post-restart bodies, template documents, full negative responses, and
+post-reuse source bodies are missing. Preserve corrected real-model category
+counts, both failed CLI attempts, incomplete executed-driver provenance, and
+operator-attested privacy/retention limits in the
+[reviewed retest](VALIDATION.md#normal-cli-and-server-experimental-suite-retest).
+Schedules remain NOT RUN; defaults and runtime code are unchanged. No new cloud
+run is needed for this documentation checkpoint. Missing captures are not passes,
+and this does not establish general sensitivity or enterprise readiness.
+
 O3 now has conservative dashboard-only finding groups: 18 sample occurrences
 can display as seven groups while original JSON/SARIF, score 70, all occurrence
 IDs, check counts, suppression keys, and resolution behavior remain unchanged.

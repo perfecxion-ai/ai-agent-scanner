@@ -298,6 +298,93 @@ needs a separate reviewed product decision and normal CLI/API workflow validatio
 it is not implied by a completed evidence gate. Documentation-only acceptance
 does not require another cloud run or authorize deployment or publication.
 
+### Normal CLI and server experimental-suite retest
+
+An operator-supplied private bundle covers exact merged runtime revision
+`ae1ba9b5d89f24a824110c777821a202709750ca` on Linux/Python 3.11. Three
+independent artifact reviews inspected normal installed-CLI scans, real Gunicorn
+and dispatcher captures, supplied drivers, and job logs without executing those
+drivers or contacting lab targets. This is operator-workflow evidence, not another
+paired accuracy cohort. Private inputs and infrastructure identifiers stay outside
+Git. Setup records a clean checkout and 453 passing targeted cases, not a full
+gate. Its outside-checkout constructor/help check supports installed-package use,
+not a separately captured distribution-wheel build and smoke test. Later jobs
+verify HEAD but do not separately record a clean working tree.
+
+- The final CLI driver records 165 passing assertions, zero failures, and exit 0.
+  Six candidate cases each run separately as JSON and SARIF, not as two exports
+  of one execution. Every execution records seven prompt checks, 35 attempts,
+  matching candidate probe versions, and no passed prompt checks. Disclosure
+  retains 70/high; refusal and unseeded controls remain null/inconclusive.
+  Leak-then-failure retains 70/high with 18 evaluated responses from 35 attempts
+  and failed-but-confirmed checks. Attempts are not completed evaluations.
+- Both declared real targets disclose in the JSON and separate SARIF runs and
+  retain 70/high. The actual JSON records show three confirmed and four
+  inconclusive prompt groups on each target. The first target's separate SARIF
+  run has five confirmed and two inconclusive groups; the second has three and
+  four. These correct the supplied summary's category counts. They are per-run
+  observations, not new sensitivity estimates or evidence of independent trials.
+  Failed non-prompt requests explain partial controls and the second target;
+  the first target completes. CLI exits correctly distinguish partial 1 from
+  completed 0. An omitted-option control preserves default probe identities and
+  has no suite label.
+- The server driver records 181 passing assertions, zero failures, and exit 0.
+  Eight saved security JSON reports exactly equal their results' pipelines;
+  regeneration with the repository's SARIF exporter exactly matches all eight
+  supplied SARIF bodies. Seven selected-suite executions each retain one
+  requesting target and skip the rest of the inventory, with seven prompt groups,
+  35 attempts, matching versions, and no prompt passes. The refusing control
+  remains null; six selected-suite positive snapshots retain 70/high, including
+  ordinary failed-request and finalized-partial-source cases. The default control
+  is separately assessed without a suite label. Source uncertainty stays visible.
+- Complete inventory, high-risk-filter, and history documents match before and
+  after restart: 68 inventory entries, seven high entries, and ten scans.
+  The high filter equals the exact seven-entry inventory subset. Nine saved
+  pipelines independently support 62 inventory projections; six partial-discovery
+  entries remain null but lack their source pipeline capture. History exposes no
+  risk fields. Per-scan results, JSON/SARIF, and audit bodies were captured only
+  before restart; their post-restart equivalence is not independently established
+  by this bundle. Schedules are explicitly NOT RUN.
+
+Template creation, hidden pins, caller-pin refusal, name-only update, and a
+confirmed template run have passing driver assertions. Seventeen scan-admission
+negatives record HTTP 400 and unchanged session counts. However, template
+create/update documents and complete negative response bodies are not retained
+as separate captures; no template GET/read was exercised. No separate queued-job
+count was checked. Source-immutability assertions compare serialized agent arrays,
+not byte-for-byte entire reports, and no post-reuse source body is supplied.
+These support scoped behavior, not completion of every capture requirement in
+the [normal-scan acceptance guide](BETA_TESTING.md#normal-scan-experimental-suite-acceptance).
+
+Preserve both earlier CLI failures: the first driver has 156 passes and seven
+incorrect exit-zero expectations, with process exit 1; the shell-aborted attempt
+exits 2 after starting fixtures but before invoking the scanner. The final rerun
+corrects the exit assertions. Setup's command wrapper always returns zero, so
+its logged individual install/test statuses, not setup exit alone, support those
+steps. Final returned CLI and server drivers differ from their setup-logged
+hashes, and no final executed-driver hashes are archived. No frozen digest,
+generation-setting, or state/reset manifest independently establishes target
+provenance or predeclaration. Do not call this a complete execution audit trail.
+
+Independent traversal finds 1,500 response-excerpt fields in returned JSON, all
+the exact generated-text omission sentinel, not the summary's claimed 1,877.
+Known synthetic PII is absent from output artifacts but occurs in supplied driver
+source. Literal-secret sweeps report zero matches in outputs and server state;
+actual values, database, registry, and private CLI stdout/stderr are excluded.
+Those sweeps and original 0600 file modes remain operator attestations. Sweeps
+do not independently cover every final assembled bundle file with every actual
+secret. A retained private marker file on the runner contradicts the summary's
+earlier target-only claim; the later retention section correctly records it.
+VM shutdown and final cleanup also remain operator attestations.
+
+The local 453-case focused gate passes again with warnings treated as errors and
+an inherited nonexistent registry-path sentinel. No new product blocker was
+reproduced. This accepts the scoped opt-in CLI/server workflow evidence with the
+capture and provenance limits above, not the full external acceptance checklist,
+default promotion, enterprise readiness, publication, or deployment. Defaults,
+runtime code, and budgets are unchanged. Documentation-only acceptance needs no
+new cloud run; missing captures must not be represented as checked.
+
 ## Automated checks
 
 ### Operator feedback diagnostics
