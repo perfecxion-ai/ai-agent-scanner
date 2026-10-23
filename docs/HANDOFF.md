@@ -1,6 +1,46 @@
 # Continuation handoff
 
-## Current limited-beta checkpoint
+## Active revised-roadmap checkpoint
+
+The 2026-10-22 strategic review at `aae1863` and the operator's approval replace
+the next delivery order with [R1 through R4](ENGINEERING_PLAN.md#active-roadmap):
+trustworthy results, useful application assessment, meaningful live agent
+coverage, then team readiness. Release/contributor work and public benchmark
+design run alongside implementation. Historical acceptance below remains scoped;
+it does not establish market leadership or enterprise readiness.
+
+Two new trust gaps take priority. Generic authentication checks can pass against
+an always-denied endpoint without proving a protected resource is reachable with
+valid credentials, and report comparison can treat that result as resolution.
+Separately, an outer deadline can discard confirmed results accumulated before a
+later stage stalls. The review also identifies incomplete newest-100 inventory
+filtering, unknown-score storage placeholders, stale release identity, difficult
+operator configuration, and narrow live application/agent coverage. See
+[review evidence](VALIDATION.md#strategic-review-and-revised-roadmap).
+
+The R1.1 working slice now has explicit authorized positive controls, denied
+controls, versioned evidence semantics, and false-pass/resolution regressions.
+Explicit cancelled-check accounting is included: a cancelled check cannot pass
+merely because its controls succeeded. Local acceptance passes 2,220 cases with
+warnings treated as errors, independent review, lint/security checks, build,
+metadata, and installed-wheel smoke. PR/post-merge CI remains pending; see
+[local acceptance and limits](VALIDATION.md#protected-access-positive-control-local-acceptance).
+R1.2 first defines
+sanitized incremental persistence and transactional termination/recovery; do not
+equate the benchmark's observation checkpoint with durable normal-scan results.
+The completed design separates finalized-check checkpoints from a later real
+in-progress evidence contract. Persistence is not implemented by R1.1. Both
+slices require exact-revision CI before delivery acceptance.
+
+Do not ask for another broad GCP run merely for this roadmap update. Use isolated
+local fixtures for the initial correctness slices. Request a scoped, pinned
+operator retest only when a merged runtime change needs real-service validation,
+with exact commands, required captures, budgets, and genuine process exits.
+Keep experimental prompt selection opt-in and existing scope/privacy/budget
+limits intact. No cloud startup, deployed service change, package publication,
+or real schedule enablement is authorized by this continuation.
+
+## Prior limited-beta checkpoint
 
 The [remediation hold](BETA_REMEDIATION.md) is closed for limited single-operator
 beta testing on runtime revision `82ee7d5e8d1a0183fe5344b41da90f60b49c5f91`.
@@ -439,6 +479,9 @@ this beta after independent review and all required CI. It is not M6 completion,
 security certification, representative model accuracy, or deployment authority.
 
 ## Next delivery sequence
+
+The active [revised roadmap](ENGINEERING_PLAN.md#active-roadmap) supersedes this
+older sequence. The following privacy and validation constraints still apply.
 
 The privacy follow-up keeps machine-local assistant instructions and lab assets
 out of the public index and build inputs while retaining local copies. Package
