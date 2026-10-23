@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional, Callable
 import logging
 from src.core.transport import current_budget
 from src.utils.request_builder import construct_agent_request, missing_credential_reason
-from src.core.contracts import CHECK_SCHEMA_VERSION, collect_checks, missing_checks, risk_assessment_eligible
+from src.core.contracts import CHECK_SCHEMA_VERSION, CheckpointError, collect_checks, missing_checks, risk_assessment_eligible
 from src.risk.risk_assessor import SEVERITY_SCORES
 
 # Import test modules from guardrail tester
@@ -22,6 +22,15 @@ class SecurityTestEngine:
         self.privacy_tester = DataPrivacyTester()
         
         self.logger = logging.getLogger(__name__)
+
+    def checkpoint_secrets(self, agents):
+        """Pin predictable probe credentials before protected-access checkpoints."""
+        if not any(agent.get('authentication_required') is True
+                   and agent.get('protected_response_marker') for agent in agents):
+            return set()
+        secrets = {password for _, password in self.access_tester.weak_credentials[:5] if password}
+        secrets.update(key for key in self.access_tester.test_api_keys[:5] if key)
+        return secrets
     
     async def test_agents(self, agents: List[Dict[str, Any]], 
                          progress_callback: Optional[Callable] = None) -> List[Dict[str, Any]]:
@@ -127,6 +136,8 @@ class SecurityTestEngine:
             if not risk_assessment_eligible(test_results):
                 test_results['overall_risk_score'] = None
             
+        except CheckpointError:
+            raise
         except Exception:
             self.logger.error("Security testing failed")
             test_results['status'] = 'failed'

@@ -1,6 +1,7 @@
 """Additive scan contracts and context-local evidence accounting."""
 
 import asyncio
+from copy import deepcopy
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
@@ -15,6 +16,9 @@ from src.utils.request_builder import extract_response_text
 
 CHECK_SCHEMA_VERSION = "1.0"
 CHECK_INTERRUPTED_REASON = "Check interrupted before completion"
+MAX_CHECKPOINTS = 4096
+MAX_CHECKPOINT_BYTES = 8 * 1024 * 1024
+MAX_CHECKPOINT_TOTAL_BYTES = 128 * 1024 * 1024
 PLANNED_RULES = tuple("prompt_injection." + category for category in (
     "system_prompt_extraction", "instruction_bypass", "role_manipulation", "dan_jailbreak",
     "context_manipulation", "injection_via_encoding", "payload_injection")) + (
@@ -120,6 +124,24 @@ class _Execution:
 
 _records = ContextVar("security_check_records", default=None)
 _execution = ContextVar("security_check_execution", default=None)
+_observer = ContextVar("finalized_check_observer", default=None)
+
+
+class CheckpointError(RuntimeError):
+    """Checkpoint failure stops further probes without exposing private details."""
+
+    def __init__(self):
+        super().__init__("Scan checkpoint could not be preserved")
+
+
+@contextmanager
+def observe_checks(observer):
+    """Observe independent finalized check/finding pairs in this scan context."""
+    token = _observer.set(observer)
+    try:
+        yield
+    finally:
+        _observer.reset(token)
 
 
 @contextmanager
@@ -220,6 +242,14 @@ def checked(rule, spec, prerequisite=None, oracle=None, coverage=None, absence_r
                 for finding in findings:
                     finding.update(rule_id=rule_id, probe_id=probe_id, probe_version=version,
                                    evidence_context_id=record.evidence_context_id)
+            observer = _observer.get()
+            if observer is not None:
+                try:
+                    await observer(deepcopy(record.to_dict()), deepcopy(findings))
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    raise CheckpointError() from None
             return findings
         return wrapped
     return decorate
@@ -321,3 +351,32 @@ def validate_scan_result(result):
                         "confirmed", "heuristic", "inconclusive"}:
                     raise ValueError("Invalid finding evidence status")
     return result
+
+
+def validate_checkpoint_report(report, *, final=False):
+    """Validate a bounded canonical checkpoint without changing its contents."""
+    try:
+        validate_scan_result(report)
+        identifiers = [agent.get("id") for agent in report["agents"]]
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError("Checkpoint asset identity is ambiguous")
+        if report.get("check_schema_version") != CHECK_SCHEMA_VERSION:
+            raise ValueError("Checkpoint requires current evidence contracts")
+        if report.get("status") not in ({"completed", "partial"} if final else {"partial"}):
+            raise ValueError("Invalid checkpoint execution status")
+        checkpoint = report.get("checkpoint")
+        if (not isinstance(checkpoint, dict) or set(checkpoint) != {"version", "sequence", "coverage"}
+                or checkpoint["version"] != "1.0" or checkpoint["coverage"] != "finalized_checks_only"
+                or type(checkpoint["sequence"]) is not int
+                or not 1 <= checkpoint["sequence"] <= MAX_CHECKPOINTS):
+            raise ValueError("Invalid checkpoint metadata")
+        if not all(isinstance(report.get(key), list) for key in ("security_results", "risk_assessments")):
+            raise ValueError("Invalid checkpoint result arrays")
+        if not isinstance(report.get("summary"), dict):
+            raise ValueError("Invalid checkpoint summary")
+        encoded = json.dumps(report, ensure_ascii=True, allow_nan=False, separators=(",", ":")).encode("utf-8")
+        if len(encoded) > MAX_CHECKPOINT_BYTES:
+            raise ValueError("Checkpoint size limit exceeded")
+    except (TypeError, ValueError, OverflowError, RecursionError):
+        raise CheckpointError() from None
+    return report

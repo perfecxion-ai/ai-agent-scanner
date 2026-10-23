@@ -41,6 +41,7 @@ _PUBLIC_DESCRIPTOR = (
     'discovery_method', 'embedding_inversion', 'embedding_poisoning', 'endpoint_redacted',
     'estimated_effort', 'evidence_context_id', 'excessive_tool_permissions', 'executionSuccessful',
     'expiry-deletion-adapter-unavailable-v1', 'fabricated_citations', 'financial_data_access',
+    'finalized_check_observer', 'finalized_checks_only',
     'financial_operations', 'fine_tuning_attack', 'high_vulnerabilities',
     'inappropriate_data_retention', 'indirect_prompt_injection', 'information_disclosure',
     'information_disclosure_in_errors', 'injection_via_encoding', 'insecure_session_management',
