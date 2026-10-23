@@ -22,7 +22,11 @@ _SEMANTICS = 'nondisclosure-inconclusive-v2'
 # Fixed JSON, risk/framework, check, pattern, and SARIF descriptors can appear as
 # keys or tuples, which ordinary value redaction intentionally does not rewrite.
 _PUBLIC_DESCRIPTOR = (
-    '18-header-variations-denied-control-v1', 'X-Originating-IP', 'admin-path-sample-v1',
+    '18-header-variations-denied-control-v1', '18-header-variations',
+    'authorized-and-denied-resource-controls-v2',
+    'authorized_marker_verified_and_invalid_credential_denied',
+    'scanner-invalid-',
+    'X-Originating-IP', 'admin-path-sample-v1',
     'adversarial_suffix', 'agent_privilege_escalation', 'agents_discovered', 'agents_not_tested',
     'agents_risk_assessed', 'agents_risk_not_assessed', 'ai-agent-scanner',
     'anonymous-model-call-v1', 'assessment_timestamp', 'authenticated_api',

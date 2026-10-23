@@ -12,9 +12,12 @@ from src.security.security_engine import SecurityTestEngine
 
 
 @pytest.fixture
-async def target():
+async def target(monkeypatch):
+    monkeypatch.setenv('FIXTURE_ISSUED_KEY', 'issued-test-key')
     async def handler(request):
         status = int(request.match_info['status'])
+        if request.headers.get('Authorization') == 'Bearer issued-test-key':
+            return web.Response(text='private-fixture-marker')
         response = web.Response(status=status, text='Synthetic response')
         if request.query.get('cookie') == 'unsafe':
             # Attribute-like text in the value must not count as actual flags.
@@ -56,10 +59,11 @@ async def test_rejected_model_calls_cannot_report_completed_low_risk(target, sta
 @pytest.mark.asyncio
 async def test_denied_authentication_control_is_not_failed_model_coverage(target):
     agent = {'endpoint': f'{target}/401', 'authentication_required': True,
-             'protected_response_marker': 'private-fixture-marker'}
+             'protected_response_marker': 'private-fixture-marker', 'api_key_env': 'FIXTURE_ISSUED_KEY'}
     budget = ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True)
     with scan_transport(budget):
-        assert await AccessControlTester()._has_denied_control(agent)
+        assert await AccessControlTester()._has_access_controls(
+            agent, agent['endpoint'], agent['protected_response_marker'], [])
     assert budget.failures == 0
 
 

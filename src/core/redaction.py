@@ -33,7 +33,9 @@ def collect_secrets(value):
             if sensitive_key(key) and isinstance(item, str) and item:
                 secrets.add(item)
                 if item.lower().startswith(('bearer ', 'basic ')):
-                    secrets.add(item.split(' ', 1)[1])
+                    credential = item.split(' ', 1)[1]
+                    if credential:
+                        secrets.add(credential)
                 if str(key).lower().replace('-', '') in ('cookie', 'setcookie'):
                     try:
                         parsed = SimpleCookie()
@@ -75,5 +77,6 @@ def redact_secrets(value, secrets):
     if isinstance(value, str):
         value = _URL.sub(_clean_url, value)
         for secret in sorted(secrets, key=len, reverse=True):
-            value = value.replace(secret, '[redacted]')
+            if secret:
+                value = value.replace(secret, '[redacted]')
     return value

@@ -61,7 +61,7 @@ class SecurityTestEngine:
             'limitations': ['Data retention requires verified expiry/deletion and session boundaries.',
                             'Prompt and tenant disclosure require operator-seeded protected canaries; nondisclosure is inconclusive.',
                             'Anonymous inference is an exposure observation, not proof of authorization bypass.',
-                            'Authentication checks require a protected response marker and denied control.'],
+                            'Authentication checks require explicit issued credentials, a protected response marker, and successful authorized/denied controls.'],
             'overall_risk_score': None
         }
         test_results['check_schema_version'] = CHECK_SCHEMA_VERSION

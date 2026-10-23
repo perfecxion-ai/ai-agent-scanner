@@ -25,9 +25,14 @@ CANARY = "random-fixture-canary-95fb63569eaf"
 
 
 @pytest.fixture
-async def target():
+async def target(monkeypatch):
+    monkeypatch.setenv('FIXTURE_ISSUED_KEY', 'issued-test-key')
     async def handler(request):
+        if request.method == 'GET' and request.headers.get('Authorization') == 'Bearer issued-test-key':
+            return web.Response(text=CANARY)
         if request.path == "/admin":
+            if request.headers.get('Authorization', '').startswith('Bearer scanner-invalid-'):
+                return web.Response(status=401, text='Denied')
             return web.Response(text=CANARY)
         if request.path == "/api/admin":
             return web.Response(status=403, text="Denied")
@@ -59,7 +64,8 @@ async def target():
     port = site._server.sockets[0].getsockname()[1]
     try:
         yield {"id": "fixture", "name": "fixture", "endpoint": f"http://127.0.0.1:{port}/safe",
-               "provider": "openai-compatible", "model": "fixture-model", "metadata": {}}
+               "provider": "openai-compatible", "model": "fixture-model", "metadata": {},
+               "api_key_env": "FIXTURE_ISSUED_KEY"}
     finally:
         await runner.cleanup()
 
