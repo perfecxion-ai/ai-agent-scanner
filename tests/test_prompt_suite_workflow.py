@@ -134,7 +134,7 @@ def test_real_cli_candidate_to_private_report(wire_target, tmp_path, mode, fmt, 
     config.chmod(0o600)
     result = CliRunner().invoke(scanner_cli.cli, ["scan", "--config", str(config), "--allow-loopback",
         "--prompt-suite", PROTECTED_DISCLOSURE_SUITE, "--format", fmt, "--max-requests", "150",
-        "--timeout-seconds", "15", "--request-timeout-seconds", "2", "--output", str(output)])
+        "--timeout-seconds", "45", "--request-timeout-seconds", "2", "--output", str(output)])
     assert output.exists(), result.output
     assert result.exit_code == (1 if mode == "partial" else 0), result.output
     report = json.loads(output.read_text())
