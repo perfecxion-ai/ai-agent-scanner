@@ -163,6 +163,17 @@ def acceptance(base, control_key, artifacts):
                 expect(announcement).to_contain_text("Scan " + status + ".")
                 assert "passed" not in announcement.inner_text().lower()
 
+            for kind in ("pass", "confirmation"):
+                open_scan("obsolete-" + kind)
+                expect(announcement).to_contain_text("Scan completed.")
+                expect(page.locator("#riskScore")).to_have_text("Not assessed")
+                expect(page.locator("#assetList")).to_contain_text("Risk: Not assessed")
+                expect(page.locator("#reportNote")).to_contain_text("Some stored scores are unverified.")
+                expect(page.locator("#findingCount")).to_have_text("1" if kind == "confirmation" else "0")
+                if kind == "confirmation":
+                    expect(page.locator("#findingList")).to_contain_text("Historical protected-access finding")
+                expect(page.locator("#jsonBtn")).to_be_enabled()
+
             open_scan("finding-groups")
             expect(page.locator("#findingGroupingSummary")).to_contain_text("7 finding groups / 18 sample occurrences")
             expect(page.locator("#findingCount")).to_have_text("18")

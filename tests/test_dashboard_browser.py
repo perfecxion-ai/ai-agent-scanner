@@ -27,6 +27,23 @@ def fixture_module():
     return load_script("dashboard-browser-fixture.py")
 
 
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_historical_access_fixture_keeps_archived_scores_but_has_no_current_risk(fixture_module, confirmed):
+    from copy import deepcopy
+    from src.core.contracts import validate_scan_result
+    from src.core.risk_projection import project_report_risk
+
+    report = fixture_module.historical_access_report("historical-fixture", confirmed=confirmed)
+    original = deepcopy(report)
+    assert validate_scan_result(report) is report
+    summary, agents = project_report_risk(report)
+    assert summary["overall_risk_score"] is None
+    assert agents[report["agents"][0]["id"]]["risk_score"] is None
+    assert report == original
+    assert report["agents"][0]["risk_score"] == (70 if confirmed else 0)
+    assert len(report["agents"][0]["vulnerabilities"]) == int(confirmed)
+
+
 @pytest.fixture
 def smoke_module():
     return load_script("dashboard-browser-smoke.py")

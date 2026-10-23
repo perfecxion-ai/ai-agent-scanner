@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -39,6 +40,33 @@ def prompt_report(identifier, *, large=False, distinct=False):
             security_status="completed", risk_score=70, risk_level="high", risk_scoring_policy="severity-floor-v2",
             risk_coverage_status="sampled", checks=checks, vulnerabilities=findings)],
         summary=dict(agents_tested=1, overall_risk_score=70, vulnerabilities_found=len(findings), checks_completed=len(checks)))
+
+
+def historical_access_report(identifier, *, confirmed=False):
+    """Unsupported old control semantics remain visible only as archived evidence."""
+    report = prompt_report(identifier)
+    agent = report["agents"][0]
+    version = "1:" + hashlib.sha256(json.dumps([
+        "18-header-variations-denied-control-v1", agent["provider"], agent["model"]], sort_keys=True).encode()).hexdigest()
+    check = dict(rule_id="authentication_bypass", probe_id="authentication_bypass.sample", probe_version=version,
+        evidence_context_id="browser-fixture-policy-v1", status="completed",
+        outcome="confirmed" if confirmed else "passed", requests_attempted=36, responses_evaluated=36)
+    agent.update(checks=[check], risk_score=70 if confirmed else 0, risk_level="high" if confirmed else "minimal",
+        vulnerabilities=[dict(rule_id=check["rule_id"], probe_id=check["probe_id"], probe_version=version,
+            evidence_context_id=check["evidence_context_id"], evidence_status="confirmed", severity="high",
+            title="Historical protected-access finding")] if confirmed else [])
+    report["summary"].update(overall_risk_score=agent["risk_score"], vulnerabilities_found=int(confirmed), checks_completed=1)
+    return report
+
+
+def store_report(app, identifier, report):
+    """Seed matching synthetic snapshots so the real API can project each asset."""
+    app.db.session.add(app.ScanResult(scan_id=identifier, result=report))
+    for ordinal, agent in enumerate(report["agents"]):
+        app.db.session.add(app.DiscoveredAgentModel(id=f"{identifier}-{ordinal}", scan_id=identifier,
+            agent_name=agent["name"], agent_type="fixture", provider=agent["provider"],
+            model_name=agent.get("model"), discovery_method="fixture", vulnerabilities=agent["vulnerabilities"],
+            metadata_json={"asset_id": agent["id"]}))
 
 
 def fixture_database(directory):
@@ -110,7 +138,8 @@ def main(directory):
         with app.app.app_context():
             for status in ("completed", "partial", "failed", "cancelled", "interrupted", "running"):
                 identifier = "fixture-" + status
-                checks = [dict(rule_id=f"fixture.check.{index}", status="completed", outcome="inconclusive",
+                checks = [dict(rule_id=f"fixture.check.{index}", probe_id=f"fixture.check.{index}.sample",
+                               probe_version="1:browser-fixture", status="completed", outcome="inconclusive",
                                requests_attempted=1, responses_evaluated=1, reason="Synthetic fixture only")
                           for index in range(110 if status == "partial" else 36)]
                 report = dict(schema_version="1.0", check_schema_version="1.0", scan_id=identifier,
@@ -126,7 +155,7 @@ def main(directory):
                     report["risk_assessment_status"] = "partial"
                     report["summary"]["overall_risk_score"] = 70
                     report["agents"][0].update(
-                        security_status="partial", risk_score=70, risk_scoring_policy="severity-floor-v2",
+                        security_status="partial", risk_score=70, risk_level="high", risk_scoring_policy="severity-floor-v2",
                         risk_coverage_status="partial", vulnerabilities=[dict(
                             rule_id=check["rule_id"], probe_id=check["probe_id"], probe_version=check["probe_version"],
                             evidence_status="confirmed", severity="high", title="Synthetic protected disclosure",
@@ -134,7 +163,7 @@ def main(directory):
                 app.db.session.add(app.ScanSession(id=identifier, organization_id="browser-fixture",
                     scan_name=identifier, scan_type="full", status=status, progress=20 if status == "running" else 100,
                     target_scope={}, scan_config={}))
-                app.db.session.add(app.ScanResult(scan_id=identifier, result=report))
+                store_report(app, identifier, report)
             for name, large, distinct in (("finding-groups", False, False), ("finding-cap", True, True),
                                            ("occurrence-cap", True, False)):
                 identifier = "fixture-" + name
@@ -142,7 +171,14 @@ def main(directory):
                 app.db.session.add(app.ScanSession(id=identifier, organization_id="browser-fixture",
                     scan_name=identifier, scan_type="full", status="completed", progress=100,
                     target_scope={}, scan_config={}))
-                app.db.session.add(app.ScanResult(scan_id=identifier, result=report))
+                store_report(app, identifier, report)
+            for confirmed in (False, True):
+                identifier = "fixture-obsolete-" + ("confirmation" if confirmed else "pass")
+                report = historical_access_report(identifier, confirmed=confirmed)
+                app.db.session.add(app.ScanSession(id=identifier, organization_id="browser-fixture",
+                    scan_name=identifier, scan_type="full", status="completed", progress=100,
+                    target_scope={}, scan_config={}))
+                store_report(app, identifier, report)
             app.db.session.commit()
         server = make_server("127.0.0.1", 0, app.app, threaded=True)
         print(json.dumps(dict(port=server.server_port, control_key=control_key)), flush=True)
