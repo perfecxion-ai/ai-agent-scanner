@@ -27,17 +27,23 @@ from urllib.parse import urljoin, urlsplit
 import uuid
 from datetime import datetime, timezone
 from src.core.contracts import checked, has_canary, record_interaction, usable_model_response
+from src.core.access_probe_policy import (
+    ACCESS_CONTROL_STATUS, DEFAULT_SENSITIVE_PATHS, DEFAULT_TEST_API_KEYS,
+    DEFAULT_WEAK_CREDENTIALS, PROTECTED_ACCESS_PATHS, PROTECTED_CONTROL_VERSION, PUBLIC_ACCESS_FIELDS,
+    access_probe_definition,
+)
 from src.core.redaction import contains_literal
 from src.utils.request_builder import construct_agent_request, resolve_api_key
 from yarl import URL
 
 
-_CONTROL_VERSION = 'authorized-and-denied-resource-controls-v2'
 _CONTROL_MARKER = re.compile(r'[A-Za-z0-9_.~-]{16,128}\Z')
 
 
 def _valid_access_marker(marker):
-    return isinstance(marker, str) and _CONTROL_MARKER.fullmatch(marker) is not None
+    return (isinstance(marker, str) and _CONTROL_MARKER.fullmatch(marker) is not None
+            and not any(marker.casefold() in descriptor
+                        for descriptor in PUBLIC_ACCESS_FIELDS))
 
 
 def _issued_credential_prerequisite(agent):
@@ -50,18 +56,17 @@ def _authentication_prerequisite(agent):
     if agent.get('authentication_required') is not True or not has_canary(agent, 'protected_response_marker'):
         return "A protected response marker and explicit authentication requirement are required"
     if not _valid_access_marker(agent['protected_response_marker']):
-        return "Protected access markers require 16 to 128 opaque ASCII characters"
+        return "Protected access markers require 16 to 128 opaque ASCII characters distinct from public descriptors"
     return _issued_credential_prerequisite(agent)
 
 
 def _authorization_prerequisite(agent):
     markers = agent.get('protected_path_markers', {})
-    paths = ('/admin', '/admin/', '/administrator', '/api/admin',
-             '/api/v1/admin', '/admin/users', '/admin/config', '/system')
+    paths = PROTECTED_ACCESS_PATHS
     if not isinstance(markers, dict) or not any(has_canary(markers, path) for path in paths):
         return "Protected admin-path markers are required"
     if any(path in markers and not _valid_access_marker(markers[path]) for path in paths):
-        return "Protected access markers require 16 to 128 opaque ASCII characters"
+        return "Protected access markers require 16 to 128 opaque ASCII characters distinct from public descriptors"
     return _issued_credential_prerequisite(agent)
 
 
@@ -113,40 +118,14 @@ class AccessControlTester:
         
         # Common weak credentials used in credential stuffing attacks
         # These are typical default/weak combinations found in real systems
-        self.weak_credentials = [
-            ('admin', 'admin'),
-            ('admin', 'password'),
-            ('admin', '123456'),
-            ('admin', ''),
-            ('test', 'test'),
-            ('user', 'user'),
-            ('guest', 'guest'),
-            ('api', 'api'),
-            ('demo', 'demo'),
-            ('root', 'root')
-        ]
+        self.weak_credentials = list(DEFAULT_WEAK_CREDENTIALS)
         
         # Common API key patterns for testing
-        self.test_api_keys = [
-            'test-key',
-            'demo-key',
-            'dev-key',
-            'api-key',
-            '123456789',
-            'sk-1234567890abcdef',
-            'Bearer test',
-            'test_key_123',
-            'development',
-            'staging'
-        ]
+        self.test_api_keys = list(DEFAULT_TEST_API_KEYS)
         
         # Rate limiting test patterns
         self.rate_limit_requests = 50  # Number of requests to test rate limiting
-        self.sensitive_paths = [
-            '/admin', '/admin/', '/administrator', '/api/admin', '/api/v1/admin',
-            '/admin/users', '/admin/config', '/system', '/debug', '/internal',
-            '/../admin', '/./admin', '/%2e%2e/admin', '/admin%00', '/admin.php', '/admin.json',
-        ]
+        self.sensitive_paths = list(DEFAULT_SENSITIVE_PATHS)
         
     async def test_agent(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test agent for access control vulnerabilities"""
@@ -225,7 +204,7 @@ class AccessControlTester:
             self.logger.debug('Anonymous inference request failed')
             return []
     
-    @checked("authentication_bypass", ["18-header-variations", _CONTROL_VERSION],
+    @checked("authentication_bypass", access_probe_definition('authentication_bypass'),
              prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_authentication_bypass(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for authentication bypass vulnerabilities"""
@@ -310,7 +289,8 @@ class AccessControlTester:
                             'vulnerability_type': 'authentication_bypass',
                             'severity': 'high',
                             'evidence_status': 'confirmed',
-                            'control_status': 'authorized_marker_verified_and_invalid_credential_denied',
+                            'control_status': ACCESS_CONTROL_STATUS,
+                            'protected_control_version': PROTECTED_CONTROL_VERSION,
                             'title': f"Authentication Bypass - {test['name']}",
                             'description': f"Agent allows access without proper authentication using {test['name']}.",
                             'method': test['name'],
@@ -329,7 +309,7 @@ class AccessControlTester:
         
         return None
     
-    @checked("weak_credentials", lambda self: [self.weak_credentials[:5], _CONTROL_VERSION],
+    @checked("weak_credentials", lambda self: access_probe_definition('weak_credentials', sample=self.weak_credentials[:5]),
              prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_weak_credentials(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for weak or default credentials"""
@@ -367,7 +347,8 @@ class AccessControlTester:
                                 'vulnerability_type': 'weak_credentials',
                                 'severity': 'critical',
                                 'evidence_status': 'confirmed',
-                                'control_status': 'authorized_marker_verified_and_invalid_credential_denied',
+                                'control_status': ACCESS_CONTROL_STATUS,
+                                'protected_control_version': PROTECTED_CONTROL_VERSION,
                                 'title': f"Weak Credentials - {username}:{password}",
                                 'description': f"Agent accepts weak credentials: {username}:{password}",
                                 'username': username,
@@ -387,7 +368,7 @@ class AccessControlTester:
         
         return vulnerabilities
     
-    @checked("weak_api_key", lambda self: [self.test_api_keys[:5], "six-header-variations-v1", _CONTROL_VERSION],
+    @checked("weak_api_key", lambda self: access_probe_definition('weak_api_key', sample=self.test_api_keys[:5]),
              prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_api_key_security(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test API key security implementation"""
@@ -422,7 +403,8 @@ class AccessControlTester:
                                     'vulnerability_type': 'weak_api_key',
                                     'severity': 'high',
                                     'evidence_status': 'confirmed',
-                                    'control_status': 'authorized_marker_verified_and_invalid_credential_denied',
+                                    'control_status': ACCESS_CONTROL_STATUS,
+                                    'protected_control_version': PROTECTED_CONTROL_VERSION,
                                     'title': f"Weak API Key Accepted - {api_key}",
                                     'description': f"Agent accepts weak/test API key: {api_key}",
                                     'api_key': api_key,
@@ -449,7 +431,7 @@ class AccessControlTester:
                 {'X-API-KEY': api_key}, {'Authorization': f'Bearer {api_key}'},
                 {'Authorization': f'ApiKey {api_key}'}]
     
-    @checked("authorization_bypass", lambda self: ["admin-path-sample-v1", self.sensitive_paths[:8], _CONTROL_VERSION],
+    @checked("authorization_bypass", lambda self: access_probe_definition('authorization_bypass', sample=self.sensitive_paths[:8]),
              prerequisite=_authorization_prerequisite,
              oracle=lambda agent: True,
              coverage=lambda self, agent: [path for path in self.sensitive_paths[:8]
@@ -484,10 +466,13 @@ class AccessControlTester:
                                 'vulnerability_type': 'authorization_bypass',
                                 'severity': 'high',
                                 'evidence_status': 'confirmed',
-                                'control_status': 'authorized_marker_verified_and_invalid_credential_denied',
+                                'control_status': ACCESS_CONTROL_STATUS,
+                                'protected_control_version': PROTECTED_CONTROL_VERSION,
                                 'title': "Authorization Bypass - Admin Access",
                                 'description': f"Agent allows unauthorized access to admin functionality via {path}",
                                 'path': path,
+                                **({'protected_path_index': PROTECTED_ACCESS_PATHS.index(path)}
+                                   if path in PROTECTED_ACCESS_PATHS else {}),
                                 'full_url': test_url,
                                 'status_code': response.status,
                                 'response_excerpt': '[RESPONSE_TEXT_OMITTED]',

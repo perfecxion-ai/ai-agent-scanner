@@ -82,6 +82,9 @@ def _complete(report):
 def compare_reports(before, after):
     old_assets, old_findings = inventory(before)
     new_assets, new_findings = inventory(after)
+    # Keep original context presence; inventory labels may synthesize absent values.
+    old_contexts = {asset_identity(agent)['asset_key']: agent for agent in before['agents']}
+    new_contexts = {asset_identity(agent)['asset_key']: agent for agent in after['agents']}
     absent = old_findings.keys() - new_findings.keys()
     resolved, unverified = [], []
     for key in sorted(absent):
@@ -94,7 +97,9 @@ def compare_reports(before, after):
                     and asset["provider"] == old_assets[item["asset_key"]]["provider"]
                     and asset["model"] == old_assets[item["asset_key"]]["model"]
                     and all(occurrence.get("probe_id") and occurrence.get("probe_version") and any(
-                        isinstance(check, dict) and proves_absence(check, occurrence)
+                        isinstance(check, dict) and proves_absence(
+                            check, occurrence, asset=new_contexts[item['asset_key']],
+                            previous_asset=old_contexts[item['asset_key']])
                         for check in asset.get("checks", []))
                         for occurrence in item["occurrences"]))
         (resolved if verified else unverified).append(item)

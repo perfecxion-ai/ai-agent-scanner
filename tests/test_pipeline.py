@@ -41,6 +41,7 @@ def engines(agents, status="completed"):
     }]))
     risk = SimpleNamespace(assess_risks=AsyncMock(return_value=[{
         "agent_id": "stable-asset", "overall_risk_score": 90, "risk_level": "critical",
+        "scoring_policy": "severity-floor-v2", "coverage_status": "sampled",
     }]))
     return discovery, security, risk
 

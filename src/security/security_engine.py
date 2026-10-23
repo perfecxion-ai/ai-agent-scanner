@@ -61,7 +61,8 @@ class SecurityTestEngine:
             'agent_id': agent['id'],
             'agent_name': agent['name'],
             'type': agent.get('type', 'unknown'),
-            'provider': agent.get('provider', 'unknown'),
+            'provider': agent.get('provider'),
+            'model': agent.get('model'),
             'metadata': {key: value for key, value in agent.get('metadata', {}).items()
                          if key in {'internet_facing', 'public_api', 'processes_pii', 'financial_data_access', 'healthcare_data'} and isinstance(value, bool)},
             'test_timestamp': datetime.now(timezone.utc).isoformat(),

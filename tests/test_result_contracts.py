@@ -19,6 +19,7 @@ from src.security.access_control_tests import AccessControlTester
 from src.security.data_privacy_tests import DataPrivacyTester
 from src.security.prompt_injection_tests import PromptInjectionTester
 from src.security.security_engine import SecurityTestEngine
+from tests.controlled_access import result as controlled_result, target as controlled_target
 
 
 CANARY = "random-fixture-canary-95fb63569eaf"
@@ -210,11 +211,11 @@ async def test_checks_are_isolated_across_concurrent_scans(target):
 
 @pytest.mark.asyncio
 async def test_pipeline_sarif_and_diff_preserve_explicit_probe_evidence(target):
-    rule = "authentication_bypass"
-    check = CheckRecord(rule, rule + ".sample", "1:fixture", "completed", "passed", 1, 1,
-                        evidence_context_id="lab-policy-v1").to_dict()
-    security = SimpleNamespace(test_agents=AsyncMock(return_value=[{
-        "agent_id": "fixture", "status": "completed", "checks": [check], "vulnerabilities": []}]))
+    target = controlled_target()
+    passed = await controlled_result(target)
+    confirmed = await controlled_result(target, disclose=True)
+    check = passed['checks'][0]
+    security = SimpleNamespace(test_agents=AsyncMock(return_value=[passed]))
     discovery = SimpleNamespace(discover_agents=AsyncMock(return_value=[target]))
     risk = SimpleNamespace(assess_risks=AsyncMock(return_value=[]))
     result = await run_pipeline(discovery, security, risk, None)
@@ -222,15 +223,13 @@ async def test_pipeline_sarif_and_diff_preserve_explicit_probe_evidence(target):
     assert result["summary"]["checks_completed"] == 1
     assert to_sarif(result)["runs"][0]["properties"]["checks"] == [{"agent_id": "fixture", **check}]
     before = deepcopy(result)
-    before["agents"][0]["vulnerabilities"] = [{
-        "rule_id": rule, "probe_id": check["probe_id"], "probe_version": check["probe_version"],
-        "category": "system_prompt_extraction", "severity": "high",
-        "evidence_context_id": "lab-policy-v1"}]
-    assert len(compare_reports(before, result)["resolved"]) == 1
+    before["agents"][0].update(checks=confirmed['checks'], vulnerabilities=confirmed['vulnerabilities'])
+    resolved = compare_reports(before, result)['resolved']
+    assert resolved and sum(len(item['occurrences']) for item in resolved) == 18
     changed = deepcopy(result)
     changed["agents"][0]["checks"][0]["probe_version"] = "1:changed"
     assert compare_reports(before, changed)["resolved"] == []
-    assert len(compare_reports(before, changed)["resolution_unverified"]) == 1
+    assert compare_reports(before, changed)["resolution_unverified"]
     for context in (None, "lab-policy-v2", "[redacted]", "[CANARY_REDACTED]"):
         changed = deepcopy(result)
         changed["agents"][0]["checks"][0]["evidence_context_id"] = context
@@ -372,15 +371,21 @@ async def test_completed_modern_checks_without_protected_oracle_leave_risk_unass
 @pytest.mark.parametrize("outcome", ["confirmed", "passed"])
 async def test_completed_modern_conclusive_check_remains_risk_eligible(target, outcome):
     check = CheckRecord("rule", "probe", "1", "completed", outcome, 1, 1).to_dict()
-    security = SimpleNamespace(test_agents=AsyncMock(return_value=[{
+    evidence = {
         "agent_id": "fixture", "status": "completed", "check_schema_version": "1.0",
         "checks": [check], "vulnerabilities": [{
             "rule_id": "rule", "probe_id": "probe", "probe_version": "1",
             "evidence_status": "confirmed", "severity": "high"
-        }] if outcome == "confirmed" else []}]))
+        }] if outcome == "confirmed" else []}
+    if outcome == 'passed':
+        target = controlled_target()
+        evidence = await controlled_result(target)
+    security = SimpleNamespace(test_agents=AsyncMock(return_value=[evidence]))
     discovery = SimpleNamespace(discover_agents=AsyncMock(return_value=[target]))
     risk = SimpleNamespace(assess_risks=AsyncMock(return_value=[{
-        "agent_id": "fixture", "overall_risk_score": 0, "risk_level": "low"}]))
+        "agent_id": "fixture", "overall_risk_score": 70 if outcome == 'confirmed' else 0,
+        "risk_level": "high" if outcome == 'confirmed' else "minimal",
+        "scoring_policy": "severity-floor-v2", "coverage_status": "sampled"}]))
     report = await run_pipeline(discovery, security, risk, None)
     risk.assess_risks.assert_awaited_once()
     assert report["risk_assessment_status"] == "completed"

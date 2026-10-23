@@ -20,7 +20,7 @@ from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime, timezone
 import statistics
 from collections import Counter
-from src.core.contracts import confirmed_findings
+from src.core.contracts import confirmed_findings, risk_assessment_eligible
 
 from src.frameworks.owasp_llm_top10 import (
     generate_owasp_coverage_report,
@@ -150,6 +150,8 @@ class RiskAssessment:
         agent_name = agent_results.get('agent_name')
         vulnerabilities = agent_results.get('vulnerabilities', [])
         if 'check_schema_version' in agent_results:
+            if not risk_assessment_eligible(agent_results):
+                raise ValueError('Current risk assessment requires supported evidence')
             vulnerabilities = confirmed_findings(agent_results)
         
         # Calculate base vulnerability score

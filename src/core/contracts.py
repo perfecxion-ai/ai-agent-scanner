@@ -12,6 +12,9 @@ from typing import Literal, TypedDict
 
 from src.core.transport import current_budget
 from src.utils.request_builder import extract_response_text
+from src.core.access_probe_policy import (
+    PROTECTED_ACCESS_RULES, protected_access_pass, protected_access_confirmation,
+)
 
 
 CHECK_SCHEMA_VERSION = "1.0"
@@ -277,12 +280,48 @@ def missing_checks(records, reason):
             for rule in PLANNED_RULES if rule not in recorded]
 
 
-def proves_absence(check, finding):
-    # Finite stochastic samples cannot establish remediation of a disclosure.
+def _access_context(asset):
+    if not isinstance(asset, dict) or not all(key in asset for key in ('provider', 'model')):
+        return None
+    return {'provider': asset['provider'], 'model': asset['model']}
+
+
+def _protected_access_claim(value):
+    return isinstance(value, dict) and any(
+        isinstance(value.get(key), str) and value[key] in PROTECTED_ACCESS_RULES
+        for key in ('rule_id', 'vulnerability_type'))
+
+
+def _supported_confirmation(check, finding, asset):
+    if _protected_access_claim(check) or _protected_access_claim(finding):
+        context = _access_context(asset)
+        return context is not None and protected_access_confirmation(check, finding, **context)
+    return True
+
+
+def _unsupported_access_confirmation(result):
+    """Unverifiable positive claims cannot be reinterpreted as an assessed zero."""
+    checks = result.get('checks', [])
+    findings = result.get('vulnerabilities', [])
+    if not isinstance(findings, list) or any(not isinstance(finding, dict) for finding in findings):
+        return True
+    for finding in findings:
+        if _protected_access_claim(finding) and finding.get('evidence_status') == 'confirmed':
+            if not any(_supported_confirmation(check, finding, result) for check in checks):
+                return True
+    for check in checks:
+        if _protected_access_claim(check) and check.get('outcome') == 'confirmed':
+            if not any(_supported_confirmation(check, finding, result) for finding in findings):
+                return True
+    return False
+
+
+def proves_absence(check, finding, *, asset=None, previous_asset=None):
+    """Resolve only supported controlled probes with matching prior evidence."""
     rule = finding.get("rule_id", finding.get("vulnerability_type", ""))
     if not isinstance(rule, str):
         return False
-    if rule == "prompt_injection" or rule.startswith("prompt_injection.") or rule == "tenant_isolation_violation":
+    if rule not in PROTECTED_ACCESS_RULES:
         return False
     try:
         record = CheckRecord(**check)
@@ -291,6 +330,19 @@ def proves_absence(check, finding):
     context = record.evidence_context_id
     safe_context = (isinstance(context, str) and context.strip()
                     and "[" not in context and "]" not in context)
+    if _protected_access_claim(check) or _protected_access_claim(finding):
+        current_context, previous_context = _access_context(asset), _access_context(previous_asset)
+        if (current_context is None or previous_context != current_context
+                or not protected_access_pass(check, **current_context)):
+            return False
+        previous_checks = previous_asset.get('checks', [])
+        try:
+            validate_checks(previous_checks)
+        except (TypeError, ValueError):
+            return False
+        if not any(protected_access_confirmation(previous, finding, **previous_context)
+                   for previous in previous_checks):
+            return False
     return (safe_context and context == finding.get("evidence_context_id")
             and record.status == "completed" and record.outcome == "passed"
             and record.rule_id == finding.get("rule_id", finding.get("vulnerability_type"))
@@ -306,23 +358,26 @@ def risk_assessment_eligible(result):
         validate_checks(result.get("checks", []))
     except (TypeError, ValueError):
         return False
+    if _unsupported_access_confirmation(result):
+        return False
     confirmed = confirmed_findings(result)
     if confirmed:
         return True
     return result.get("status") == "completed" and any(
         check.get("status") == "completed" and check.get("outcome") == "passed"
-        and not check.get("rule_id", "").startswith("prompt_injection")
-        and check.get("rule_id") != "tenant_isolation_violation"
+        and _protected_access_claim(check)
+        and _access_context(result) is not None and protected_access_pass(check, **_access_context(result))
         for check in result.get("checks", []))
 
 
 def confirmed_findings(result):
     """Select findings with matching versioned confirmed check evidence."""
-    identities = {(check.get("rule_id"), check.get("probe_id"), check.get("probe_version"))
-                  for check in result.get("checks", []) if check.get("outcome") == "confirmed"}
+    checks = {(check.get("rule_id"), check.get("probe_id"), check.get("probe_version")): check
+              for check in result.get("checks", []) if check.get("outcome") == "confirmed"}
     return [finding for finding in result.get("vulnerabilities", [])
             if finding.get("evidence_status") == "confirmed"
-            and (finding.get("rule_id"), finding.get("probe_id"), finding.get("probe_version")) in identities]
+            and (identity := (finding.get("rule_id"), finding.get("probe_id"), finding.get("probe_version"))) in checks
+            and _supported_confirmation(checks[identity], finding, result)]
 
 
 def validate_scan_result(result):

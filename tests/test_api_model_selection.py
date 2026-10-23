@@ -27,7 +27,7 @@ async def test_source_model_selection_survives_queue_without_mutating_source(api
     await execute_scan(module, scan_id, 'security_only', {}, queued.scan_config)
     assert security.test_agents.call_args.args[0][0]['model'] == 'selected-model'
     module.db.session.expire_all()
-    assert 'model' not in module.db.session.get(module.ScanResult, 'source').result['agents'][0]
+    assert module.db.session.get(module.ScanResult, 'source').result['agents'][0]['model'] is None
     assert module.db.session.get(module.ScanResult, scan_id).result['agents'][0]['model'] == 'selected-model'
 
 
