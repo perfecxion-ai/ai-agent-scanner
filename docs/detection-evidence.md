@@ -280,9 +280,10 @@ schedules for review. Treat a changed canary or protected policy as a new public
 profile/context version, update the target and private environment together, and
 review replacement templates/schedules. Pins cover public configuration, not
 secret-derived hashes: silently changing only a secret value cannot be detected
-as a policy revision. This workflow does not migrate stored unknown-score
-placeholders; saved pipeline results and canonical API projections remain the
-authoritative risk verdicts.
+as a policy revision. [Schema-4 startup migration](jobs.md#schema-upgrades) handles
+stored unknown-score placeholders separately from evidence-profile configuration.
+Saved pipeline results and canonical API projections remain authoritative; the
+migration preserves archived report bytes.
 
 Successful configuration does not prove a target leaks. Exact protected-marker
 disclosure can confirm the finding; nondisclosure stays inconclusive. This

@@ -6,12 +6,14 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
 
 import pytest
-from sqlalchemy import MetaData, create_engine, event, inspect, insert, select, text, CheckConstraint, DefaultClause
+from sqlalchemy import create_engine, event, inspect, insert, select, text, CheckConstraint, DefaultClause
+from sqlalchemy.exc import IntegrityError
 
 from src.core.jobs import JobDispatcher
 from src.core.schema import BASE_TABLES, LEGACY_LAYOUTS, SCHEMA_VERSION, VERSION_ONE_TABLES, SchemaError, initialize_schema
 from tests.test_api_auth import api as api, headers
 from tests.test_jobs import store as store, enqueue, state, result
+from tests.historical_schema import historical_metadata
 
 
 @pytest.fixture
@@ -40,12 +42,37 @@ def test_fresh_schema_and_restart_are_idempotent(database):
     assert version(engine, module) == [(1, SCHEMA_VERSION)]
 
 
+@pytest.mark.parametrize('old_version', [1, 2, 3])
+def test_historical_fixtures_keep_not_null_scores_and_python_zero_defaults(database, old_version):
+    _, engine = database
+    metadata = historical_metadata(version=old_version)
+    metadata.create_all(engine)
+    scans, assets = metadata.tables['scan_session'], metadata.tables['discovered_agent']
+    for table, name in ((scans, 'overall_risk_score'), (assets, 'risk_score')):
+        assert table.c[name].nullable is False
+        assert table.c[name].default.arg == 0.0
+        assert table.c[name].server_default is None
+        stored = next(column for column in inspect(engine).get_columns(table.name) if column['name'] == name)
+        assert stored['nullable'] is False and stored['default'] is None
+    with engine.begin() as connection:
+        connection.execute(insert(scans).values(id='default-zero', organization_id='tenant-a',
+                           scan_name='Frozen old fixture', scan_type='discovery_only',
+                           target_scope={}, scan_config={}))
+        connection.execute(insert(assets).values(id='default-zero', scan_id='default-zero',
+                           agent_name='Frozen old fixture', agent_type='assistant', discovery_method='fixture'))
+    with engine.connect() as connection:
+        assert connection.scalar(select(scans.c.overall_risk_score)) == 0.0
+        assert connection.scalar(select(assets.c.risk_score)) == 0.0
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(scans.update().values(overall_risk_score=None))
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(assets.update().values(risk_score=None))
+
+
 @pytest.mark.parametrize("layout", LEGACY_LAYOUTS)
 def test_recognized_legacy_upgrade_preserves_rows_and_creates_no_fake_history(database, layout):
     module, engine = database
-    metadata = MetaData()
-    for name in layout:
-        module.db.metadata.tables[name].to_metadata(metadata)
+    metadata = historical_metadata(layout)
     metadata.create_all(engine)
     scans = metadata.tables["scan_session"]
     with engine.begin() as connection:
@@ -76,9 +103,7 @@ def test_unknown_schemas_fail_without_changing_database(database, mutation):
     if mutation in {"future_version", "partial_versioned"}:
         initialize_schema(engine, module.db.metadata)
     else:
-        metadata = MetaData()
-        for name in BASE_TABLES:
-            module.db.metadata.tables[name].to_metadata(metadata)
+        metadata = historical_metadata(BASE_TABLES)
         if mutation == "unknown_constraint":
             metadata.tables["scan_session"].append_constraint(CheckConstraint("status = 'completed'"))
         if mutation == "unknown_default":
@@ -130,9 +155,7 @@ def test_schema_ddl_and_version_stamp_roll_back_together(database):
 
 
 def version_one_database(module, engine):
-    metadata = MetaData()
-    for name in VERSION_ONE_TABLES:
-        module.db.metadata.tables[name].to_metadata(metadata)
+    metadata = historical_metadata(version=1)
     metadata.create_all(engine)
     with engine.begin() as connection:
         connection.execute(insert(metadata.tables["schema_version"]).values(id=1, version=1))
@@ -144,7 +167,7 @@ def version_one_database(module, engine):
     return metadata
 
 
-def test_version_one_additive_upgrade_preserves_existing_rows(database):
+def test_version_one_upgrade_preserves_existing_rows(database):
     module, engine = database
     version_one_database(module, engine)
     initialize_schema(engine, module.db.metadata)

@@ -210,7 +210,7 @@ def test_filtered_inventory_reports_bounded_window_not_exhaustive_absence(api):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mode', ['discovery_only', 'full'])
-async def test_actual_persisted_pipeline_and_api_agree_without_changing_storage(api, monkeypatch, mode):
+async def test_actual_pipeline_and_api_preserve_null_in_storage(api, monkeypatch, mode):
     module, client = api
     discovery, security, _ = engines([asset()])
     monkeypatch.setattr(module, 'discovery_engine', discovery)
@@ -230,4 +230,5 @@ async def test_actual_persisted_pipeline_and_api_agree_without_changing_storage(
     listed = client.get('/api/agents', headers=headers(module)).json['agents'][0]
     assert listed['risk_score'] == expected
     assert listed['id'] != listed['asset_id'] == 'stable-asset'
-    assert module.db.session.get(module.ScanSession, 'fixture').overall_risk_score == (expected or 0)
+    assert module.db.session.get(module.ScanSession, 'fixture').overall_risk_score == expected
+    assert module.DiscoveredAgentModel.query.filter_by(scan_id='fixture').one().risk_score == expected

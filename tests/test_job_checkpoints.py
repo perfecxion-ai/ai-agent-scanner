@@ -18,7 +18,8 @@ from tests.test_jobs import enqueue, result, state, store as store
 
 
 def report(sequence=1, *, scan_id='checkpoint', finding=True):
-    check = CheckRecord('authorization_bypass', 'auth.sample', '2', 'completed',
+    # A generic fixture isolates checkpoint transactions from security controls.
+    check = CheckRecord('fixture.disclosure', 'fixture.sample', '2', 'completed',
                         'confirmed' if finding else 'inconclusive', 2, 2).to_dict()
     findings = [{'id': 'finding-1', 'rule_id': check['rule_id'], 'probe_id': check['probe_id'],
                  'probe_version': '2', 'evidence_status': 'confirmed', 'severity': 'high'}] if finding else []
@@ -280,17 +281,22 @@ def file_api(api, monkeypatch, tmp_path):
     module, client = api
     module.db.session.remove()
     engine = create_engine(f"sqlite:///{tmp_path / 'api-checkpoints.db'}")
-    with engine.connect() as connection:
-        connection.exec_driver_sql('PRAGMA journal_mode=WAL')
-    module.db.metadata.create_all(engine)
-    monkeypatch.setitem(module.db.engines, None, engine)
-    store = module._get_job_store()
-    enqueue(store, 'checkpoint')
-    assert store.claim('worker') == 'checkpoint'
-    fixture = (store, module.DiscoveredAgentModel.__table__, module)
-    yield module, client, fixture
-    module.db.session.remove()
-    engine.dispose()
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql('PRAGMA journal_mode=WAL')
+        module.db.metadata.create_all(engine)
+        with monkeypatch.context() as scoped:
+            scoped.setitem(module.db.engines, None, engine)
+            try:
+                store = module._get_job_store()
+                enqueue(store, 'checkpoint')
+                assert store.claim('worker') == 'checkpoint'
+                fixture = (store, module.DiscoveredAgentModel.__table__, module)
+                yield module, client, fixture
+            finally:
+                module.db.session.remove()
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.parametrize('route', ['results', 'agents'])

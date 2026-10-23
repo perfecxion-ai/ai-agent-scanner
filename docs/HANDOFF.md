@@ -101,9 +101,19 @@ expectations, and fixture POST outcomes. Its deterministic fixtures do not
 establish real-model sensitivity. The private harness and narrative have limits
 around held-candidate/reflection coverage, privacy capture scope, and failure
 propagation; see [qualified acceptance](VALIDATION.md#supplied-tenant-workflow-acceptance).
-No broad repeat is needed for those qualifications. Continue with local R1.3
-nullable-score storage: freeze old schema definitions, preserve supported zero
-and partial evidence, and verify transactional upgrade plus backup/restore.
+No broad repeat is needed for those qualifications. The R1.3 nullable-score
+storage slice now passes local acceptance: schema 4 stores unknown scores as SQL
+NULL, preserves supported zero and partial evidence, and upgrades recognized old
+layouts transactionally using independently frozen historical definitions.
+Archives and non-cache fields remain unchanged, and unsupported table/index
+semantics fail before writes. The final local gate passes 3,763 coverage tests,
+279 overlapping independent Python 3.13 cases, both ten-case backup modes, and
+installed-wheel smoke. Offline copies of all nine supplied tenant reports keep their exact bytes
+and canonical scores through upgrade and restart. See
+[storage acceptance](VALIDATION.md#nullable-score-storage-local-acceptance).
+Required delivery checks are recorded on the PR. After merge and CI, the next
+external gate is the [native storage and server upgrade retest](storage-retest.md)
+on its exact merged revision; repeating tenant probes is unnecessary.
 Tenant/access within-check receipts, server tenant profiles, CLI crash files,
 exhaustive inventory, and later roadmap slices remain open.
 

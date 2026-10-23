@@ -40,7 +40,7 @@ proposed calls and observed actions are distinct outcomes.
 | --- | --- | --- | --- |
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Merged in PR #64; local, independent, and all eight PR/post-merge CI gates passed |
 | R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence merged in PR #65 with all gates passed. Prompt-only within-check receipts in PR #67 pass local acceptance and focused review; required CI results are recorded on the PR. Tenant/access receipts and CLI crash recovery remain separate gates |
-| R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Historical access, prompt, and tenant eligibility prerequisites are merged with all gates passed. The scoped tenant CLI/TLS retest is accepted with recorded qualifications. Nullable-score migration is next |
+| R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Historical prerequisites are merged and the scoped tenant CLI/TLS retest is accepted. Schema-4 nullable storage passes local full/independent/backup acceptance; required delivery CI and the scoped native-server upgrade gate are recorded separately |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | Planned |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | Planned |
 | R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
@@ -133,9 +133,14 @@ queued execution, and discovered inputs reject private tenant declarations befor
 credential resolution. The supplied
 [tenant CLI/TLS retest](VALIDATION.md#supplied-tenant-workflow-acceptance) closes
 that scoped workflow gate. This does not close tenant within-check retention or
-establish representative model sensitivity. Next implement nullable score storage
-locally, preserving legitimate assessed zero, supported partial evidence, archives,
-and rollback/backup integrity through explicit historical schema upgrades.
+establish representative model sensitivity. Nullable storage now uses schema 4,
+explicit historical definitions, canonical scalar caches, and a transactional
+two-table rebuild. Supported zero and partial findings survive; unsupported risk
+becomes SQL NULL without rewriting archives. Local rollback, backup/restore and
+actual current HTTP-evidence cases pass. See
+[acceptance](VALIDATION.md#nullable-score-storage-local-acceptance) and the scoped
+[native-server upgrade gate](storage-retest.md). Inventory pagination and release
+identity remain separate R1 slices.
 The prompt audit also reproduces false confirmations from case-changed outbound
 values and transport-added headers. PR #67 now requires a complete private
 request snapshot to exclude these marker sources before confirmation and receipt
@@ -333,8 +338,11 @@ the strategic review does not retroactively expand any acceptance claim.
   merged as `1072d8b` with all eight PR/post-merge jobs passing. The supplied
   tenant CLI/TLS retest closes its scoped workflow gate with
   [recorded qualifications](VALIDATION.md#supplied-tenant-workflow-acceptance).
-  Nullable score storage is the next local slice; real-model sensitivity remains
-  open.
+  Nullable score storage passes 3,763 local coverage tests and 279 overlapping
+  independent Python 3.13 cases, including current prompt/tenant HTTP proofs,
+  transactional rollback and both ten-case backup modes. The delivery PR records required CI;
+  the scoped native-server upgrade retest remains the external gate. Real-model
+  sensitivity remains open.
 - Evaluation completed by architecture, security, and delivery reviewers.
 - M1 has implemented operator authentication, scan ownership, package/CI repairs,
   persisted results, conservative evidence checks, and initial discovery fixes.
@@ -380,7 +388,8 @@ the strategic review does not retroactively expand any acceptance claim.
   Finite API schedules pin template revisions, start disabled, require restart
   review, and atomically admit bounded occurrences through the shared queue.
   One-slot read-only preflight preserves cancellation and rejects late results.
-  Exact version 1/2 SQLite upgrades initialize schema version 3. Schedule
+  Scheduling originally upgraded exact version 1/2 SQLite layouts to version 3;
+  current startup follows with the schema-4 nullable-score migration. Schedule
   dashboard controls have independent controller, browser, and targeted keyboard
   acceptance. Explicit review gates creation and enablement; loading never enables.
   Focused accessibility acceptance now covers control contrast, linked guidance,
