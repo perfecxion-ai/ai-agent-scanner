@@ -19,19 +19,71 @@ import asyncio
 from src.core.transport import SafeSession, model_request_timeout
 import logging
 import base64
+import json
+import re
 from http.cookies import SimpleCookie, CookieError
 from typing import List, Dict, Any, Optional
 from urllib.parse import urljoin, urlsplit
 import uuid
 from datetime import datetime, timezone
 from src.core.contracts import checked, has_canary, record_interaction, usable_model_response
-from src.utils.request_builder import construct_agent_request
+from src.core.redaction import contains_literal
+from src.utils.request_builder import construct_agent_request, resolve_api_key
+from yarl import URL
+
+
+_CONTROL_VERSION = 'authorized-and-denied-resource-controls-v2'
+_CONTROL_MARKER = re.compile(r'[A-Za-z0-9_.~-]{16,128}\Z')
+
+
+def _valid_access_marker(marker):
+    return isinstance(marker, str) and _CONTROL_MARKER.fullmatch(marker) is not None
+
+
+def _issued_credential_prerequisite(agent):
+    if not agent.get('api_key_env') or not resolve_api_key(agent):
+        return "An explicit environment reference to an issued credential is required"
+    return None
 
 
 def _authentication_prerequisite(agent):
     if agent.get('authentication_required') is not True or not has_canary(agent, 'protected_response_marker'):
         return "A protected response marker and explicit authentication requirement are required"
-    return None
+    if not _valid_access_marker(agent['protected_response_marker']):
+        return "Protected access markers require 16 to 128 opaque ASCII characters"
+    return _issued_credential_prerequisite(agent)
+
+
+def _authorization_prerequisite(agent):
+    markers = agent.get('protected_path_markers', {})
+    paths = ('/admin', '/admin/', '/administrator', '/api/admin',
+             '/api/v1/admin', '/admin/users', '/admin/config', '/system')
+    if not isinstance(markers, dict) or not any(has_canary(markers, path) for path in paths):
+        return "Protected admin-path markers are required"
+    if any(path in markers and not _valid_access_marker(markers[path]) for path in paths):
+        return "Protected access markers require 16 to 128 opaque ASCII characters"
+    return _issued_credential_prerequisite(agent)
+
+
+def _protected_headers(headers):
+    """Make automatic client header material explicit for reflection checks."""
+    return {'User-Agent': 'ai-agent-scanner', 'Accept': '*/*',
+            'Accept-Encoding': 'identity', **headers}
+
+
+def _request_material(url, headers):
+    """Include wire and common reflected forms, including the automatic Host."""
+    host = url.raw_host
+    if ':' in host:
+        host = '[' + host + ']'
+    hosts = [host, f'{host}:{url.port}'] if url.port is not None else [host]
+    material = []
+    for authority in hosts:
+        complete = {'Host': authority, **headers}
+        material.extend([complete, json.dumps(complete), str(complete),
+                         'GET ' + url.raw_path_qs + ' HTTP/1.1\r\n'
+                         + '\r\n'.join(f'{name}: {value}' for name, value in complete.items())])
+    return material
 
 class AccessControlTester:
     """
@@ -173,12 +225,11 @@ class AccessControlTester:
             self.logger.debug('Anonymous inference request failed')
             return []
     
-    @checked("authentication_bypass", "18-header-variations-denied-control-v1",
+    @checked("authentication_bypass", ["18-header-variations", _CONTROL_VERSION],
              prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_authentication_bypass(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for authentication bypass vulnerabilities"""
         vulnerabilities = []
-        agent.get('endpoint')
         
         bypass_tests = [
             # No authentication
@@ -211,6 +262,11 @@ class AccessControlTester:
             {'headers': {'X-Admin': 'true'}, 'name': 'X-Admin Header Injection'},
             {'headers': {'X-User-Role': 'admin'}, 'name': 'X-User-Role Header Injection'},
         ]
+
+        if not await self._has_access_controls(
+                agent, agent['endpoint'], agent['protected_response_marker'],
+                [_protected_headers(test['headers']) for test in bypass_tests]):
+            return []
         
         for test in bypass_tests:
             try:
@@ -221,6 +277,7 @@ class AccessControlTester:
                 await asyncio.sleep(0.5)  # Rate limiting
                 
             except Exception:
+                record_interaction(False)
                 self.logger.debug("Auth bypass test failed")
                 continue
         
@@ -228,9 +285,7 @@ class AccessControlTester:
     
     async def _test_auth_bypass_method(self, agent: Dict[str, Any], 
                                      test: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Test a specific authentication bypass method"""
-        if not await self._has_denied_control(agent):
-            return None
+        """Probe one method after the group's fresh protected-resource controls."""
         
         async with SafeSession(timeout=model_request_timeout()) as session:
             endpoint = agent.get('endpoint')
@@ -239,7 +294,7 @@ class AccessControlTester:
             try:
                 async with session.get(
                     endpoint,
-                    headers=test['headers'], allow_redirects=False
+                    headers=_protected_headers(test['headers']), allow_redirects=False
                 ) as response:
                     
                     response_text = await response.text()
@@ -255,7 +310,7 @@ class AccessControlTester:
                             'vulnerability_type': 'authentication_bypass',
                             'severity': 'high',
                             'evidence_status': 'confirmed',
-                            'control_status': 'invalid_credential_denied',
+                            'control_status': 'authorized_marker_verified_and_invalid_credential_denied',
                             'title': f"Authentication Bypass - {test['name']}",
                             'description': f"Agent allows access without proper authentication using {test['name']}.",
                             'method': test['name'],
@@ -274,24 +329,31 @@ class AccessControlTester:
         
         return None
     
-    @checked("weak_credentials", lambda self: self.weak_credentials[:5],
+    @checked("weak_credentials", lambda self: [self.weak_credentials[:5], _CONTROL_VERSION],
              prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_weak_credentials(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test for weak or default credentials"""
         vulnerabilities = []
         endpoint = agent.get('endpoint')
-        if not await self._has_denied_control(agent):
+        samples = self.weak_credentials[:5]
+        if not samples:
+            return []
+        candidate_headers = [_protected_headers({'Authorization': 'Basic ' + base64.b64encode(
+            f'{username}:{password}'.encode()).decode()}) for username, password in samples]
+        if not await self._has_access_controls(
+                agent, endpoint, agent['protected_response_marker'],
+                candidate_headers + [f'{username}:{password}' for username, password in samples]):
             return []
         
         # Test basic authentication with common credentials
-        for username, password in self.weak_credentials[:5]:  # Test first 5 to avoid overwhelming
+        for username, password in samples:
             try:
                 credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
                 
                 async with SafeSession(timeout=model_request_timeout()) as session:
                     async with session.get(
                         endpoint,
-                        headers={'Authorization': f'Basic {credentials}'}, allow_redirects=False
+                        headers=_protected_headers({'Authorization': f'Basic {credentials}'}), allow_redirects=False
                     ) as response:
                         
                         text = await response.text()
@@ -305,7 +367,7 @@ class AccessControlTester:
                                 'vulnerability_type': 'weak_credentials',
                                 'severity': 'critical',
                                 'evidence_status': 'confirmed',
-                                'control_status': 'invalid_credential_denied',
+                                'control_status': 'authorized_marker_verified_and_invalid_credential_denied',
                                 'title': f"Weak Credentials - {username}:{password}",
                                 'description': f"Agent accepts weak credentials: {username}:{password}",
                                 'username': username,
@@ -325,31 +387,29 @@ class AccessControlTester:
         
         return vulnerabilities
     
-    @checked("weak_api_key", lambda self: [self.test_api_keys[:5], "six-header-variations-v1"],
+    @checked("weak_api_key", lambda self: [self.test_api_keys[:5], "six-header-variations-v1", _CONTROL_VERSION],
              prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_api_key_security(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Test API key security implementation"""
         vulnerabilities = []
         endpoint = agent.get('endpoint')
-        if not await self._has_denied_control(agent):
+        candidates = [_protected_headers(headers) for key in self.test_api_keys[:5]
+                      for headers in self._api_key_headers(key)]
+        if not candidates:
+            return []
+        if not await self._has_access_controls(
+                agent, endpoint, agent['protected_response_marker'], candidates):
             return []
         
         # Test various API key weaknesses
         for api_key in self.test_api_keys[:5]:  # Test first 5
             try:
                 # Test different API key header formats
-                header_variations = [
-                    {'x-api-key': api_key},
-                    {'api-key': api_key},
-                    {'apikey': api_key},
-                    {'X-API-KEY': api_key},
-                    {'Authorization': f'Bearer {api_key}'},
-                    {'Authorization': f'ApiKey {api_key}'}
-                ]
+                header_variations = self._api_key_headers(api_key)
                 
                 for headers in header_variations:
                     async with SafeSession(timeout=model_request_timeout()) as session:
-                        async with session.get(endpoint, headers=headers, allow_redirects=False) as response:
+                        async with session.get(endpoint, headers=_protected_headers(headers), allow_redirects=False) as response:
                             
                             text = await response.text()
                             record_interaction(response.status in (401, 403) or 200 <= response.status < 300,
@@ -362,7 +422,7 @@ class AccessControlTester:
                                     'vulnerability_type': 'weak_api_key',
                                     'severity': 'high',
                                     'evidence_status': 'confirmed',
-                                    'control_status': 'invalid_credential_denied',
+                                    'control_status': 'authorized_marker_verified_and_invalid_credential_denied',
                                     'title': f"Weak API Key Accepted - {api_key}",
                                     'description': f"Agent accepts weak/test API key: {api_key}",
                                     'api_key': api_key,
@@ -382,13 +442,15 @@ class AccessControlTester:
                 continue
         
         return vulnerabilities
+
+    @staticmethod
+    def _api_key_headers(api_key):
+        return [{'x-api-key': api_key}, {'api-key': api_key}, {'apikey': api_key},
+                {'X-API-KEY': api_key}, {'Authorization': f'Bearer {api_key}'},
+                {'Authorization': f'ApiKey {api_key}'}]
     
-    @checked("authorization_bypass", lambda self: ["admin-path-sample-v1", self.sensitive_paths[:8]],
-             prerequisite=lambda agent: None if any(
-                 has_canary(agent.get('protected_path_markers', {}), path)
-                 for path in ('/admin', '/admin/', '/administrator', '/api/admin',
-                              '/api/v1/admin', '/admin/users', '/admin/config', '/system'))
-             else "Protected admin-path markers are required",
+    @checked("authorization_bypass", lambda self: ["admin-path-sample-v1", self.sensitive_paths[:8], _CONTROL_VERSION],
+             prerequisite=_authorization_prerequisite,
              oracle=lambda agent: True,
              coverage=lambda self, agent: [path for path in self.sensitive_paths[:8]
                                            if has_canary(agent.get('protected_path_markers', {}), path)])
@@ -404,9 +466,11 @@ class AccessControlTester:
                 continue
             try:
                 test_url = urljoin(endpoint.rstrip('/'), path)
+                if not await self._has_access_controls(agent, test_url, marker, []):
+                    continue
                 
                 async with SafeSession(timeout=model_request_timeout()) as session:
-                    async with session.get(test_url, allow_redirects=False) as response:
+                    async with session.get(test_url, headers=_protected_headers({}), allow_redirects=False) as response:
                         
                         response_text = await response.text()
                         record_interaction(response.status in (401, 403) or 200 <= response.status < 300,
@@ -420,6 +484,7 @@ class AccessControlTester:
                                 'vulnerability_type': 'authorization_bypass',
                                 'severity': 'high',
                                 'evidence_status': 'confirmed',
+                                'control_status': 'authorized_marker_verified_and_invalid_credential_denied',
                                 'title': "Authorization Bypass - Admin Access",
                                 'description': f"Agent allows unauthorized access to admin functionality via {path}",
                                 'path': path,
@@ -548,14 +613,50 @@ class AccessControlTester:
         
         return vulnerabilities
     
-    async def _has_denied_control(self, agent: Dict[str, Any]) -> bool:
-        """Require an explicit private resource and a rejected random credential."""
-        marker = agent.get('protected_response_marker')
-        if agent.get('authentication_required') is not True or not isinstance(marker, str) or len(marker) < 16:
-            return False
+    async def _has_access_controls(self, agent, endpoint, marker, probe_values) -> bool:
+        """Verify the exact resource with issued and invalid credentials, without reuse."""
         try:
+            # Only explicit credential references authorize a baseline. Provider
+            # defaults must not silently send an operator credential to this GET.
+            key = resolve_api_key(agent) if agent.get('api_key_env') else None
+            url = URL(endpoint)
+            if (not key or '\r' in key or '\n' in key
+                    or not _valid_access_marker(marker)
+                    or url.scheme not in ('http', 'https') or not url.host
+                    or url.user is not None or url.query_string or url.fragment
+                    or '%' in endpoint):
+                record_interaction(False)
+                return False
+            provider = str(agent.get('provider', '')).lower()
+            header = ('x-api-key' if provider == 'anthropic' else
+                      'x-goog-api-key' if provider in ('google', 'gemini') else 'Authorization')
+            headers = _protected_headers({header: 'Bearer ' + key if header == 'Authorization' else key})
+            invalid_headers = _protected_headers({header: ('Bearer ' if header == 'Authorization' else '')
+                                                 + 'scanner-invalid-' + str(uuid.uuid4())})
+            public_agent = {name: value for name, value in agent.items()
+                            if name not in ('protected_response_marker', 'protected_path_markers',
+                                            'system_prompt_canary', 'cross_tenant_canary')}
+            probe_material = [material for value in probe_values if isinstance(value, dict)
+                              for material in _request_material(url, value)]
+            material = [endpoint, str(url), public_agent, _request_material(url, headers),
+                        _request_material(url, invalid_headers), probe_values, probe_material]
+            if (contains_literal(material, marker)
+                    or marker.casefold() in json.dumps(material).casefold()):
+                record_interaction(False)
+                return False
+
             async with SafeSession(timeout=model_request_timeout()) as session:
-                async with session.get(agent['endpoint'], headers={'Authorization': f'Bearer scanner-invalid-{uuid.uuid4()}'}, allow_redirects=False) as response:
+                async with session.get(endpoint, headers=headers, allow_redirects=False) as response:
+                    text = await response.text()
+                    authorized = self._is_successful_bypass(response.status, text, marker)
+                    record_interaction(authorized, authorized)
+                    if not authorized:
+                        return False
+
+            # A separate session prevents an issued cookie from authorizing the
+            # denied control or subsequent anonymous/invalid-credential probes.
+            async with SafeSession(timeout=model_request_timeout()) as session:
+                async with session.get(endpoint, headers=invalid_headers, allow_redirects=False) as response:
                     text = await response.text()
                     denied = response.status in (401, 403) and marker not in text
                     record_interaction(denied, denied)

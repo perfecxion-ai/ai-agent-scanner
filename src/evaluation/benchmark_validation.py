@@ -3,7 +3,7 @@
 import math
 import re
 
-from src.core.contracts import validate_checks
+from src.core.contracts import CHECK_INTERRUPTED_REASON, validate_checks
 from src.evaluation import prompt_benchmark as producer
 from src.utils.request_builder import SUPPORTED_PROVIDERS
 
@@ -127,7 +127,9 @@ def _checks(checks, manifest, context):
             _same(reason, _ABSENCE if outcome == 'inconclusive' else None)
         elif status == 'failed':
             _require(outcome in {'confirmed', 'inconclusive'}
-                     and type(reason) is str and reason in {_FAILURE, _DENIAL})
+                     and type(reason) is str and reason in {_FAILURE, _DENIAL, CHECK_INTERRUPTED_REASON})
+            if reason == CHECK_INTERRUPTED_REASON:
+                _same(outcome, 'inconclusive')
         else:
             _same(status, 'skipped')
             _same(outcome, 'not_evaluated')
@@ -150,6 +152,11 @@ def _run(run, pair, arm, manifest, context):
         _integer(run[key], 0, 35)
     _require(run['responses_evaluated'] <= run['requests_attempted'])
     confirmed = _checks(run['checks'], manifest, context)
+    interrupted = [index for index, check in enumerate(run['checks'])
+                   if check['reason'] == CHECK_INTERRUPTED_REASON]
+    if interrupted:
+        _same(status, 'partial')
+        _same(interrupted, [len(run['checks']) - 1])
     # Check attempts include local rejected interactions; HTTP attempts do not.
     # A partial scope-change run can therefore have more check attempts.
     check_attempts = sum(check['requests_attempted'] for check in run['checks'])

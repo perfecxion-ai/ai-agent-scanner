@@ -73,17 +73,21 @@ def fake_session(responses):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('responses,expected', [
     ([(200, 'Welcome to admin settings')], False),
-    ([(401, 'denied'), (200, '<html>Admin Login</html>')], False),
-    ([(401, 'denied'), (200, CANARY)], True),
-    ([(401, 'denied'), (302, CANARY)], False),
+    ([(401, 'denied')], False),
+    ([(200, CANARY), (401, 'denied'), (200, '<html>Admin Login</html>')], False),
+    ([(200, CANARY), (401, 'denied'), (200, CANARY)], True),
+    ([(200, CANARY), (401, 'denied'), (302, CANARY)], False),
 ])
-async def test_authentication_requires_denied_control_and_private_data(target, responses, expected):
-    target.update(authentication_required=True, protected_response_marker=CANARY)
-    with patch('src.security.access_control_tests.SafeSession', fake_session(responses)):
-        result = await AccessControlTester()._test_auth_bypass_method(target, {'name': 'No Authentication', 'headers': {}})
+async def test_authentication_requires_both_controls_and_private_data(target, responses, expected, monkeypatch):
+    monkeypatch.setenv('FIXTURE_ISSUED_KEY', 'issued-test-key')
+    target.update(authentication_required=True, protected_response_marker=CANARY, api_key_env='FIXTURE_ISSUED_KEY')
+    tester = AccessControlTester()
+    tester.weak_credentials = [('fixture', 'fixture')]
+    with patch('src.security.access_control_tests.SafeSession', fake_session(responses)), patch('asyncio.sleep', AsyncMock()):
+        result = await tester._test_weak_credentials(target)
     assert bool(result) is expected
     if result:
-        assert result['evidence_status'] == 'confirmed'
+        assert result[0]['evidence_status'] == 'confirmed'
 
 
 @pytest.mark.asyncio

@@ -23,8 +23,8 @@ stored discovery reports or the database is not a supported operator workflow.
 | `system_prompt_canary` | Seed a unique secret of at least 16 characters in a protected system instruction, outside user input. |
 | `cross_tenant_canary` | Seed a unique secret of at least 16 characters in another test tenant, outside the tested principal's authorized data. |
 | `authentication_required` | Set to `true` only when the endpoint must reject anonymous access. |
-| `protected_response_marker` | Unique string of at least 16 characters present only in protected response data. Authentication probes also require a random credential to receive HTTP 401 or 403. |
-| `protected_path_markers` | Map tested admin paths to unique strings of at least 16 characters present only in private admin data. |
+| `protected_response_marker` | Unique opaque string of 16 to 128 characters present only in protected response data. Requires the issued-credential and denied controls below. |
+| `protected_path_markers` | Map tested admin paths to unique opaque strings of 16 to 128 characters present only in private admin data. Each path requires its own issued-credential and denied controls. |
 
 Canary provenance is an operator assertion. The scanner verifies returned text,
 not how the secret was originally seeded. Canaries included in attack prompts
@@ -35,6 +35,54 @@ Generated response text is omitted from new evidence rather than persisted as
 an excerpt; older saved reports are not retroactively sanitized.
 Confirmed access checks do not follow redirects. Provider adapters preserve
 deployment prefixes and inspect generated content separately from JSON metadata.
+
+## Protected access controls
+
+Authentication bypass, weak credential, weak API key, and protected admin-path
+checks require an explicit `api_key_env` reference to an operator-issued test
+credential. Keep the value in the private process environment, not the agent
+configuration. Automatic provider credentials do not enable these controls.
+The credential must authorize a GET of the exact configured endpoint or admin
+path and return its protected marker in an HTTP 2xx response. This is a resource
+check, not a model inference request; a POST-only endpoint cannot satisfy it.
+
+The baseline uses `x-api-key` for Anthropic, `x-goog-api-key` for Google/Gemini,
+and `Authorization: Bearer` otherwise. A fresh invalid credential in the same
+header must receive HTTP 401 or 403 without the marker. Only then does the check
+send its anonymous, malformed, or weak-credential probes. Baseline and control
+requests use separate sessions, never follow redirects, and consume the same
+scan request and deadline budget as probes. Controls are not cached across check
+groups or paths. Unsupported credential schemes require a future adapter.
+
+Missing explicit credentials skip the check. An unavailable resource, stale
+credential, missing marker, failed control, or interrupted request cannot itself
+establish a pass or a confirmed bypass. Completed sampled denials can pass only after both
+controls succeed; successful responses without the marker remain inconclusive.
+An endpoint that denies every request is not evidence of effective protection.
+Earlier confirmations survive an ordinary later request/control failure.
+Cancellation marks an unfinished check failed, even after every response was
+evaluated. Durable retention of in-flight findings on cancellation or an outer
+scan deadline remains separate work.
+
+V2 access markers must use exactly `[A-Za-z0-9_.~-]{16,128}`. No trimming,
+decoding, case conversion, or other normalization is used for response matching.
+Previously accepted arbitrary strings outside this grammar are now refused
+before requests. The restriction excludes header and JSON fragments that could
+be mistaken for private data after request reflection.
+
+Protected-access URLs must be HTTP(S) without user information, query parameters,
+fragments, or percent escapes. Markers must not overlap public target fields,
+credential values, normalized URLs, or probe material, including fixed client
+headers and rendered request lines. Collision checks also reject case variants
+of that public/request material. Reflected request content is not protected
+evidence. Baseline text and issued credentials are never finding
+fields. Configure opaque synthetic markers separately from credentials.
+
+The `authorized-and-denied-resource-controls-v2` definition changes probe
+versions for all four check groups. Historical checks and findings remain
+readable but cannot establish verified resolution across this version boundary.
+Keep the public `evidence_context_id` stable only while the tested resource,
+authorization policy, and protected fixture remain the same.
 
 ## Server system-prompt canary profiles
 
