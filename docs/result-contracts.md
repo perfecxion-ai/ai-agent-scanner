@@ -84,6 +84,49 @@ version 1.0 files remain readable with their persisted scores; reading them
 does not trigger a retrospective assessment or change their recorded values.
 Missing legacy check evidence cannot prove finding resolution.
 
+Current protected-access verdicts additionally require recognized positive-control
+probe definitions bound to the original provider/model context. Only the four
+supported protected-access groups can establish sampled zero or verified absence.
+Unknown/custom definitions, missing context, incomplete sample counts, and older
+control semantics cannot establish these claims. An explicitly recorded absent
+model is distinct from missing context. Current confirmations require matching
+control provenance, response status, and covered resource in addition to the
+matching check. Failed checks may retain genuine findings despite cleanup errors;
+their recorded interaction counters are not guaranteed wire-request totals.
+New findings carry integer `protected_control_version: 2` so the fixed control
+description remains verifiable when a known candidate credential redacts part of
+that description. The reference requires a recognized probe and compatible literal
+redaction, not arbitrary text. Existing exact control descriptions remain valid
+without this additive field; altered descriptions without it stay unverified.
+New authorization findings include a nonsecret `protected_path_index` into the
+frozen eight-path sample. The recognized probe version binds the catalog and
+selected subset. This reference preserves resource identity when privacy filtering
+redacts part of a fixed path; conflicting paths or invalid indices are rejected.
+Older findings without the reference still require an exact, unredacted covered
+path. The reference neither records a secret nor changes which requests execute.
+
+Security scans reject configured protected values that collide with either new
+field name before their first checkpoint or security probe. The check includes
+source, validator-added, resolved, and predictable probe secrets across assets;
+later-discovered collisions also stop report projection. The error is static and
+does not echo the protected value. Discovery-only runs do not emit these fields.
+This guard covers these two additive fields, not every possible public-schema
+collision. Redaction never exempts a secret to preserve evidence eligibility.
+
+Archived protected-access confirmations with unsupported provenance make that
+asset's current score unknown, even beside supported evidence: the saved number
+may include unsupported contributions. Other assets remain independently eligible.
+Unsupported old passes alone do not invalidate independently supported evidence.
+Original report bodies, scores, and findings remain unchanged. The dashboard uses
+the API's canonical risk fields joined by unique asset identity, not the archived
+report's numeric values or a separate browser evidence evaluator. Missing or
+ambiguous mappings display Not assessed; original evidence stays downloadable.
+New reports also withhold numeric assessments when privacy redaction removes
+context needed to validate their evidence or invalidates public risk metadata.
+Other eligible assets still contribute to the recomputed summary. Redaction is
+not weakened to retain a score. Modern direct scorer inputs without eligible evidence are rejected;
+they do not silently become numeric zero.
+
 The `severity-floor-v2` policy uses a single 0-100 scale. Confirmed severity floors
 are critical 90, high 70, medium 40, low 15, and informational 1. The base is the
 highest severity, not a sum of repeated samples. Documented exposure/business
@@ -129,6 +172,8 @@ occurrence's exact rule, probe ID, and probe version. Changed versions,
 changed models or providers, unknown/changed evidence contexts, inconclusive
 responses, failed or skipped checks, and legacy versionless
 findings remain `resolution_unverified`.
+Both the previous confirmation and the new pass must satisfy current supported
+control semantics. Two matching obsolete versions cannot resolve each other.
 
 Cloud assets preserve bounded `metadata.resource_id` and a cloud
 identifier (`aws`, `azure`, or `gcp`). Inventory identity uses cloud, provider,

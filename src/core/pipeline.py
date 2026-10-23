@@ -10,6 +10,8 @@ import json
 from urllib.parse import urlsplit, urlunsplit
 from src.core.transport import current_budget, scan_transport, ScanBudget
 from src.core.redaction import collect_secrets, redact_secrets
+from src.core.risk_projection import project_agent_risk
+from src.core.access_probe_policy import PUBLIC_ACCESS_FIELDS
 from src.reporting.sarif_output import generate_sarif
 from src.utils.request_builder import resolve_api_key
 from src.core.contracts import (
@@ -22,6 +24,12 @@ from src.security.security_engine import SecurityTestEngine
 
 
 SCHEMA_VERSION = "1.0"
+
+
+def _validate_access_field_privacy(secrets):
+    if any(secret and any(secret.casefold() in field.casefold() for field in PUBLIC_ACCESS_FIELDS)
+           for secret in secrets):
+        raise ValueError('Protected evidence conflicts with public access fields')
 
 
 def public_metadata(metadata):
@@ -66,9 +74,12 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         if prompt_suite is not None:
             validate_prompt_suite_agents(observations)
     checkpoint = None
+    if scan_type != "discovery_only" and isinstance(security, SecurityTestEngine):
+        # Ordinary and checkpointed reports use the same privacy/evidence basis.
+        secrets.update(security.checkpoint_secrets(observations))
+    if scan_type != "discovery_only":
+        _validate_access_field_privacy(secrets)
     if checkpoint_callback is not None:
-        if scan_type != "discovery_only" and isinstance(security, SecurityTestEngine):
-            secrets.update(security.checkpoint_secrets(observations))
         checkpoint = _CheckpointState(observations, risk, scan_type, prompt_suite, secrets, checkpoint_callback)
         await checkpoint.publish()
     if scan_type != "discovery_only":
@@ -95,6 +106,8 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
             # Do not persist arbitrary transport exceptions that may contain credentials.
             if result.get("error"):
                 result["error"] = "Security testing failed"
+            # Probe versions bind original public context, not tester-supplied labels.
+            result['provider'], result['model'] = agent.get('provider'), agent.get('model')
             if "checks" in result:
                 try:
                     validate_checks(result["checks"])
@@ -139,7 +152,30 @@ async def _assess_results(risk, security_results):
 def _project_report(observations, security_results, risks, risk_status, scan_type, prompt_suite, secrets,
                     *, incomplete=False):
     """One canonical projection for ordinary reports and durable evidence snapshots."""
+    if scan_type != "discovery_only":
+        _validate_access_field_privacy(secrets)
     security_results, risks = deepcopy(security_results), deepcopy(risks)
+    # A public verdict needs independently verifiable public evidence. Redaction
+    # can erase the original context used to bind a protected-access probe.
+    public_tests = {result['agent_id']: redact_secrets(result, secrets) for result in security_results}
+
+    def supported_assessment(assessment):
+        evidence = public_tests.get(assessment['agent_id'], {})
+        if not risk_assessment_eligible(evidence):
+            return False
+        candidate = {**evidence, 'security_status': evidence['status'], **redact_secrets({
+            'risk_score': assessment.get('overall_risk_score'),
+            'risk_level': assessment.get('risk_level'),
+            'risk_coverage_status': assessment.get('coverage_status'),
+            'risk_scoring_policy': assessment.get('scoring_policy'),
+        }, secrets)}
+        return project_agent_risk(candidate, assessed=True)['risk_score'] is not None
+
+    original_risk_count = len(risks)
+    risks = [assessment for assessment in risks if supported_assessment(assessment)]
+    if len(risks) != original_risk_count:
+        risk_status = ('partial' if any(item.get('coverage_status') == 'partial' for item in risks)
+                       else 'completed') if risks else 'not_assessed'
     completed = [result for result in security_results if result["status"] == "completed"]
     if incomplete and risks:
         risk_status = "partial"
@@ -155,6 +191,7 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
     public_agents = []
     for original in observations:
         agent = {key: original[key] for key in ("id", "name", "type", "provider", "model", "endpoint", "discovery_method", "confidence") if key in original}
+        agent['provider'], agent['model'] = original.get('provider'), original.get('model')
         agent["metadata"] = public_metadata(original.get("metadata", {}))
         if agent.get("endpoint"):
             endpoint = urlsplit(agent["endpoint"])
@@ -231,7 +268,8 @@ class _CheckpointState:
         agent = self.observations[index]
         self.results[index] = {
             "agent_id": agent["id"], "agent_name": agent["name"], "type": agent.get("type", "unknown"),
-            "provider": agent.get("provider", "unknown"), "metadata": public_metadata(agent.get("metadata", {})),
+            "provider": agent.get("provider"), "model": agent.get("model"),
+            "metadata": public_metadata(agent.get("metadata", {})),
             "check_schema_version": CHECK_SCHEMA_VERSION, "status": "partial",
             "vulnerabilities": [], "observations": [], "checks": [],
         }
@@ -310,7 +348,8 @@ class _CheckpointState:
         return deepcopy({
             "agent_id": result.get("agent_id"), "agent_name": result.get("agent_name"),
             "agent_type": result.get("agent_type"), "type": result.get("type"),
-            "provider": result.get("provider"), "metadata": result.get("metadata", {}),
+            "provider": result.get("provider"), "model": result.get("model"),
+            "metadata": result.get("metadata", {}),
             "vulnerabilities": confirmed_findings(result),
         })
 

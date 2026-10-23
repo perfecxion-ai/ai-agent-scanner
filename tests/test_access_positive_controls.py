@@ -402,11 +402,16 @@ async def test_legacy_probe_versions_cannot_resolve_current_findings_or_reverse(
     state['mode'] = 'protected'
     passed, _, _ = await execute(agent, method)
     assert confirmed['probe_version'] == passed['probe_version'] != legacy_version
-    assert proves_absence(passed, findings[0])
+    assert proves_absence(passed, findings[0], asset=agent,
+                          previous_asset={**agent, 'checks': [confirmed]})
     legacy_pass = dict(passed, probe_version=legacy_version)
     legacy_finding = dict(findings[0], probe_version=legacy_version)
-    assert not proves_absence(legacy_pass, findings[0])
-    assert not proves_absence(passed, legacy_finding)
+    assert not proves_absence(legacy_pass, findings[0], asset=agent,
+                              previous_asset={**agent, 'checks': [confirmed]})
+    assert not proves_absence(passed, legacy_finding, asset=agent,
+                              previous_asset={**agent, 'checks': [dict(confirmed, probe_version=legacy_version)]})
+    assert not proves_absence(legacy_pass, legacy_finding, asset=agent,
+                              previous_asset={**agent, 'checks': [dict(confirmed, probe_version=legacy_version)]})
     assert not compare_reports(report(agent, confirmed, [legacy_finding]), report(agent, passed, []))['resolved']
 
 

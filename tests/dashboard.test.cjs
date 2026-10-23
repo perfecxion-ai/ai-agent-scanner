@@ -29,6 +29,14 @@ const checkedReport = (checks, score = null) => ({status: 'completed', check_sch
     agents: [{id: 'asset', name: 'Fixture', security_status: 'completed', risk_score: score,
         risk_scoring_policy: 'severity-floor-v2', checks, vulnerabilities: []}],
     security_results: [], summary: {overall_risk_score: score}});
+const projectedResults = report => ({pipeline: report,
+    summary: {overall_risk_score: report.summary.overall_risk_score,
+        risk_assessment_status: report.risk_assessment_status},
+    agents: report.agents.map((asset, index) => ({id: `snapshot-${index}`, asset_id: asset.id,
+        risk_score: asset.risk_score, risk_level: asset.risk_score === 0 ? 'minimal' : 'high',
+        risk_scoring_policy: 'severity-floor-v2', security_status: asset.security_status,
+        risk_coverage_status: asset.security_status === 'completed' ? 'sampled' : 'partial',
+        risk_assessment_status: asset.security_status === 'completed' ? 'completed' : 'partial'}))});
 const auditEvent = id => ({id, event: 'claim', previous_status: 'queued', status: 'running', created_at: '2026-10-13T10:00:00'});
 const savedTemplate = (changes = {}) => ({id: 'recipe', revision: 3, scan_name: 'Lab recipe', scan_type: 'discovery_only',
     target_scope: {network_ranges: ['192.0.2.0/28'], active_probe: false}, scan_config: {timeout_seconds: 120}, ...changes});
@@ -370,7 +378,7 @@ test('eighteen prompt occurrences form seven presentation groups without changin
     assert.equal(new Set(groups.flatMap(group => group.occurrences.map(item => item.id))).size, 18);
     assert.equal(groups[0].occurrences[0], report.agents[0].vulnerabilities[0]);
     const {app} = fixture();
-    app.renderReport(report);
+    app.renderReport(report, projectedResults(report));
     assert.match(app.el('findingGroupingSummary').textContent, /^7 finding groups \/ 18 sample occurrences\./);
     assert.equal(app.el('findingCount').textContent, '18');
     assert.equal(app.el('findingList').children[0].children.length, 7);
@@ -489,7 +497,7 @@ test('failed execution with confirmed evidence may group without changing partia
     report.status = report.risk_assessment_status = 'partial';
     report.agents[0].security_status = report.agents[0].checks[0].status = 'failed';
     const {app} = fixture();
-    app.renderReport(report);
+    app.renderReport(report, projectedResults(report));
     assert.equal(groupFindingOccurrences(report).length, 1);
     assert.equal(app.el('riskScore').textContent, '70.0 / 100 (partial coverage)');
 });
@@ -1289,9 +1297,11 @@ test('historical scores without check evidence do not look like a current assess
     assert.ok(texts(app.el('assetList')).includes('Check evidence unavailable for this report.'));
 });
 
-test('modern conclusive evidence can display the stored assessment score', () => {
+test('canonical API assessment can display legitimate sampled zero', () => {
     const {app} = fixture();
-    app.renderReport(checkedReport([{rule_id: 'prompt', status: 'completed', outcome: 'passed', responses_evaluated: 1, requests_attempted: 1}], 0));
+    const report = checkedReport([{rule_id: 'authentication_bypass', status: 'completed', outcome: 'passed',
+        responses_evaluated: 20, requests_attempted: 20}], 0);
+    app.renderReport(report, projectedResults(report));
     assert.equal(app.el('riskScore').textContent, '0.0 / 100');
     assert.ok(texts(app.el('assetList')).includes('Risk: 0.0 / 100'));
 });
@@ -1313,10 +1323,89 @@ test('partial confirmed evidence retains risk with an explicit coverage warning'
     report.agents[0].security_status = 'partial';
     report.agents[0].vulnerabilities = [{...check, evidence_status: 'confirmed', severity: 'high'}];
     report.source_inventory = {coverage_complete: false};
-    app.renderReport(report);
+    app.renderReport(report, projectedResults(report));
     assert.equal(app.el('riskScore').textContent, '70.0 / 100 (partial coverage)');
     assert.ok(texts(app.el('assetList')).includes('Risk: 70.0 / 100 (partial coverage)'));
     assert.match(app.el('reportNote').textContent, /Source inventory coverage is incomplete/);
+});
+
+test('loadResults uses canonical API risk instead of historical pipeline scores', async () => {
+    for (const storedScore of [0, 70]) {
+        const report = checkedReport([{rule_id: 'authentication_bypass', probe_id: 'authentication_bypass.sample',
+            probe_version: '1:obsolete', status: 'completed', outcome: storedScore ? 'confirmed' : 'passed',
+            requests_attempted: 36, responses_evaluated: 36}], storedScore);
+        if (storedScore) report.agents[0].vulnerabilities = [{...report.agents[0].checks[0],
+            evidence_status: 'confirmed', severity: 'high', title: 'Historical finding'}];
+        const results = projectedResults(report);
+        results.summary = {overall_risk_score: null, risk_assessment_status: 'not_assessed'};
+        Object.assign(results.agents[0], {risk_score: null, risk_level: 'unknown',
+            risk_scoring_policy: null, risk_assessment_status: 'not_assessed', risk_coverage_status: 'not_assessed'});
+        const original = JSON.stringify(results);
+        const {app} = fixture(async () => response({results}));
+        app.token = 'fixture'; app.scanId = 'scan';
+        await app.loadResults(app.selection);
+        assert.equal(app.el('riskScore').textContent, 'Not assessed');
+        assert.ok(texts(app.el('assetList')).includes('Risk: Not assessed'));
+        assert.equal(app.el('findingCount').textContent, String(storedScore ? 1 : 0));
+        assert.match(app.el('reportNote').textContent, /stored scores are unverified/);
+        assert.match(app.el('reportNote').textContent, /original records, not new verdicts/);
+        assert.equal(app.el('jsonBtn').disabled, false);
+        assert.equal(JSON.stringify(results), original);
+    }
+});
+
+test('canonical asset mapping is independent of snapshot ID and row order', async () => {
+    const report = promptReport([1]);
+    report.agents.push({...report.agents[0], id: 'unassessed', risk_score: 0, vulnerabilities: []});
+    const results = projectedResults(report);
+    results.agents[1].risk_score = null;
+    results.agents.reverse();
+    const {app} = fixture(async () => response({results}));
+    app.token = 'fixture'; app.scanId = 'scan';
+    await app.loadResults(app.selection);
+    assert.equal(app.el('riskScore').textContent, '70.0 / 100');
+    assert.ok(texts(app.el('assetList').children[0]).includes('Risk: 70.0 / 100'));
+    assert.ok(texts(app.el('assetList').children[1]).includes('Risk: Not assessed'));
+});
+
+for (const mutation of ['missing-results', 'missing-row', 'missing-id', 'wrong-id', 'duplicate-row',
+    'duplicate-source', 'null-score', 'boolean-score', 'infinite-score', 'oversized-score',
+    'old-policy', 'unknown-level', 'wrong-coverage', 'wrong-status', 'wrong-assessment']) {
+    test(`canonical risk fails closed for ${mutation}`, () => {
+        const report = promptReport([1]);
+        let results = projectedResults(report);
+        const row = results.agents[0];
+        if (mutation === 'missing-results') results = undefined;
+        if (mutation === 'missing-row') results.agents = [];
+        if (mutation === 'missing-id') delete row.asset_id;
+        if (mutation === 'wrong-id') row.asset_id = 'different';
+        if (mutation === 'duplicate-row') results.agents.push({...row, id: 'other-snapshot'});
+        if (mutation === 'duplicate-source') report.agents.push({...report.agents[0]});
+        if (mutation === 'null-score') row.risk_score = null;
+        if (mutation === 'boolean-score') row.risk_score = true;
+        if (mutation === 'infinite-score') row.risk_score = Infinity;
+        if (mutation === 'oversized-score') row.risk_score = 101;
+        if (mutation === 'old-policy') row.risk_scoring_policy = 'legacy';
+        if (mutation === 'unknown-level') row.risk_level = 'unknown';
+        if (mutation === 'wrong-coverage') row.risk_coverage_status = 'partial';
+        if (mutation === 'wrong-status') row.security_status = 'failed';
+        if (mutation === 'wrong-assessment') row.risk_assessment_status = 'not_assessed';
+        const {app} = fixture();
+        app.renderReport(report, results);
+        assert.equal(app.el('riskScore').textContent, 'Not assessed');
+        assert.ok(texts(app.el('assetList')).includes('Risk: Not assessed'));
+        assert.equal(app.el('findingCount').textContent, String(report.agents.length));
+    });
+}
+
+test('a mismatched canonical summary is hidden without erasing valid asset projections', () => {
+    const report = promptReport([1]);
+    const results = projectedResults(report);
+    results.summary.overall_risk_score = 99;
+    const {app} = fixture();
+    app.renderReport(report, results);
+    assert.equal(app.el('riskScore').textContent, 'Not assessed');
+    assert.ok(texts(app.el('assetList')).includes('Risk: 70.0 / 100'));
 });
 
 test('stale prompt nondisclosure passes cannot display a zero risk verdict', () => {

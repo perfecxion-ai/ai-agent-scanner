@@ -14,6 +14,7 @@ from src.core.contracts import CheckpointError, checked, record_interaction, val
 from src.core.transport import current_budget
 from src.risk.risk_assessor import RiskAssessment
 from src.security.security_engine import SecurityTestEngine
+from tests.controlled_access import target as controlled_target, transport as controlled_transport
 
 
 CANARY = 'synthetic-checkpoint-canary-84625'
@@ -367,20 +368,11 @@ async def test_redaction_colliding_distinct_asset_ids_rejected_before_persistenc
 
 @pytest.mark.asyncio
 async def test_predicted_probe_secrets_are_pinned_before_first_checkpoint(monkeypatch):
-    target = asset('admin-service')
-    target.update(authentication_required=True, protected_response_marker=CANARY)
+    target = controlled_target(id='admin-service', system_prompt_canary=CANARY)
     security, saved = engine(monkeypatch), []
-
-    class WeakCredential:
-        @checked('weak_credentials', 'checkpoint-credential-fixture')
-        async def test_agent(self, agent):
-            record_interaction(True)
-            return [{'id': 'weak-finding', 'evidence_status': 'confirmed', 'severity': 'critical',
-                     'vulnerability_type': 'weak_credentials', 'password': 'admin',
-                     'description': 'Accepted admin credential'}]
-
-    security.access_tester.test_agent = WeakCredential().test_agent
-    final = await run(security, capture(saved), agents=[target])
+    security.access_tester.test_agent = security.access_tester._test_weak_credentials
+    with controlled_transport(disclose=True):
+        final = await run(security, capture(saved), agents=[target])
     assert all(report['agents'][0]['id'] == '[redacted]-service' for report in saved + [final])
     assert final['summary']['overall_risk_score'] == 90
     assert 'admin' not in json.dumps(saved + [final])

@@ -11,6 +11,7 @@ from src.core.contracts import CheckRecord
 from src.risk.risk_assessor import RiskAssessment
 from tests.test_api_auth import api as api, headers
 from tests.test_pipeline import add_scan, asset, engines
+from tests.controlled_access import result as controlled_result
 
 
 def report(score=None, *, partial=False):
@@ -80,9 +81,13 @@ def test_unknown_and_historical_scores_are_not_current_verdicts(api, kind):
 
 @pytest.mark.parametrize('score,partial', [(70, True), (0, False)])
 @pytest.mark.parametrize('alias', ['stable-asset', None])
-def test_current_evidence_preserves_high_partial_and_true_zero(api, score, partial, alias):
+@pytest.mark.asyncio
+async def test_current_evidence_preserves_high_partial_and_true_zero(api, score, partial, alias):
     module, client = api
     value = report(score, partial=partial)
+    if score == 0:
+        actual = await controlled_result()
+        value['agents'][0].update({key: actual[key] for key in ('provider', 'model', 'checks')})
     if alias is None:
         value['agents'][0]['id'] = 'fixture-snapshot'
     seed(module, value, alias=alias, db_score=99)

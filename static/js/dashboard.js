@@ -90,6 +90,38 @@ function groupFindingOccurrences(report) {
     return groups;
 }
 
+function displayRiskProjection(report, results) {
+    // The server owns evidence eligibility. Stored report scores are audit data.
+    const agents = new Map();
+    const unknown = {agents, score: null, partial: false};
+    if (report.check_schema_version !== '1.0' || !Array.isArray(results?.agents)) return unknown;
+    const sourceCounts = new Map();
+    const projectionCounts = new Map();
+    for (const asset of report.agents || []) sourceCounts.set(asset.id, (sourceCounts.get(asset.id) || 0) + 1);
+    for (const asset of results.agents) {
+        if (findingRecord(asset)) projectionCounts.set(asset.asset_id, (projectionCounts.get(asset.asset_id) || 0) + 1);
+    }
+    const sources = new Map((report.agents || []).map(asset => [asset.id, asset]));
+    for (const asset of results.agents) {
+        if (!findingRecord(asset) || !groupText(asset.asset_id, 2048) ||
+            sourceCounts.get(asset.asset_id) !== 1 || projectionCounts.get(asset.asset_id) !== 1 ||
+            asset.risk_scoring_policy !== 'severity-floor-v2' ||
+            !Number.isFinite(asset.risk_score) || asset.risk_score < 0 || asset.risk_score > 100 ||
+            !['minimal', 'low', 'medium', 'high', 'critical'].includes(asset.risk_level) ||
+            !['completed', 'partial', 'failed'].includes(asset.security_status) ||
+            asset.security_status !== sources.get(asset.asset_id).security_status ||
+            asset.risk_coverage_status !== (asset.security_status === 'completed' ? 'sampled' : 'partial') ||
+            asset.risk_assessment_status !== (asset.security_status === 'completed' ? 'completed' : 'partial')) continue;
+        agents.set(asset.asset_id, asset);
+    }
+    const summary = results.summary;
+    if (!findingRecord(summary) || !['completed', 'partial'].includes(summary.risk_assessment_status) ||
+        !Number.isFinite(summary.overall_risk_score) || !agents.size ||
+        summary.overall_risk_score !== Array.from(agents.values()).reduce((maximum, asset) => Math.max(maximum, asset.risk_score), 0)) return unknown;
+    return {agents, score: summary.overall_risk_score,
+        partial: report.status === 'partial' || summary.risk_assessment_status === 'partial'};
+}
+
 class AIAgentScanner {
     constructor(doc = document, fetcher = (...args) => fetch(...args)) {
         this.doc = doc;
@@ -848,7 +880,7 @@ class AIAgentScanner {
             this.reportState = 'historical';
             return this.reportState;
         }
-        this.renderReport(report);
+        this.renderReport(report, data.results);
         this.clearReportNotice();
         this.el('jsonBtn').disabled = this.el('sarifBtn').disabled = false;
         this.reportState = 'available';
@@ -1010,7 +1042,7 @@ class AIAgentScanner {
         more.addEventListener('click', show);
         details.addEventListener('toggle', () => { if (details.open && rendered === 0) show(); });
     }
-    renderReport(report) {
+    renderReport(report, results = null) {
         this.el('reportView').hidden = false;
         const agents = report.agents || [];
         const findings = agents.flatMap(agent => (agent.vulnerabilities || []).map(finding => ({...finding, agent_name: agent.name})));
@@ -1022,31 +1054,20 @@ class AIAgentScanner {
         const occurrenceLabel = findingGroups.length && findingGroups.every(group => group.sampled) ? 'sample' : 'recorded';
         this.el('findingGroupingSummary').textContent = `${findingGroups.length} finding groups / ${findings.length} ${occurrenceLabel} occurrences. ` +
             'Grouping is for display only, not a shared-root-cause claim. JSON and SARIF retain every occurrence.';
-        const score = report.summary && report.summary.overall_risk_score;
+        const risk = displayRiskProjection(report, results);
         const modern = report.check_schema_version === '1.0';
-        const riskEligible = agent => agent.risk_scoring_policy === 'severity-floor-v2' &&
-            ['completed', 'partial', 'failed'].includes(agent.security_status) &&
-            Array.isArray(agent.checks) && agent.checks.some(check => {
-            if (!Number.isSafeInteger(check.responses_evaluated) || check.responses_evaluated < 1 ||
-                !Number.isSafeInteger(check.requests_attempted) || check.requests_attempted < check.responses_evaluated) return false;
-            if (check.outcome === 'confirmed' && ['completed', 'failed'].includes(check.status)) {
-                return (agent.vulnerabilities || []).some(finding => finding.evidence_status === 'confirmed' &&
-                    ['rule_id', 'probe_id', 'probe_version'].every(key => typeof check[key] === 'string' && finding[key] === check[key]));
-            }
-            return agent.security_status === 'completed' && check.status === 'completed' && check.outcome === 'passed' &&
-                typeof check.rule_id === 'string' && !check.rule_id.startsWith('prompt_injection') &&
-                check.rule_id !== 'tenant_isolation_violation';
-        });
-        const riskAvailable = modern && ['completed', 'partial'].includes(report.risk_assessment_status) && agents.some(riskEligible);
-        const partialRisk = report.status === 'partial' || report.risk_assessment_status === 'partial';
-        this.el('riskScore').textContent = riskAvailable && Number.isFinite(score) ?
-            `${score.toFixed(1)} / 100${partialRisk ? ' (partial coverage)' : ''}` : 'Not assessed';
+        this.el('riskScore').textContent = risk.score !== null ?
+            `${risk.score.toFixed(1)} / 100${risk.partial ? ' (partial coverage)' : ''}` : 'Not assessed';
         const checks = agents.flatMap(agent => Array.isArray(agent.checks) ? agent.checks : []);
         this.el('checkSummary').textContent = modern ?
             `Checks: ${checks.filter(check => check.status === 'completed').length} completed / ${checks.filter(check => check.status === 'skipped').length} skipped / ${checks.filter(check => check.status === 'failed').length} failed. Completion is separate from evidence outcome.` :
             'Check evidence unavailable for this historical report. Existing numeric scores remain in the export.';
         this.el('reportNote').textContent = report.error ||
             `${report.status}. ${report.summary?.agents_tested || 0} assets completed security testing. Review skipped and incomplete states below.`;
+        if ((Number.isFinite(report.summary?.overall_risk_score) && risk.score === null) ||
+            agents.some(agent => Number.isFinite(agent.risk_score) && !risk.agents.has(agent.id))) {
+            this.el('reportNote').textContent += ' Some stored scores are unverified. Check outcomes and findings below are the original records, not new verdicts.';
+        }
         if (report.source_inventory?.coverage_complete === false) {
             this.el('reportNote').textContent += ' Source inventory coverage is incomplete; only saved validated assets were tested.';
         }
@@ -1061,9 +1082,9 @@ class AIAgentScanner {
             this.append(card, 'p', `${agent.provider || 'Unknown provider'} / ${agent.security_status || 'unknown'}`);
             this.append(card, 'p', agent.endpoint || 'No endpoint');
             if (agent.metadata?.resource_id) this.append(card, 'p', `Cloud resource: ${agent.metadata.resource_id}`);
-            const partialAsset = agent.risk_coverage_status === 'partial' || ['partial', 'failed'].includes(agent.security_status);
-            this.append(card, 'p', riskAvailable && riskEligible(agent) && Number.isFinite(agent.risk_score) ?
-                `Risk: ${agent.risk_score.toFixed(1)} / 100${partialAsset ? ' (partial coverage)' : ''}` : 'Risk: Not assessed');
+            const projected = risk.agents.get(agent.id);
+            this.append(card, 'p', projected ?
+                `Risk: ${projected.risk_score.toFixed(1)} / 100${projected.risk_coverage_status === 'partial' ? ' (partial coverage)' : ''}` : 'Risk: Not assessed');
             const assessment = (report.security_results || []).find(result => result.agent_id === agent.id);
             if (assessment && (assessment.reason || assessment.error)) this.append(card, 'p', assessment.reason || assessment.error);
             if (assessment?.limitations?.length) {

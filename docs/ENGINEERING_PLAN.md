@@ -39,8 +39,8 @@ proposed calls and observed actions are distinct outcomes.
 | Slice | Finding and work | Required acceptance | State |
 | --- | --- | --- | --- |
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Merged in PR #64; local, independent, and all eight PR/post-merge CI gates passed |
-| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence passes local and independent gates; PR/CI pending. In-progress evidence and CLI crash recovery remain separate gates |
-| R1.3 | Database score columns retain unknown as `0.0` despite correct public projections | Versioned migration derives values from validated saved evidence, preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Planned |
+| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence merged in PR #65; local, independent, and all eight PR/post-merge CI gates passed. In-progress evidence and CLI crash recovery remain separate gates |
+| R1.3 | Database score columns retain unknown as `0.0`; historical authentication evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Historical-evidence prerequisite passes local and independent gates; PR/CI pending. Migration follows |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | Planned |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | Planned |
 | R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
@@ -68,6 +68,15 @@ unfinished checks. The last increment needs a versioned progress/evidence
 contract, not a benchmark boolean or invented completed check. R1.2 remains open
 until both completed-check and in-progress confirmation recovery pass. Recovery
 must never replay an active probe to recreate lost evidence.
+
+Before within-check persistence and score migration, close the historical
+protected-access eligibility gap. A matching obsolete probe version is not proof
+that an issued-credential positive control ran. Current scoring and resolution
+must recognize supported public probe semantics and valid counters through one
+shared contract. Preserve archived reports and findings, including unsupported
+confirmations, without presenting them as current verified risk or resolution.
+Unknown/custom protected-access probe definitions fail closed until they have supported evidence
+provenance. Do not change frozen current catalogs merely to reinterpret history.
 
 The checkpoint design uses scan-local immutable check/finding pairs and the
 shared report/risk projection, not a second scorer or global-engine state. A
@@ -251,12 +260,15 @@ the strategic review does not retroactively expand any acceptance claim.
 
 - The 2026-10-22 review establishes the active R1 through R4 roadmap. R1.1 is
   merged with local, independent, and all eight PR/post-merge checks passing.
-  R1.2 remains open. Completed-check persistence passes local and independent
-  acceptance; PR/CI is pending. In-progress confirmation recovery requires a
-  separate contract. See
+  R1.2 remains open. Completed-check persistence is merged in PR #65 with local,
+  independent, and all eight PR/post-merge gates passing. In-progress confirmation
+  recovery requires a separate contract. Historical protected-access eligibility
+  passes local and independent acceptance; PR/CI remains pending. It is a
+  prerequisite for that work and the nullable-score migration. See
   [review evidence](VALIDATION.md#strategic-review-and-revised-roadmap) and
   [local control acceptance](VALIDATION.md#protected-access-positive-control-local-acceptance),
-  and [checkpoint acceptance](VALIDATION.md#finalized-check-checkpoint-local-acceptance).
+  [checkpoint acceptance](VALIDATION.md#finalized-check-checkpoint-local-acceptance),
+  and [compatibility acceptance](VALIDATION.md#historical-protected-access-compatibility-follow-up).
 - Evaluation completed by architecture, security, and delivery reviewers.
 - M1 has implemented operator authentication, scan ownership, package/CI repairs,
   persisted results, conservative evidence checks, and initial discovery fixes.
