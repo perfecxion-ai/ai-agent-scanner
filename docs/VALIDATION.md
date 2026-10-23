@@ -282,7 +282,12 @@ modules in the wheel match the working source. Normal and optimized disposable
 backup acceptance each pass all eight cases. These counts are regression coverage,
 not independent model observations or detection-effectiveness measurements.
 
-PR and cross-platform CI acceptance remain pending. This local prompt-only slice
+The complete 3,081-case suite also passes with Linux CI coverage instrumentation
+and warnings treated as errors. Interruption fixtures now wait for actual progress
+before cancelling; the 35-receipt profile workflow has a finite test-local timeout
+allowance. Production deadlines, request budgets, and evidence assertions are unchanged.
+
+See PR #67 for required cross-platform CI results. This local prompt-only slice
 does not close tenant/access within-check retention, CLI crash files, nullable
 database scores, or exhaustive inventory filtering. No GCP service, external model,
 operator registry/database, package publication, or deployment was used.

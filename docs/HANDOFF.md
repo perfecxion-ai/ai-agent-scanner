@@ -52,7 +52,7 @@ within-check retention slice now passes 3,081 local tests, 762 overlapping
 independent cases, 143 dashboard cases, both backup modes, and installed-wheel
 smoke. Immutable receipts bind a finding to an actual evaluated response without
 inventing a completed check; real loopback CLI/server and dispatcher-kill cases
-retain the evidence. PR and cross-platform CI remain pending. See
+retain the evidence. PR #67 records independent review and cross-platform CI. See
 [prompt receipt acceptance](VALIDATION.md#within-check-prompt-receipt-local-acceptance).
 Tenant/access observation retention and CLI process-crash files remain separate
 gates; this work does not close them.
