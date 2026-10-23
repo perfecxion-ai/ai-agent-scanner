@@ -112,3 +112,13 @@ check is not yet covered by prompt-style observation receipts.
 Keep application-model yield separate from deterministic fixture correctness.
 Three repetitions do not establish sensitivity or a safety guarantee. Send the
 new bundle only after the local privacy check; retain the original lab runs.
+
+The first supplied run is recorded in
+[qualified workflow acceptance](VALIDATION.md#supplied-tenant-workflow-acceptance).
+For future drivers, make analysis and privacy failures produce a nonzero final
+job exit. Check secrets, raw-text fields, file modes, and cleanup outcomes rather
+than parsing only selected printed counters. Record whether logs were sanitized
+before checking them, and state the exact files covered by the privacy sweep.
+If claiming held-candidate rejection, the tested control must actually return
+both markers before the invalid control fails. Label POST-only fixture counters
+as such when GET requests are not captured.

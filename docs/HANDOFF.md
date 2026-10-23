@@ -92,13 +92,20 @@ inputs before environment resolution. See
 [local validation](VALIDATION.md#controlled-tenant-evidence-local-acceptance).
 Final local acceptance passes 3,515 coverage tests, 247 overlapping independent
 review cases, 145 dashboard cases, both backup modes, and installed-wheel smoke.
-The delivery PR records required cross-platform checks for the corrected slice.
-After the reviewed runtime merge and required CI, the next external gate is the
-[scoped tenant retest](tenant-retest.md) on the exact merged SHA from the handoff.
-The lab needs two genuine principal bindings and trusted TLS; bare model servers
-cannot supply those controls. Tenant/access within-check receipts, CLI crash
-files, nullable-score migration, exhaustive inventory, and later roadmap slices
-remain open. Local fixture correctness does not establish model sensitivity.
+PR #69 merged as `1072d8b` with all eight PR and post-merge CI jobs passing.
+The supplied scoped HTTPS tenant retest is accepted for CLI workflow correctness:
+three vulnerable runs retain 90/critical, three defended runs stay inconclusive
+with null risk, and all broken-control cases stop without confirmation or a pass.
+Two independent reviews validate the nine reports, ten real exits, 70 captured
+expectations, and fixture POST outcomes. Its deterministic fixtures do not
+establish real-model sensitivity. The private harness and narrative have limits
+around held-candidate/reflection coverage, privacy capture scope, and failure
+propagation; see [qualified acceptance](VALIDATION.md#supplied-tenant-workflow-acceptance).
+No broad repeat is needed for those qualifications. Continue with local R1.3
+nullable-score storage: freeze old schema definitions, preserve supported zero
+and partial evidence, and verify transactional upgrade plus backup/restore.
+Tenant/access within-check receipts, server tenant profiles, CLI crash files,
+exhaustive inventory, and later roadmap slices remain open.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
