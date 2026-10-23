@@ -26,11 +26,17 @@ def api(monkeypatch):
                              SCAN_ALLOWED_PATH_ROOTS=(), SCAN_ALLOW_LOOPBACK=False)
     monkeypatch.setattr(module, "_job_dispatcher", None)
     with module.app.app_context():
-        assert module.db.engine.url.database == ":memory:"
-        module.initialize_schema(module.db.engine, module.db.metadata)
-        yield module, module.app.test_client()
-        module.db.session.remove()
-        module.db.drop_all()
+        fixture_engine = module.db.engine
+        assert fixture_engine.url.database == ":memory:"
+        try:
+            module.initialize_schema(fixture_engine, module.db.metadata)
+            yield module, module.app.test_client()
+        finally:
+            try:
+                module.db.session.remove()
+                module.db.drop_all()
+            finally:
+                fixture_engine.dispose()
 
 
 def headers(module, organization="tenant-a"):

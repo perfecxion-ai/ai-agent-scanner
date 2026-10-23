@@ -6,7 +6,7 @@ import re
 from sqlalchemy import DDL, LargeBinary, MetaData, case, cast, func, inspect, insert, literal, select, update
 
 from src.core.stored_risk import (
-    MAX_STORED_RISK_BYTES, project_stored_risk, snapshot_stored_risk,
+    MAX_STORED_RISK_BYTES, project_stored_risk, snapshot_stored_risk, stored_json_text,
 )
 
 
@@ -237,10 +237,11 @@ def _bounded_blob(column):
 
 
 def _decode(raw):
-    if not isinstance(raw, bytes) or len(raw) > MAX_STORED_RISK_BYTES:
+    text = stored_json_text(raw)
+    if text is None:
         return _INVALID_JSON
     try:
-        return json.loads(raw)
+        return json.loads(text)
     except (ValueError, TypeError, RecursionError, OverflowError, UnicodeError):
         return _INVALID_JSON
 

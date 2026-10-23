@@ -54,7 +54,9 @@ def snapshot(engine):
 
 @pytest.mark.parametrize('raw', [b'{', b'null', b'42', b'[]', b'"text"', b'\xff\xfe',
                                  b'[' * 2000 + b'0' + b']' * 2000,
-                                 b' ' * (8 * 1024 * 1024 + 1)])
+                                 b' ' * (8 * 1024 * 1024 + 1)],
+                         ids=['broken', 'null', 'number', 'array', 'string', 'invalid-utf8',
+                              'depth-2000', 'oversized'])
 def test_invalid_or_oversized_archives_become_unknown_without_rewriting_bytes(old_database, raw):
     module, engine, _ = old_database
     seed(old_database, raw)
@@ -120,7 +122,7 @@ async def test_duplicate_report_asset_ids_cannot_populate_a_current_cache(old_da
 @pytest.mark.parametrize('raw_metadata', [
     b'{', b'\xff\xfe', b'[' * 2000 + b'0' + b']' * 2000,
     b'{"asset_id":"fixture","padding":"' + b'X' * (8 * 1024 * 1024) + b'"}',
-])
+], ids=['broken', 'invalid-utf8', 'depth-2000', 'oversized'])
 async def test_invalid_metadata_cannot_gain_fallback_risk(old_database, raw_metadata):
     module, engine, _ = old_database
     actual = access_report(await access_result(disclose=True), score=70)

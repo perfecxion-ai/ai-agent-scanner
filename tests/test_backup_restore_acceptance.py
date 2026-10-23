@@ -231,7 +231,7 @@ def test_owned_paths_reject_foreign_nested_names_and_symlinks(tmp_path):
 def test_readonly_copy_no_clobber_and_expired_deadline():
     with owned_directory() as directory:
         source = directory / "source.sqlite"
-        with sqlite3.connect(source) as connection:
+        with closing(sqlite3.connect(source)) as connection, connection:
             connection.execute("CREATE TABLE fixture (id INTEGER)")
             connection.execute("INSERT INTO fixture VALUES (42)")
         destination = directory / "backup.sqlite"

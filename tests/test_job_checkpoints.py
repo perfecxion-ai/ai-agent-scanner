@@ -281,17 +281,22 @@ def file_api(api, monkeypatch, tmp_path):
     module, client = api
     module.db.session.remove()
     engine = create_engine(f"sqlite:///{tmp_path / 'api-checkpoints.db'}")
-    with engine.connect() as connection:
-        connection.exec_driver_sql('PRAGMA journal_mode=WAL')
-    module.db.metadata.create_all(engine)
-    monkeypatch.setitem(module.db.engines, None, engine)
-    store = module._get_job_store()
-    enqueue(store, 'checkpoint')
-    assert store.claim('worker') == 'checkpoint'
-    fixture = (store, module.DiscoveredAgentModel.__table__, module)
-    yield module, client, fixture
-    module.db.session.remove()
-    engine.dispose()
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql('PRAGMA journal_mode=WAL')
+        module.db.metadata.create_all(engine)
+        with monkeypatch.context() as scoped:
+            scoped.setitem(module.db.engines, None, engine)
+            try:
+                store = module._get_job_store()
+                enqueue(store, 'checkpoint')
+                assert store.claim('worker') == 'checkpoint'
+                fixture = (store, module.DiscoveredAgentModel.__table__, module)
+                yield module, client, fixture
+            finally:
+                module.db.session.remove()
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.parametrize('route', ['results', 'agents'])
