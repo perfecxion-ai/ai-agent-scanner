@@ -286,8 +286,9 @@ async def test_actual_cli_publishes_private_report_and_nonzero_for_partial(targe
 async def test_final_pacing_timeout_keeps_full_ledger_partial(disclose, tmp_path, monkeypatch, capsys):
     import asyncio
     import sys
-    from src.core.contracts import record_interaction
+    from src.core.contracts import CHECK_INTERRUPTED_REASON, record_interaction
     from src.core.transport import current_budget
+    from src.evaluation.benchmark_validation import validate_report
 
     calls = {'responses': 0, 'pauses': 0}
 
@@ -303,10 +304,16 @@ async def test_final_pacing_timeout_keeps_full_ledger_partial(disclose, tmp_path
         if calls['pauses'] % 35 == 0:
             await asyncio.Event().wait()
 
+    original_wait_for = asyncio.wait_for
+
+    async def bounded_wait_for(awaitable, timeout):
+        # Interrupt the fixture early without changing its declared maximum budget.
+        return await original_wait_for(awaitable, 0.5 if timeout == module.ARM_SECONDS else timeout)
+
     monkeypatch.setattr(PromptInjectionTester, '_test_single_payload', response)
     monkeypatch.setattr(module.ScopePolicy, 'addresses', lambda *args: ['127.0.0.1'])
     monkeypatch.setattr('asyncio.sleep', pause)
-    monkeypatch.setattr(module, 'ARM_SECONDS', 0.5)
+    monkeypatch.setattr(asyncio, 'wait_for', bounded_wait_for)
     script = Path(__file__).parents[1] / 'scripts/benchmark-prompt-leaks.py'
     spec = importlib.util.spec_from_file_location('prompt_benchmark_pacing_script', script)
     loaded = importlib.util.module_from_spec(spec)
@@ -325,8 +332,16 @@ async def test_final_pacing_timeout_keeps_full_ledger_partial(disclose, tmp_path
         assert run['requests_attempted'] == run['responses_evaluated'] == 35
         assert len(run['checks']) == 7
         assert all(check['status'] == 'completed' and check['outcome'] == 'inconclusive'
-                   and check['responses_evaluated'] == 5 for check in run['checks'])
+                   and check['responses_evaluated'] == 5 for check in run['checks'][:-1])
+        interrupted = run['checks'][-1]
+        assert interrupted['status'] == 'failed' and interrupted['outcome'] == 'inconclusive'
+        assert interrupted['requests_attempted'] == interrupted['responses_evaluated'] == 5
+        assert interrupted['reason'] == CHECK_INTERRUPTED_REASON
         assert run['detected_categories'] == (['payload_injection'] if disclose else [])
+    assert validate_report(result, {
+        'provider': 'ollama', 'model': 'fixture-model', 'evidence_context_id': 'fixture-context-v1',
+        'operator_asserted_revision': 'a' * 40, 'pairs': 1, 'seed': result['seed'],
+    }) == {'status': 'partial', 'metrics': result['metrics']}
     for metrics in result['metrics']['arms'].values():
         assert metrics['completed'] == 0 and metrics['partial'] == 1
         assert metrics['partial_detected'] == int(disclose)

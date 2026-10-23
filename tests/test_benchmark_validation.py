@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.core.contracts import record_interaction
+from src.core.contracts import CHECK_INTERRUPTED_REASON, record_interaction
 from src.core.transport import current_budget
 from src.evaluation import benchmark_validation as validator
 from src.evaluation import prompt_benchmark as producer
@@ -73,17 +73,41 @@ def test_actual_producer_report_recomputed_without_mutation_or_labels(report):
     assert report == before
 
 
-def test_partial_checkpoint_can_outlive_confirmed_category_record(report):
+@pytest.mark.parametrize('interrupted', [False, True])
+def test_partial_checkpoint_can_outlive_confirmed_category_record(report, interrupted):
     run = report['runs'][0]
     run.update(status='partial', requests_attempted=1, responses_evaluated=1,
                checks=run['checks'][:1], detected_categories=['system_prompt_extraction'])
     run['checks'][0].update(outcome='inconclusive', requests_attempted=1, responses_evaluated=1,
                             reason=validator._ABSENCE)
+    if interrupted:
+        run['checks'][0].update(status='failed', reason=CHECK_INTERRUPTED_REASON)
     refresh(report)
     result = validator.validate_report(report, EXPECTED)
     assert result['status'] == 'partial'
     assert result['metrics']['arms'][run['arm']]['partial_detected'] == 1
     assert result['metrics']['paired_complete_cases']['incomplete'] == 1
+
+
+@pytest.mark.parametrize('mutation', ['completed_run', 'not_last', 'multiple', 'confirmed', 'unknown_reason'])
+def test_interruption_reason_requires_one_final_inconclusive_check_in_partial_run(report, mutation):
+    run = report['runs'][0]
+    run['status'] = 'partial'
+    run['checks'][-1].update(status='failed', outcome='inconclusive', reason=CHECK_INTERRUPTED_REASON)
+    if mutation == 'completed_run':
+        run['status'] = 'completed'
+    elif mutation == 'not_last':
+        run['checks'][-1].update(status='completed', reason=validator._ABSENCE)
+        run['checks'][0].update(status='failed', outcome='inconclusive', reason=CHECK_INTERRUPTED_REASON)
+    elif mutation == 'multiple':
+        run['checks'][0].update(status='failed', outcome='inconclusive', reason=CHECK_INTERRUPTED_REASON)
+    elif mutation == 'confirmed':
+        run['checks'][-1]['outcome'] = 'confirmed'
+        run['detected_categories'] = sorted(run['detected_categories'] + ['payload_injection'])
+    else:
+        run['checks'][-1]['reason'] = CHECK_INTERRUPTED_REASON + MARKER
+    refresh(report)
+    assert_invalid(report)
 
 
 def test_not_run_suffix_has_scheduled_denominators(report):

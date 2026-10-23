@@ -1,5 +1,6 @@
 """Additive scan contracts and context-local evidence accounting."""
 
+import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
@@ -13,6 +14,7 @@ from src.utils.request_builder import extract_response_text
 
 
 CHECK_SCHEMA_VERSION = "1.0"
+CHECK_INTERRUPTED_REASON = "Check interrupted before completion"
 PLANNED_RULES = tuple("prompt_injection." + category for category in (
     "system_prompt_extraction", "instruction_bypass", "role_manipulation", "dan_jailbreak",
     "context_manipulation", "injection_via_encoding", "payload_injection")) + (
@@ -174,10 +176,15 @@ def checked(rule, spec, prerequisite=None, oracle=None, coverage=None, absence_r
             budget = current_budget()
             before = (budget.requests, budget.failures + budget.rejections) if budget else (0, 0)
             findings = []
+            interrupted = False
             token = _execution.set(execution)
             try:
                 if not reason:
                     findings = await method(self, agent, *args, **kwargs)
+            except asyncio.CancelledError:
+                execution.failed = True
+                interrupted = True
+                raise
             except Exception:
                 execution.failed = True
                 raise
@@ -192,7 +199,8 @@ def checked(rule, spec, prerequisite=None, oracle=None, coverage=None, absence_r
                 elif execution.failed:
                     status = "failed"
                     outcome = "confirmed" if "confirmed" in evidence else "inconclusive"
-                    reason = ("Required model interaction denied authorization (HTTP 401/403); verify credentials and access policy"
+                    reason = (CHECK_INTERRUPTED_REASON if interrupted else
+                              "Required model interaction denied authorization (HTTP 401/403); verify credentials and access policy"
                               if execution.authorization_denied else
                               "Some required interactions failed or returned unusable responses")
                 elif not execution.evaluated:
