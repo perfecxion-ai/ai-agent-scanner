@@ -56,7 +56,7 @@ def valid_asset():
                    evidence_status='confirmed', status_code=200, payload=payloads[0])
     receipt = dict(provenance, id=receipt_id, run_id=run_id, agent_id='fixture', finding_id=finding_id,
                    sample_index=0, sequence=1, request_ordinal=1, requests_attempted=1, responses_evaluated=1,
-                   source='protected_system_canary_match', source_version='1.0')
+                   source='protected_system_canary_match', source_version='2.0')
     return dict(item, status='partial', check_schema_version='1.0', check_evidence_schema_version='1.0',
                 check_evidence_run_id=run_id, check_evidence=[receipt], vulnerabilities=[finding], checks=[])
 
@@ -397,8 +397,8 @@ async def test_unbound_mock_responses_cannot_mint_or_complete_checks(target, mon
     endpoint, target_state = target
     original = BoundedResponse.__init__
 
-    def unbound(self, response, budget, evidence_token=None):
-        original(self, response, budget)
+    def unbound(self, response, budget, evidence_token=None, request_evidence=None):
+        original(self, response, budget, request_evidence=request_evidence)
 
     monkeypatch.setattr(BoundedResponse, '__init__', unbound)
     item, tester = agent(endpoint), PromptInjectionTester()
@@ -492,7 +492,7 @@ def test_all_frozen_probe_hashes_are_recognized_without_changing_catalogs(catalo
     ('evidence_context_id', '[CANARY_REDACTED]'), ('finding_id', str(uuid.uuid4())),
     ('sample_index', True), ('sample_index', -1), ('sample_index', 5),
     ('sequence', True), ('sequence', 2), ('request_ordinal', 2), ('requests_attempted', 2),
-    ('responses_evaluated', 0), ('responses_evaluated', True), ('source', 'heuristic'), ('source_version', '2.0'),
+    ('responses_evaluated', 0), ('responses_evaluated', True), ('source', 'heuristic'), ('source_version', '1.0'),
 ])
 def test_receipt_mutations_fail_closed(field, value):
     asset = valid_asset()

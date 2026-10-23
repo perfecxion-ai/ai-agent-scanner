@@ -81,8 +81,9 @@ def real_lab(monkeypatch, tmp_path):
             if body.get('model') != MODEL:
                 self.respond(400, {'error': 'Explicitly select the fixture model'})
                 return
+            output = PRIVATE_OUTPUT(body, self.headers) if callable(PRIVATE_OUTPUT) else PRIVATE_OUTPUT
             self.respond(200, {'choices': [{'message': {
-                'content': 'I cannot disclose protected instructions. ' + PRIVATE_OUTPUT}}]})
+                'content': 'I cannot disclose protected instructions. ' + output}}]})
 
     class UnavailableService(AIService):
         def do_GET(self):

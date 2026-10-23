@@ -15,6 +15,7 @@ from aiohttp.abc import AbstractResolver
 from yarl import URL
 
 from src.core.request_evidence import bind_response, cancel_request, capture_body, close_request, reserved_request
+from src.core.request_provenance import RequestCapture
 
 
 class TransportPolicyError(ValueError):
@@ -142,11 +143,12 @@ class PolicyResolver(AbstractResolver):
 
 
 class BoundedResponse:
-    def __init__(self, response, budget, evidence_token=None):
+    def __init__(self, response, budget, evidence_token=None, request_evidence=None):
         self.response = response
         self.budget = budget
         self.body = None
         self._evidence_token = evidence_token
+        self.__request_evidence = request_evidence
         bind_response(evidence_token, self)
 
     def __getattr__(self, name):
@@ -155,6 +157,10 @@ class BoundedResponse:
     @property
     def content(self):
         return self
+
+    @property
+    def _request_evidence(self):
+        return self.__request_evidence
 
     async def iter_chunked(self, size):
         received = 0
@@ -194,6 +200,21 @@ class SafeSession:
         connector = aiohttp.TCPConnector(resolver=self.resolver, limit=20)
         options = dict(self.kwargs)
         options['timeout'] = _bounded_timeout(options.get('timeout'), self.budget.request_timeout_seconds)
+        trace = aiohttp.TraceConfig()
+
+        async def headers_sent(session, context, params):
+            capture = context.trace_request_ctx
+            if isinstance(capture, RequestCapture):
+                capture.sent_headers(params.method, str(params.url), params.headers)
+
+        async def chunk_sent(session, context, params):
+            capture = context.trace_request_ctx
+            if isinstance(capture, RequestCapture):
+                capture.sent_chunk(params.method, str(params.url), params.chunk)
+
+        trace.on_request_headers_sent.append(headers_sent)
+        trace.on_request_chunk_sent.append(chunk_sent)
+        options['trace_configs'] = [*options.get('trace_configs', []), trace]
         self.session = aiohttp.ClientSession(connector=connector, trust_env=False, **options)
         await self.session.__aenter__()
         return self
@@ -216,9 +237,11 @@ class SafeSession:
             if 'timeout' in kwargs:
                 kwargs['timeout'] = _bounded_timeout(kwargs['timeout'], self.budget.request_timeout_seconds)
             kwargs['allow_redirects'] = False
+            capture = RequestCapture()
+            kwargs['trace_request_ctx'] = capture
             async with self.session.request(method, url, **kwargs) as response:
                 try:
-                    yield BoundedResponse(response, self.budget, evidence_token)
+                    yield BoundedResponse(response, self.budget, evidence_token, capture.seal(response))
                 except asyncio.CancelledError:
                     cancel_request(evidence_token)
                     raise

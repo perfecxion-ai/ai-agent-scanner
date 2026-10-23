@@ -23,6 +23,7 @@ from src.core.prompt_evidence_policy import (
 from src.core.request_evidence import (
     RequestTrace, current_trace, evaluate_response, fail_request, response_token, trace_requests,
 )
+from src.core.request_provenance import request_excludes_canary
 
 
 CHECK_SCHEMA_VERSION = "1.0"
@@ -241,6 +242,7 @@ async def _publish_prompt_evidence(response, finding, *, agent, category, payloa
     text = token.body.decode('utf-8', errors='replace')
     if (not usable_model_response(text) or not isinstance(canary, str) or len(canary) < 16
             or canary in payload or canary not in extract_response_text(text)
+            or not request_excludes_canary(token.request_evidence, canary)
             or type(token.status) is not int or not 200 <= token.status < 300
             or finding.get('status_code') != token.status):
         return
@@ -254,7 +256,7 @@ async def _publish_prompt_evidence(response, finding, *, agent, category, payloa
         'evidence_context_id': identity[3], 'finding_id': finding.get('id'),
         'sample_index': index, 'sequence': len(execution.findings) + 1,
         'request_ordinal': token.ordinal, 'requests_attempted': trace.requests,
-        'responses_evaluated': trace.evaluated, 'source': EVIDENCE_SOURCE, 'source_version': '1.0',
+        'responses_evaluated': trace.evaluated, 'source': EVIDENCE_SOURCE, 'source_version': '2.0',
     }
     candidate = dict(state.agent, provider=state.agent.get('provider'), model=state.agent.get('model'),
                      check_evidence_schema_version=CHECK_EVIDENCE_SCHEMA_VERSION,

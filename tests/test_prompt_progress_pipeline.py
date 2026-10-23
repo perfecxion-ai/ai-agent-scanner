@@ -17,6 +17,7 @@ from src.core.risk_projection import project_report_risk
 from src.risk.risk_assessor import RiskAssessment
 from src.security.security_engine import SecurityTestEngine
 from tests.controlled_access import result as controlled_result
+from tests.request_provenance_fixture import declared_wire_request
 
 
 CANARY = 'prompt-receipt-fixture-canary-473829'
@@ -49,23 +50,34 @@ def producer(monkeypatch, *, pause=None, leak_at=(1,), output=CANARY):
     class Response:
         status = 200
 
-        def __init__(self, ordinal):
+        def __init__(self, ordinal, request_info):
             self.ordinal = ordinal
             self.content = self
+            self.request_info = request_info
 
         async def iter_chunked(self, size):
             disclose = state.leak_at(self.ordinal) if callable(state.leak_at) else self.ordinal in state.leak_at
             yield json.dumps({'response': output if disclose else 'Refused'}).encode()
 
     class Request:
-        def __init__(self, url):
-            self.url = url
+        def __init__(self, session, method, url, kwargs):
+            self.session, self.method, self.url, self.kwargs = session, method, url, kwargs
 
         async def __aenter__(self):
             state.requests += 1
             self.ordinal = state.requests
             await wait_at('request', self.ordinal)
-            return Response(self.ordinal)
+            body, info = declared_wire_request(self.method, self.url,
+                                              headers=self.kwargs.get('headers'), json_body=self.kwargs.get('json'))
+            for trace in self.session.traces:
+                context = trace.trace_config_ctx(trace_request_ctx=self.kwargs['trace_request_ctx'])
+                for callback in trace.on_request_headers_sent:
+                    await callback(self.session, context, SimpleNamespace(
+                        method=self.method, url=info.url, headers=info.headers))
+                for callback in trace.on_request_chunk_sent:
+                    await callback(self.session, context, SimpleNamespace(
+                        method=self.method, url=info.url, chunk=body))
+            return Response(self.ordinal, info)
 
         async def __aexit__(self, *args):
             await wait_at('response_cleanup', self.ordinal)
@@ -75,6 +87,7 @@ def producer(monkeypatch, *, pause=None, leak_at=(1,), output=CANARY):
         def __init__(self, *, connector, **kwargs):
             self.ordinal = 0
             self.connector = connector
+            self.traces = kwargs.get('trace_configs', [])
 
         async def __aenter__(self):
             return self
@@ -88,7 +101,7 @@ def producer(monkeypatch, *, pause=None, leak_at=(1,), output=CANARY):
 
         def request(self, method, url, **kwargs):
             self.ordinal = state.requests + 1
-            return Request(url)
+            return Request(self, method, url, kwargs)
 
     async def pacing(_):
         await wait_at('pacing', state.requests)

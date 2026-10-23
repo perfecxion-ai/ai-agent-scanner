@@ -32,6 +32,7 @@ class _RequestToken:
     published: bool = False
     body: bytes | None = None
     status: int | None = None
+    request_evidence: object = None
 
 
 def current_trace():
@@ -78,6 +79,7 @@ def bind_response(token, response):
             raise ValueError('Request evidence response is already bound')
         token.response = response
         token.status = response.status
+        token.request_evidence = response._request_evidence
 
 
 def capture_body(token, response, body):

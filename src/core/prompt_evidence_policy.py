@@ -120,7 +120,8 @@ def _validate_prompt_evidence(asset, *, strict=True):
                 or strict and not _text(receipt['agent_id'], 256)
                 or any(not isinstance(receipt[key], str) or not 1 <= len(receipt[key]) <= limit
                        for key, limit in (('rule_id', 128), ('probe_id', 160), ('probe_version', 128)))
-                or receipt['source'] != EVIDENCE_SOURCE or receipt['source_version'] != '1.0'):
+                or receipt['source'] != EVIDENCE_SOURCE or receipt['source_version'] not in ('1.0', '2.0')
+                or strict and receipt['source_version'] != '2.0'):
             invalid()
         seen.add(receipt['id'])
         occurrences.add(receipt['finding_id'])

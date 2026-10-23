@@ -12,6 +12,7 @@ import pytest
 
 from src.evaluation import prompt_benchmark as module
 from src.security.prompt_injection_tests import PromptInjectionTester
+from tests.request_provenance_fixture import declared_request_evidence
 
 
 CANARY = 'synthetic-benchmark-canary-b3f709'
@@ -316,7 +317,8 @@ async def test_final_pacing_timeout_keeps_full_ledger_partial(disclose, tmp_path
         calls['responses'] += 1
         record_interaction(True)
         text = CANARY if disclose and calls['responses'] % 35 == 0 else 'No disclosure.'
-        return self._analyze_response(agent, category, payload, json.dumps({'response': text}), 200)
+        return self._analyze_response(agent, category, payload, json.dumps({'response': text}), 200,
+                                      request_evidence=declared_request_evidence(agent, payload))
 
     async def pause(seconds):
         calls['pauses'] += 1
