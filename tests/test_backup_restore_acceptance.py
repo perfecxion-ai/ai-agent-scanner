@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "acceptance-backup-restore.py"
@@ -104,7 +105,7 @@ def test_cli_has_no_source_or_destination_paths(tmp_path):
 def test_engine_guard_rejects_before_connect(url):
     with owned_directory() as directory:
         database = acceptance.owned_path(directory, "source.sqlite")
-        engine = create_engine(url)
+        engine = create_engine(url, poolclass=StaticPool)
         engine.connect = Mock(side_effect=AssertionError("Must not connect"))
         try:
             with pytest.raises(RuntimeError, match="owned temporary"):
@@ -304,7 +305,7 @@ def test_child_failure_reason_is_preserved_but_bounded(monkeypatch):
 def test_query_engine_rejected_even_for_exact_owned_filename():
     with owned_directory() as directory:
         database = directory / "source.sqlite"
-        engine = create_engine("sqlite:///" + str(database) + "?mode=ro")
+        engine = create_engine("sqlite:///" + str(database) + "?mode=ro&uri=true")
         try:
             with pytest.raises(RuntimeError, match="owned temporary"):
                 acceptance.guard_database(engine, database)
