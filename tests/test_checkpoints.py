@@ -416,13 +416,23 @@ async def test_unfinished_pass_alone_does_not_become_assessed_zero(monkeypatch):
 @pytest.mark.asyncio
 async def test_no_confirmation_timeout_stays_unknown(monkeypatch):
     security, saved = engine(monkeypatch, disclose=False), []
+    entered = asyncio.Event()
 
     async def stall(agent):
+        entered.set()
         await asyncio.Event().wait()
 
     security.access_tester.test_agent = stall
-    with pytest.raises((TimeoutError, asyncio.TimeoutError)):
-        await asyncio.wait_for(run(security, capture(saved)), 0.01)
+    task = asyncio.create_task(run(security, capture(saved)))
+    try:
+        # Start the timeout only after the quiet prompt check is acknowledged.
+        await asyncio.wait_for(entered.wait(), 5)
+        assert saved[-1]['agents'][0]['checks'][0]['outcome'] == 'inconclusive'
+        with pytest.raises((TimeoutError, asyncio.TimeoutError)):
+            await asyncio.wait_for(task, 0.01)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
     assert saved[-1]['summary']['vulnerabilities_found'] == 0
     assert saved[-1]['summary']['overall_risk_score'] is None
     assert saved[-1]['agents'][0]['checks'][0]['outcome'] == 'inconclusive'

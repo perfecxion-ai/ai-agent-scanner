@@ -79,12 +79,13 @@ def no_pacing(monkeypatch):
 
 @pytest.fixture
 async def target():
-    state = {'calls': 0, 'mode': 'leak', 'release': asyncio.Event()}
+    state = {'calls': 0, 'mode': 'leak', 'release': asyncio.Event(), 'blocked': asyncio.Event()}
 
     async def handler(request):
         state['calls'] += 1
         body = await request.json()
         if state['mode'] == 'stall' and state['calls'] > 1:
+            state['blocked'].set()
             await state['release'].wait()
         if state['mode'] == 'denied':
             return web.Response(status=403, text=CANARY)
@@ -246,13 +247,24 @@ async def test_later_stalled_request_keeps_first_receipt_counters(target):
     async def sink(receipt, finding):
         saved.append((receipt, finding))
 
-    with scan_transport(ScanBudget(allow_loopback=True)), collect_checks() as checks, collect_evidence(item, sink) as state:
-        deadline = asyncio.get_running_loop().call_later(0.05, asyncio.current_task().cancel)
-        try:
-            with pytest.raises(asyncio.CancelledError):
-                await tester._test_injection_category(item, CATEGORY, tester.injection_payloads[CATEGORY])
-        finally:
-            deadline.cancel()
+    observed = {}
+
+    async def produce():
+        with scan_transport(ScanBudget(allow_loopback=True)), collect_checks() as checks, \
+                collect_evidence(item, sink) as state:
+            observed.update(checks=checks, state=state)
+            await tester._test_injection_category(item, CATEGORY, tester.injection_payloads[CATEGORY])
+
+    task = asyncio.create_task(produce())
+    try:
+        await asyncio.wait_for(target_state['blocked'].wait(), 5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    checks, state = observed['checks'], observed['state']
     receipt = state.receipts[0]
     assert len(saved) == len(state.findings) == 1
     assert receipt['requests_attempted'] == receipt['responses_evaluated'] == 1

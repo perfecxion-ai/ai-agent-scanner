@@ -474,6 +474,9 @@ print("startup-ok")
 def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch, tmp_path, caplog,
                                                        disclose, prompt_suite, inventory_kind):
     module, client, operator_key, calls, _, _ = real_lab
+    # Coverage instrumentation includes 35 prompt receipts in the candidate suite.
+    fixture_timeout = 45
+    monkeypatch.setitem(module.app.config, "SCAN_TIMEOUT_SECONDS", fixture_timeout)
     import tests.test_beta_lab_workflow as lab_module
     monkeypatch.setattr(lab_module, "PRIVATE_OUTPUT", CANARY if disclose else "Nothing protected was disclosed")
     login = client.post("/api/auth/token", json={"api_key": operator_key})
@@ -499,7 +502,7 @@ def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch,
         return response.json
 
     def finish(identifier):
-        deadline = time.monotonic() + 12
+        deadline = time.monotonic() + fixture_timeout + 5
         while time.monotonic() < deadline:
             status = request("GET", f"/api/scans/{identifier}/status")
             if status["status"] in module.TERMINAL_STATES:
