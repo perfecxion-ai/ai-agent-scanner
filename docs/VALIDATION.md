@@ -273,24 +273,80 @@ credentials, and private request tokens remain out of JSON/SARIF and retained st
 Public receipts attest scanner observations, not independently verified target
 seeding or cryptographic report authenticity.
 
-Combined Linux/Python 3.10 acceptance passes 3,081 cases with warnings treated as
-errors and an inherited nonexistent evidence-registry sentinel. Independent review
-passes 762 overlapping focused cases. All 143 dashboard JavaScript cases, Ruff,
+Combined Linux/Python 3.10 acceptance passes 3,216 cases with CI coverage
+instrumentation, warnings treated as errors, and an inherited nonexistent
+evidence-registry sentinel. Independent review passes 793 overlapping coverage
+cases. All 143 dashboard JavaScript cases, Ruff,
 configured Bandit, whitespace checks, distribution build, Twine, and a fresh
-installed-wheel smoke outside the checkout pass. All eleven changed runtime
+installed-wheel smoke outside the checkout pass. All thirteen changed runtime
 modules in the wheel match the working source. Normal and optimized disposable
 backup acceptance each pass all eight cases. These counts are regression coverage,
 not independent model observations or detection-effectiveness measurements.
 
-The complete 3,081-case suite also passes with Linux CI coverage instrumentation
-and warnings treated as errors. Interruption fixtures now wait for actual progress
-before cancelling; the 35-receipt profile workflow has a finite test-local timeout
-allowance. Production deadlines, request budgets, and evidence assertions are unchanged.
+Interruption fixtures wait for actual progress before cancelling; the 35-receipt
+profile workflow has a finite test-local timeout allowance. Production deadlines,
+request budgets, and evidence assertions are unchanged.
 
 See PR #67 for required cross-platform CI results. This local prompt-only slice
 does not close tenant/access within-check retention, CLI crash files, nullable
 database scores, or exhaustive inventory filtering. No GCP service, external model,
 operator registry/database, package publication, or deployment was used.
+
+### Prompt request-reflection correction
+
+All eight PR CI jobs passed at `9c411ad`, but independent owned-loopback audit found
+an existing detector gap and held the merge for the correction below.
+The unchanged full catalogs, actual request adapter/transport/analyzer, normal
+pipeline/scorer, canonical projection, and checkpoint callbacks produced these
+pre-correction results:
+
+- Exact collisions in the model, credential, URL, normalized URL, and explicit
+  header value were refused before HTTP and remained unassessed.
+- A target that only echoes an automatic User-Agent or a rendered Content-Type
+  header produced 35 confirmations, 35 receipts, and 70/high in baseline mode.
+  Baseline CLI/Python input rules accepted those nonopaque markers, but
+  candidate and server-profile marker grammar rejected them.
+- Uppercasing a reflected model or credential also produced 35 confirmations,
+  35 receipts, and 70/high in baseline and candidate pipelines. These synthetic
+  canaries were deliberately related by case to outbound values, not independent
+  target secrets. Subsequent regression cases also reproduced the model echo via
+  genuine discovery, profile loading, model overrides, and server dispatcher
+  execution in both suites, without finding/report/score seeding. The full server
+  credential-echo path remains untested because there is no corresponding owned
+  loopback credential input in that API workflow.
+- Standalone execution also confirmed those reflection cases. The paired benchmark
+  falsely detected both uppercase cases in both complete 35-request arms and all
+  seven categories. Its exact-model collision and nonopaque automatic-header
+  inputs were refused before HTTP.
+
+No protected data existed on these echo fixtures. The draft receipts faithfully
+preserved the false confirmation; they did not establish protected provenance.
+The corrected producer and receipt minting independently require complete bounded
+request provenance, including actual serialized body bytes and final transport
+headers. They exclude case-normalized outbound values and decoded/rendered request
+forms while keeping response matching exact. Current receipts require source
+version 2.0; draft version 1.0 stays structurally readable but ineligible for current
+receipt-backed risk. Missing, incomplete, oversized, compressed, or chunked request
+provenance cannot confirm. None of this private request material is exported.
+
+The 72-case reflection regression suite passes, covering owned-HTTP execution,
+before-I/O admission refusals, normal pipelines, checkpoints, standalone/paired
+benchmarks, server profile/API behavior, privacy,
+and genuine 35-confirmation/seven-check/70-score controls. The 61 new core cases
+cover bounds, immutable capture, completeness, and an overridden analyzer that
+cannot mint without valid request exclusion. Two legacy compatibility cases are
+described below. Offline component fixtures explicitly declare complete synthetic
+request bytes; they are separate from real-HTTP acceptance. The combined 3,216-case
+gate and 793-case independent coverage review pass. Frozen prompts, probe hashes,
+and request budgets are unchanged. This is not an arbitrary-transformation proof.
+
+Legacy finalized prompt reports retain their existing numeric eligibility in this
+bounded increment. Two compatibility cases preserve the pre-receipt report shape,
+stored/exported JSON, API scores, and unresolved lifecycle through nondisclosure;
+they do not attest historical request provenance. A separate historical prompt
+guard is required before nullable-score migration. Old benchmark observations also
+remain tied to their recorded producer revision, not upgraded to production
+receipt evidence or a new detection-effectiveness claim.
 
 ### Tenant evidence prerequisite for the next increment
 

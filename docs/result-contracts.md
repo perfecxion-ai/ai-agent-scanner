@@ -184,11 +184,21 @@ canary can produce a prompt-disclosure receipt. It binds a finding UUID to the
 asset, execution UUID, rule/probe version, public evidence context, zero-based
 sample index, per-check observation sequence, and actual reserved-request and
 evaluated-response counters as of that observation. The source is
-`protected_system_canary_match`, version `1.0`. These counters exclude report
+`protected_system_canary_match`, version `2.0`. These counters exclude report
 callbacks and cleanup failures; reserved attempts are not guaranteed delivered
 wire requests. A private task-bound transport token prevents a
 generic finding dictionary or an unbound response from supplying this provenance;
 tokens, raw responses, and protected canaries are never exported.
+The same token binds a private immutable capture of the actual outbound method,
+URL, complete headers, and serialized body bytes. Confirmation excludes the marker
+from case-normalized request values, decoded URL forms, and header/request-line
+renderings; response matching remains exact and case-sensitive. Known adapter
+collisions are refused before HTTP. Missing, incomplete, oversized, compressed,
+or chunked request provenance cannot establish a confirmation. Capture is bounded
+to 128 KiB of body bytes, 64 KiB of header text, 256 headers, and 16,384 URL
+characters. None of this private request material is exported.
+Draft source version `1.0` remains structurally readable but cannot establish
+current receipt-backed risk. These guards do not exclude arbitrary transformations.
 Receipts attest scanner observations, not independently verified target-side
 canary seeding or cryptographic report authenticity.
 
@@ -198,7 +208,12 @@ New engine prompt confirmations require supported receipts even after their chec
 finishes. Unsupported custom findings remain visible but cannot fall back to
 legacy numeric scoring. Historical reports and explicit legacy-only standalone
 adapters keep their earlier finalized-check contract; mixed adapter modes are
-rejected. This is not a general plugin evidence protocol.
+rejected. Pre-receipt finalized prompt scores retain their prior numeric eligibility,
+an open historical-compatibility limitation, not reverified request-exclusion proof.
+Their findings remain unresolved after nondisclosure. Standalone benchmarks use
+the guarded analyzer but do not acquire production receipts; archived observations
+remain tied to their recorded producer revision. This is not a general plugin
+evidence protocol.
 
 The producer publishes before response/session cleanup or the next prompt await.
 Receipts and findings are immutable, append-only, and saved before asynchronous
