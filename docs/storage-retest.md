@@ -19,6 +19,7 @@ set -eu
 : "${AIS_STORAGE_REVISION:?Set the full merged SHA from the handoff}"
 umask 077
 test -z "$(git status --porcelain)"
+git fetch origin
 git checkout --detach "$AIS_STORAGE_REVISION"
 test "$(git rev-parse HEAD)" = "$AIS_STORAGE_REVISION"
 test ! -e .venv-storage-retest
@@ -53,6 +54,9 @@ Both commands must accept all ten cases. Their owned temporary fixtures cover
 versions 1 through 4, unknown/null, genuine assessed zero, retained confirmed
 partial risk, upgrade rollback, exclusive ownership, and untouched source/backup
 hashes. They take no database paths and never inspect a deployed database.
+The automated migration regressions also enforce the same 64-container nesting
+limit across Python versions; excessive depth leaves an unknown cache without
+changing the archived JSON.
 
 ## Real server upgrade and restart
 
@@ -78,13 +82,19 @@ command separately exercises both with actual controlled-access producers.
    sanitized startup logs; propagate every startup or assertion failure.
 3. Wait for `/health/ready`. Verify schema version 4; the two score columns must
    be nullable and have no zero default. SQL NULLs must represent unsupported or
-   missing evidence. Supported assessed zero must remain 0.0, and supported
-   partial or confirmed scores must match the current canonical report projection.
+   missing evidence. Within the documented cache interpretation bounds, supported
+   assessed zero must remain 0.0 and supported partial or confirmed scores must
+   match the current canonical report projection.
 4. Authenticate through the normal API. Compare scan results, inventory, and
    JSON/SARIF exports with the saved report evidence. Snapshot aliases follow the
    existing API rules. Preserve archive bytes, findings, IDs, audit/template data,
-   non-cache row fields, and accepted ordinary/partial indexes. Compare scalar
-   cache scores/levels against `project_report_risk`, not their former placeholders.
+   non-cache row fields, and accepted ordinary/partial indexes. Derive scalar
+   expectations with `stored_json_text` before JSON parsing, then
+   `project_stored_risk` and `snapshot_stored_risk`. Raw material rejected by the
+   byte, encoding, syntax, or depth bounds leaves a null/unknown cache. API reads
+   still use `project_report_risk` on saved reports, so an archive beyond the cache
+   bounds can have a different API verdict. Ordinary supported lab reports should
+   match both. Former scalar placeholders never supply the expected verdict.
 5. Stop and restart the same copy once more. Readiness, API verdicts, scalar caches,
    schema, archives, and row identities must remain consistent. Verify database
    and dispatcher-lock permissions. Stop and reap the lab process when finished.

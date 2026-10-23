@@ -106,9 +106,9 @@ storage slice now passes local acceptance: schema 4 stores unknown scores as SQL
 NULL, preserves supported zero and partial evidence, and upgrades recognized old
 layouts transactionally using independently frozen historical definitions.
 Archives and non-cache fields remain unchanged, and unsupported table/index
-semantics fail before writes. The final local gate passes 3,631 coverage tests,
-423 overlapping independent cases, both ten-case backup modes, and installed-wheel
-smoke. Offline copies of all nine supplied tenant reports keep their exact bytes
+semantics fail before writes. The final local gate passes 3,763 coverage tests,
+279 overlapping independent Python 3.13 cases, both ten-case backup modes, and
+installed-wheel smoke. Offline copies of all nine supplied tenant reports keep their exact bytes
 and canonical scores through upgrade and restart. See
 [storage acceptance](VALIDATION.md#nullable-score-storage-local-acceptance).
 Required delivery checks are recorded on the PR. After merge and CI, the next

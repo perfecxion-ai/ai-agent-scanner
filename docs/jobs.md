@@ -162,9 +162,12 @@ API reads and exports continue to use the saved report; inventory pagination is
 a separate roadmap item.
 
 Migration bounds each report and snapshot-metadata interpretation to 8 MiB before
-fetching its raw bytes and processes records incrementally. Malformed, deeply
-nested, or oversized evidence leaves the cache unknown while its stored bytes
-remain intact. This does not repair a malformed archive. Startup performs this
+fetching its raw bytes and processes records incrementally. An explicit limit of
+64 nested JSON containers applies before JSON parsing and to new cache projections,
+independently of Python's recursion behavior. Stored JSON text must be UTF-8
+(an optional UTF-8 BOM is accepted). Malformed, deeper, non-UTF-8, or oversized
+evidence leaves the cache unknown while its stored bytes remain intact. This does
+not repair a malformed archive. Startup performs this
 upgrade before recovering jobs, under the existing exclusive dispatcher lock.
 
 Unknown tables, views, triggers, expression indexes, additional constraints or unique indexes,

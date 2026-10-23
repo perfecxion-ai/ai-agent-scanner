@@ -179,6 +179,9 @@ reads. Recognized older databases migrate the caches transactionally while
 preserving archived report bytes, findings, IDs and other non-cache fields.
 Unsupported historical positives remain current unknowns; reading or upgrading
 the database does not rewrite their archived report scores or resolve findings.
+Cache interpretation also applies byte, UTF-8, and depth limits. Rejected
+material leaves unknown scalar values while API reads continue to project the
+saved report. Scalar caches alone cannot establish a finding or exhaustive filter.
 See [schema and rollback boundaries](jobs.md#schema-upgrades).
 
 ## Incremental report envelope

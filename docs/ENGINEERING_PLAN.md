@@ -338,9 +338,9 @@ the strategic review does not retroactively expand any acceptance claim.
   merged as `1072d8b` with all eight PR/post-merge jobs passing. The supplied
   tenant CLI/TLS retest closes its scoped workflow gate with
   [recorded qualifications](VALIDATION.md#supplied-tenant-workflow-acceptance).
-  Nullable score storage passes 3,631 local coverage tests and 423 overlapping
-  independent cases, including current prompt/tenant HTTP proofs, transactional
-  rollback and both ten-case backup modes. The delivery PR records required CI;
+  Nullable score storage passes 3,763 local coverage tests and 279 overlapping
+  independent Python 3.13 cases, including current prompt/tenant HTTP proofs,
+  transactional rollback and both ten-case backup modes. The delivery PR records required CI;
   the scoped native-server upgrade retest remains the external gate. Real-model
   sensitivity remains open.
 - Evaluation completed by architecture, security, and delivery reviewers.

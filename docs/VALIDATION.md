@@ -553,7 +553,7 @@ canonical cache projection, rollback, and disposable backup/restore acceptance.
 
 ### Nullable score storage local acceptance
 
-Runtime commit `85e2707` replaces unknown scalar-score placeholders with SQL NULL
+PR #72 replaces unknown scalar-score placeholders with SQL NULL
 in schema 4. The two score columns have no zero default. Canonical report risk,
 not a caller's cached number, supplies checkpoint and terminal summary/snapshot
 values. Cancellation and recovery also project the retained summary. Supported
@@ -570,8 +570,9 @@ constraints, and unsupported layouts are rejected before writes. Table creation,
 copy/drop/rename, index replay, cache updates, and version stamping share one
 BEGIN IMMEDIATE transaction under existing dispatcher ownership.
 
-Archive and metadata interpretation uses SQL byte bounds before deserialization
-and processes records incrementally. Invalid, deeply nested, or oversized material
+Archive and metadata interpretation uses SQL byte bounds before deserialization,
+an explicit 64-container nesting limit, and incremental record processing.
+Invalid, deeply nested, or oversized material
 leaves unknown caches without echoing contents. Valid non-object metadata follows
 the API row-ID fallback; malformed explicit aliases cannot fall back. Duplicate
 report IDs remain unassessed. Duplicate database aliases retain the current API
@@ -579,14 +580,23 @@ semantics, rather than introducing a different storage-only identity policy.
 
 Final local evidence:
 
-- Linux/Python 3.10.20: 3,631 tests pass with coverage and warnings treated as
-  errors in 273.93 seconds. The gate includes independently frozen old schemas,
+- Linux/Python 3.10.20: 3,763 tests pass with coverage and warnings treated as
+  errors in 278.49 seconds. The gate includes independently frozen old schemas,
   genuine assessed zero, supported positive/partial evidence, historical unknowns,
   rollback at every rebuild stage, and invalid UTF-8/deep/oversized archives.
-- Independent final review passes 423 overlapping cases with coverage and
-  warnings treated as errors in 121.37 seconds, including 32 adversarial cases.
-  The migration component has 56 dedicated cases; the fixture/backup slice passes
-  248 overlapping cases. Reviewer-approved runtime bytes match the integrated tree.
+- Independent corrected-code review passes 279 overlapping cases on exact Python
+  3.13.15/SQLAlchemy 2.1.6 with coverage and warnings treated as errors in 46.72
+  seconds. This includes 56 new independent bounds cases, 76 depth cases,
+  32 original adversarial cases, 56 migrations, 15 writer cases, 40 checkpoints, and four current
+  HTTP proofs. The initial pre-correction review passed 423 overlapping cases;
+  the fixture/backup slice passed 248. Reviewer-approved runtime bytes match the
+  integrated tree.
+- A separate final Python 3.13.15/SQLAlchemy 2.1.6 gate passes 370 overlapping
+  cases with coverage and warnings as errors in 94.81 seconds, including backup
+  fixtures and final cleanup changes. Its log has no resource or unraisable
+  warnings, including shutdown. Lifecycle instrumentation records 156 opened and
+  156 closed SQLAlchemy connections. All 15 compared runtime/test/script files
+  match integration bytes.
 - Four real HTTP producer cases retain current prompt 70/high and tenant
   90/critical evidence through schema-3 upgrade, for completed and partial reports.
   Their original archive bytes remain unchanged. No model server participates.
@@ -601,7 +611,7 @@ Final local evidence:
   and scoped privacy checks pass. Distribution build, Twine validation, and the
   installed-wheel smoke outside the checkout pass. The three changed packaged
   runtime modules match source bytes. The final local wheel SHA-256 is
-  `61a779113d00f529e6c4be2ca2e7945bf6ac32401322199faf90f915c79de0fb`.
+  `a092b0562e8decffecf465d4b9f55680224740d0466350ae86b2c7a88b2f3ab3`.
 
 The merged CI-fixture correction changes no runtime bytes. A focused final gate
 passes 35 workflow/writer/guard cases with coverage and warnings treated as
@@ -617,6 +627,25 @@ the five guard cases pass with warnings as errors on both 2.0.54 and 2.1.6.
 PR #71 merged as `de58212` with all eight PR and post-merge jobs passing.
 The original CI failure remains recorded. Slower host execution is an inference;
 host load was not captured.
+
+The first PR #72 macOS run passed 3,630 cases and failed one depth regression:
+Python 3.13.15 accepts JSON nesting that raises a recursion error on Python 3.10,
+so excessively deep snapshot metadata inherited a row-ID fallback score. An
+isolated Python 3.13.15/SQLAlchemy 2.1.6 reproduction confirmed the failure.
+The correction imposes an explicit 64-container limit before JSON parsing and
+for object-based cache writes. UTF-8 text, including an optional UTF-8 BOM, is
+accepted; non-UTF-8 BLOBs fail closed. Archives remain untouched. The original
+assertion is retained. The unfinished Linux jobs were cancelled after their
+verbose logs reached an 8 MiB fixture value embedded in a generated case ID.
+Explicit short case labels replace those IDs without changing test inputs or
+assertions. The macOS failure remains recorded.
+
+Strict Python 3.13 validation also exposed test-fixture resource ownership gaps.
+The checkpoint fixture now restores the original engine before parent teardown
+and disposes its owned file pool. The API fixture disposes the exact in-memory
+engine it initialized, including setup or teardown failure. A raw SQLite fixture
+uses an explicit closing context as well as a transaction context. These are
+test-only cleanup changes; connection lifecycle instrumentation verifies closure.
 
 Required cross-platform PR/post-merge results are recorded on the delivery PR.
 The next external check is the [native storage/server upgrade retest](storage-retest.md),
