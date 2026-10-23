@@ -1,5 +1,7 @@
 """Saved recipe boundaries use local policy fixtures and real SQLite admission."""
 
+from tests.claimed_execution import execute_job
+
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -239,7 +241,7 @@ def test_declared_domain_survives_admission_and_worker_rechecks(api, monkeypatch
     runner = Mock()
     monkeypatch.setattr(module, "_run_scan_in_thread", runner)
     with pytest.raises(ScopeValidationError):
-        module._execute_job(job.id, threading.Event())
+        execute_job(module, job.id, threading.Event())
     runner.assert_not_called()
 
 
@@ -282,14 +284,14 @@ def test_security_recipe_rechecks_source_and_current_policy_at_run_and_worker(ap
     scan_id = response.json["scan_id"]
     runner = Mock()
     monkeypatch.setattr(module, "_run_scan_in_thread", runner)
-    module._execute_job(scan_id, threading.Event())
+    execute_job(module, scan_id, threading.Event())
     assert runner.call_args.args[1:4] == ("security_only", {}, {
         "source_scan_id": "source", "model_overrides": {"asset": "chosen-model"}, "timeout_seconds": 300})
     assert "model" not in module.db.session.get(module.ScanResult, "source").result["agents"][0]
     monkeypatch.setitem(module.app.config, "SCAN_ALLOWED_NETWORKS", ("198.51.100.0/24",))
     assert client.post(f"/api/templates/{row['id']}/run", headers=headers(module), json={}).status_code == 400
     with pytest.raises(ScopeValidationError):
-        module._execute_job(scan_id, threading.Event())
+        execute_job(module, scan_id, threading.Event())
     monkeypatch.setitem(module.app.config, "SCAN_ALLOWED_NETWORKS", ("192.0.2.0/24",))
     source = module.db.session.get(module.ScanSession, "source")
     source.organization_id = "tenant-b"
@@ -325,7 +327,7 @@ def test_declared_path_is_rechecked_after_symlink_change(api, monkeypatch, tmp_p
     link.unlink()
     link.symlink_to(outside)
     with pytest.raises(ScopeValidationError, match="outside"):
-        module._execute_job(response.json["scan_id"], threading.Event())
+        execute_job(module, response.json["scan_id"], threading.Event())
     assert client.post(f"/api/templates/{row['id']}/run", headers=headers(module), json={}).status_code == 400
 
 

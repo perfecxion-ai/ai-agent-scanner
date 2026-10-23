@@ -18,7 +18,7 @@ from sqlalchemy import insert, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.core.jobs import JobDispatcher, JobStore, TERMINAL_STATES  # noqa: E402
+from src.core.jobs import JobDispatcher, JobStore, TERMINAL_STATES, current_claim_owner  # noqa: E402
 from src.core.schema import initialize_schema  # noqa: E402
 
 
@@ -102,14 +102,17 @@ def run(args, database):
             counters["peak"] = max(counters["peak"], counters["active"])
         try:
             if cancelled.wait(args.latency_ms / 1000):
-                store.finish(scan_id, "Synthetic worker stopped", status="interrupted")
+                store.finish(scan_id, "Synthetic worker stopped", status="interrupted",
+                             owner=current_claim_owner(scan_id))
                 return
-            store.save_result(scan_id, {
+            accepted = store.save_result(scan_id, {
                 "schema_version": "1.0", "scan_id": scan_id, "scan_type": "discovery_only",
                 "status": "completed", "agents": [], "security_results": [], "risk_assessments": [],
                 "summary": {"agents_discovered": 0, "vulnerabilities_found": 0,
                             "critical_risks": 0, "overall_risk_score": None},
-            }, server.DiscoveredAgentModel.__table__, [])
+            }, server.DiscoveredAgentModel.__table__, [], owner=current_claim_owner(scan_id))
+            if not accepted:
+                raise RuntimeError("Claimed synthetic result was not accepted")
         finally:
             with lock:
                 counters["active"] -= 1

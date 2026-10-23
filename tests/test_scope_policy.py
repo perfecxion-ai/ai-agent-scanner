@@ -1,5 +1,7 @@
 """Synthetic request, filesystem, and network boundary regression cases."""
 
+from tests.claimed_execution import run_scan_in_thread
+
 import asyncio
 from unittest.mock import Mock, mock_open, patch
 
@@ -223,7 +225,7 @@ def test_deadline_marks_failed_with_consistent_report(api, monkeypatch):
         await asyncio.Event().wait()
 
     monkeypatch.setattr(module, "_execute_scan", forever)
-    module._run_scan_in_thread("deadline", "discovery_only", {}, {"timeout_seconds": 0.01})
+    run_scan_in_thread(module, "deadline", "discovery_only", {}, {"timeout_seconds": 0.01})
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, "deadline").status == "failed"
     assert module.db.session.get(module.ScanResult, "deadline").result["status"] == "failed"
@@ -248,7 +250,7 @@ def test_transport_failures_cannot_produce_clean_scan(api, monkeypatch, counter)
             module.db.session.commit()
 
     monkeypatch.setattr(module, "_execute_scan", blocked)
-    module._run_scan_in_thread("transport", "discovery_only", {}, {})
+    run_scan_in_thread(module, "transport", "discovery_only", {}, {})
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, "transport").status == "failed"
 
@@ -265,5 +267,5 @@ def test_loopback_opt_in_reaches_worker_transport(api, monkeypatch):
         seen.append(budget.allow_loopback)
 
     monkeypatch.setattr(module, "_execute_scan", local_fixture)
-    module._run_scan_in_thread("local", "discovery_only", {}, {})
+    run_scan_in_thread(module, "local", "discovery_only", {}, {})
     assert seen == [True]

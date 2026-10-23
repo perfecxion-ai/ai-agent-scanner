@@ -1,5 +1,7 @@
 """Opt-in prompt suites stay pinned, private, and isolated across server jobs."""
 
+from tests.claimed_execution import execute_scan, execute_job
+
 import asyncio
 from copy import deepcopy
 import json
@@ -38,7 +40,7 @@ async def source(module, monkeypatch, extra=None):
         discover_agents=AsyncMock(return_value=agents)))
     add_scan(module, SOURCE, mode="discovery_only")
     with scan_transport(ScanBudget()):
-        await module._execute_scan(SOURCE, "discovery_only", {}, {})
+        await execute_scan(module, SOURCE, "discovery_only", {}, {})
     module.db.session.expire_all()
     monkeypatch.setattr(module, "_evidence_profiles", registry(monkeypatch))
     return deepcopy(module.db.session.get(module.ScanResult, SOURCE).result)
@@ -55,7 +57,7 @@ def test_invalid_suite_is_static_before_source_or_profile_lookup(api, monkeypatc
     response = client.post("/api/scans", headers=headers(module), json=definition)
     assert response.status_code == 400
     assert CANARY not in response.get_data(as_text=True) and ENV not in response.get_data(as_text=True)
-    assert module.ScanJob.query.count() == module.ScanSession.query.count() == 0
+    assert module.ScanJob.query.filter(module.ScanJob.scan_id != SOURCE).count() == module.ScanSession.query.count() == 0
     assert protected.mock_calls == []
 
 
@@ -79,7 +81,7 @@ def test_rejected_selection_never_resolves_targets(api, monkeypatch, mutation):
     forbidden = Mock(side_effect=AssertionError("DNS must not run"))
     monkeypatch.setattr("src.core.scope.ScopePolicy.addresses", forbidden)
     response = client.post("/api/scans", headers=headers(module), json=definition)
-    assert response.status_code == 400 and module.ScanJob.query.count() == 0
+    assert response.status_code == 400 and module.ScanJob.query.filter(module.ScanJob.scan_id != SOURCE).count() == 0
     forbidden.assert_not_called()
     assert CANARY not in response.get_data(as_text=True)
 
@@ -122,7 +124,7 @@ async def test_catalog_change_between_validation_and_queue_cannot_admit(api, mon
 
     monkeypatch.setattr(module, "_prepare_scan", drift)
     response = client.post("/api/scans", headers=headers(module), json=body())
-    assert response.status_code == 400 and module.ScanJob.query.count() == 0
+    assert response.status_code == 400 and module.ScanJob.query.filter(module.ScanJob.scan_id != SOURCE).count() == 0
 
 
 @pytest.mark.asyncio
@@ -134,7 +136,7 @@ async def test_every_effective_testable_asset_needs_selected_evidence(api, monke
     await source(module, monkeypatch, extra)
     response = client.post("/api/scans", headers=headers(module), json=body())
     assert response.status_code == (400 if testable else 202), response.json
-    assert module.ScanJob.query.count() == (0 if testable else 1)
+    assert module.ScanJob.query.filter(module.ScanJob.scan_id != SOURCE).count() == (0 if testable else 1)
 
 
 @pytest.mark.asyncio
@@ -149,7 +151,7 @@ async def test_historical_source_canary_cannot_replace_an_explicit_profile(api, 
     previous.result = historical
     module.db.session.commit()
     response = client.post("/api/scans", headers=headers(module), json=body())
-    assert response.status_code == 400 and module.ScanJob.query.count() == 0
+    assert response.status_code == 400 and module.ScanJob.query.filter(module.ScanJob.scan_id != SOURCE).count() == 0
     assert module.db.session.get(module.ScanResult, SOURCE).result == historical
 
 
@@ -174,14 +176,14 @@ async def test_historical_skipped_marker_keeps_redaction_provenance_by_refusal(a
     pipeline = AsyncMock(side_effect=AssertionError("No candidate request may start"))
     monkeypatch.setattr(module, "run_pipeline", pipeline)
     if worker:
-        await module._execute_scan(queued.id, queued.scan_type, {}, queued.scan_config)
+        await execute_scan(module, queued.id, queued.scan_type, {}, queued.scan_config)
         module.db.session.expire_all()
         assert module.db.session.get(module.ScanSession, queued.id).status == "failed"
         failed = module.db.session.get(module.ScanResult, queued.id).result
         assert not failed.get("agents") and marker not in json.dumps(failed)
     else:
         response = client.post("/api/scans", headers=headers(module), json=body())
-        assert response.status_code == 400 and module.ScanJob.query.count() == 0
+        assert response.status_code == 400 and module.ScanJob.query.filter(module.ScanJob.scan_id != SOURCE).count() == 0
         assert marker not in response.get_data(as_text=True)
     pipeline.assert_not_called()
     assert marker not in caplog.text
@@ -196,7 +198,7 @@ async def test_public_suite_identity_collisions_never_persist(api, monkeypatch, 
     monkeypatch.setenv(ENV, marker)
     monkeypatch.setattr(module, "_evidence_profiles", EvidenceProfiles.from_document(document()))
     response = client.post("/api/scans", headers=headers(module), json=body())
-    assert response.status_code == 400 and module.ScanJob.query.count() == 0
+    assert response.status_code == 400 and module.ScanJob.query.filter(module.ScanJob.scan_id != SOURCE).count() == 0
     assert marker not in response.json["error"]
 
 
@@ -225,7 +227,7 @@ async def test_queued_jobs_fail_closed_before_execution(api, monkeypatch, mutati
     execute = Mock()
     monkeypatch.setattr(module, "_run_scan_in_thread", execute)
     with pytest.raises(ScopeValidationError):
-        module._execute_job(queued.id, None)
+        execute_job(module, queued.id, None)
     execute.assert_not_called()
 
 
@@ -251,7 +253,7 @@ async def test_template_updates_keep_hidden_pin_and_reject_drift(api, monkeypatc
     update["revision"] = row.revision
     assert client.put(f"/api/templates/{row.id}", headers=headers(module), json=update).status_code == 400
     assert client.post(f"/api/templates/{row.id}/run", headers=headers(module), json={}).status_code == 400
-    assert module.ScanJob.query.count() == 0
+    assert module.ScanJob.query.filter(module.ScanJob.scan_id != SOURCE).count() == 0
 
 
 @pytest.mark.asyncio
@@ -288,7 +290,7 @@ async def test_schedule_catalog_race_pauses_without_admitting(api, monkeypatch):
     module._schedule_admit(candidate, validated, threading.Event())
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSchedule, schedule["id"]).state == "paused"
-    assert module.ScanJob.query.count() == 0
+    assert module.ScanJob.query.filter(module.ScanJob.scan_id != SOURCE).count() == 0
 
 
 @pytest.mark.asyncio
@@ -314,7 +316,7 @@ async def test_concurrent_candidate_and_baseline_keep_global_engine_unchanged(ap
     monkeypatch.setattr(module, "run_pipeline", pipeline)
     jobs = [module.db.session.get(module.ScanSession, response.json["scan_id"])
             for response in (candidate_response, baseline_response)]
-    await asyncio.gather(*(module._execute_scan(job.id, job.scan_type, {}, job.scan_config) for job in jobs))
+    await asyncio.gather(*(execute_scan(module, job.id, job.scan_type, {}, job.scan_config) for job in jobs))
     assert len(seen) == 2 and seen[0] is not baseline_engine and seen[1] is baseline_engine
     assert seen[0].prompt_tester.injection_payloads == candidate_payloads()
     assert module.security_engine is baseline_engine

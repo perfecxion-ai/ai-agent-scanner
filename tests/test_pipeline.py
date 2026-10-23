@@ -1,5 +1,7 @@
 """Execution and persistence regressions without network access."""
 
+from tests.claimed_execution import execute_scan
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -152,7 +154,7 @@ async def test_repeated_scan_persistence_and_report_authorization(api, monkeypat
     monkeypatch.setattr(module, "risk_assessor", risk)
     for scan_id in ("first", "second"):
         add_scan(module, scan_id)
-        await module._execute_scan(scan_id, "full", {}, {})
+        await execute_scan(module, scan_id, "full", {}, {})
         module.db.session.expire_all()
         scan = module.db.session.get(module.ScanSession, scan_id)
         assert scan.status == "completed"
@@ -175,11 +177,11 @@ async def test_security_only_reuses_owned_source(api, monkeypatch):
     monkeypatch.setattr(module, "security_engine", security)
     monkeypatch.setattr(module, "risk_assessor", risk)
     add_scan(module, "source")
-    await module._execute_scan("source", "discovery_only", {}, {})
+    await execute_scan(module, "source", "discovery_only", {}, {})
     discovery.discover_agents.reset_mock()
     for scan_id, tenant in (("owned", "tenant-a"), ("foreign", "tenant-b")):
         add_scan(module, scan_id, tenant, "security_only")
-        await module._execute_scan(scan_id, "security_only", {}, {"source_scan_id": "source"})
+        await execute_scan(module, scan_id, "security_only", {}, {"source_scan_id": "source"})
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, "owned").status == "completed"
     assert module.db.session.get(module.ScanSession, "foreign").status == "failed"

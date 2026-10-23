@@ -1,5 +1,7 @@
 """Partial discovery is reusable inventory, never complete coverage."""
 
+from tests.claimed_execution import execute_scan, run_scan_in_thread
+
 from copy import deepcopy
 
 import pytest
@@ -18,7 +20,7 @@ async def source_scan(module, monkeypatch):
     budget = ScanBudget()
     budget.failures = 1
     with scan_transport(budget):
-        await module._execute_scan('source', 'discovery_only', {}, {})
+        await execute_scan(module, 'source', 'discovery_only', {}, {})
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, 'source').status == 'partial'
     return security
@@ -41,7 +43,7 @@ async def test_partial_source_accepts_snapshot_id_and_preserves_coverage(api, mo
     assert response.status_code == 202, response.json
     scan = module.db.session.get(module.ScanSession, response.json['scan_id'])
     assert scan.scan_config['model_overrides'] == {'stable-asset': 'chosen-model'}
-    await module._execute_scan(scan.id, 'security_only', {}, scan.scan_config)
+    await execute_scan(module, scan.id, 'security_only', {}, scan.scan_config)
     assert security.test_agents.call_args.args[0][0]['model'] == 'chosen-model'
     module.db.session.expire_all()
     report = module.db.session.get(module.ScanResult, scan.id).result
@@ -61,7 +63,7 @@ async def test_non_replayable_source_rejected_at_admission_and_worker(api, monke
     module.db.session.commit()
     assert client.post('/api/scans', headers=headers(module), json=request_body()).status_code == 400
     add_scan(module, 'attempt', mode='security_only')
-    await module._execute_scan('attempt', 'security_only', {}, request_body()['scan_config'])
+    await execute_scan(module, 'attempt', 'security_only', {}, request_body()['scan_config'])
     security.test_agents.assert_not_called()
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, 'attempt').status == 'failed'
@@ -100,7 +102,7 @@ async def test_partial_source_requires_final_report_matching_inventory(api, monk
     module.db.session.commit()
     response = client.post('/api/scans', headers=headers(module), json=request_body())
     assert response.status_code == 400, response.json
-    assert module.ScanJob.query.count() == 0
+    assert module.ScanJob.query.filter(module.ScanJob.scan_id != 'source').count() == 0
 
 
 @pytest.mark.asyncio
@@ -112,7 +114,7 @@ async def test_partial_source_rechecks_tenant_and_current_scope(api, monkeypatch
     assert response.status_code == 202
     module.app.config['SCAN_ALLOWED_NETWORKS'] = ('198.51.100.0/24',)
     scan = module.db.session.get(module.ScanSession, response.json['scan_id'])
-    await module._execute_scan(scan.id, 'security_only', {}, scan.scan_config)
+    await execute_scan(module, scan.id, 'security_only', {}, scan.scan_config)
     security.test_agents.assert_not_called()
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, scan.id).status == 'failed'
@@ -149,5 +151,5 @@ def test_server_request_timeout_is_owned_by_global_policy(api, monkeypatch):
     async def execute(*args):
         observed.append(current_budget().request_timeout_seconds)
     monkeypatch.setattr(module, '_execute_scan', execute)
-    module._run_scan_in_thread('fixture', 'discovery_only', {}, {})
+    run_scan_in_thread(module, 'fixture', 'discovery_only', {}, {})
     assert observed == [75]

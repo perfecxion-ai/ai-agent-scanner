@@ -167,7 +167,7 @@ def wait_until(predicate, deadline):
 
 def exercise(server, engine, directory, version, case, baseline, deadline, checks):
     from sqlalchemy import event, select
-    from src.core.jobs import DispatcherLock, JobDispatcher, JobStore
+    from src.core.jobs import DispatcherLock, JobDispatcher, JobStore, current_claim_owner
     from src.core.schema import SchemaError, initialize_schema
     observed = {"initialized": 0, "recovered": 0, "executed": [], "preflight": 0, "admitted": 0}
 
@@ -186,7 +186,9 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
     def worker(identifier, cancelled):
         observed["executed"].append(identifier)
         require(identifier == "queued" and not cancelled.is_set(), "Unexpected synthetic execution")
-        store.save_result(identifier, report(identifier), server.DiscoveredAgentModel.__table__, [])
+        accepted = store.save_result(identifier, report(identifier), server.DiscoveredAgentModel.__table__, [],
+                                     owner=current_claim_owner(identifier))
+        require(accepted, "Claimed synthetic result was not accepted")
 
     def dispatcher():
         service = server._schedule_service()

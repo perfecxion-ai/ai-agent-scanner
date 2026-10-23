@@ -1,16 +1,63 @@
 """Persistent jobs with atomic claims and bounded execution for one server process."""
 
 import logging
+import json
 import threading
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
+from copy import deepcopy
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select, update, insert, func
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+from src.core.contracts import validate_checkpoint_report
 
 
 TERMINAL_STATES = frozenset({"completed", "partial", "failed", "cancelled", "interrupted"})
+_claim = ContextVar('scan_worker_claim', default=None)
+
+
+@contextmanager
+def worker_claim(scan_id, owner):
+    """Bind this execution to the claim actually acquired by its dispatcher."""
+    token = _claim.set((scan_id, owner))
+    try:
+        yield
+    finally:
+        _claim.reset(token)
+
+
+def current_claim_owner(scan_id):
+    claim = _claim.get()
+    return claim[1] if claim and claim[0] == scan_id else None
+
+
+def snapshot_id(scan_id, ordinal):
+    return uuid.uuid5(uuid.NAMESPACE_URL, f'ai-agent-scanner:{scan_id}:{ordinal}').hex
+
+
+def _evidence_extension(previous, output):
+    """A later projection cannot erase an acknowledged check or its findings."""
+    old_agents, new_agents = previous['agents'], output['agents']
+    identity = ('id', 'provider', 'model', 'endpoint', 'endpoint_redacted')
+    if len(old_agents) != len(new_agents):
+        return False
+    for old, new in zip(old_agents, new_agents):
+        if any(old.get(key) != new.get(key) for key in identity):
+            return False
+        for field in ('checks', 'vulnerabilities', 'observations'):
+            before = Counter(json.dumps(item, sort_keys=True, allow_nan=False)
+                             for item in old.get(field, [])
+                             if field != 'checks' or item.get('probe_version') != '1:unexecuted')
+            after = Counter(json.dumps(item, sort_keys=True, allow_nan=False) for item in new.get(field, []))
+            if before - after:
+                return False
+    return True
 
 
 class DispatcherLock:
@@ -110,38 +157,119 @@ class JobStore:
             status=self.jobs.c.status))
         return connection.scalar(select(self.jobs.c.status).where(self.jobs.c.scan_id == scan_id))
 
-    def save_result(self, scan_id, output, agents_table, snapshots):
+    @contextmanager
+    def _checkpoint_transaction(self):
+        """Bound SQLite lock contention without changing pooled connection policy."""
+        if self.engine.dialect.name != 'sqlite':
+            raise ValueError('Checkpoint persistence requires SQLite')
+        with self.engine.connect() as connection:
+            previous = int(connection.exec_driver_sql('PRAGMA busy_timeout').scalar_one())
+            connection.exec_driver_sql('PRAGMA busy_timeout = %d' % min(previous, 1000))
+            connection.commit()
+            try:
+                with connection.begin():
+                    yield connection
+            finally:
+                if connection.in_transaction():
+                    connection.rollback()
+                connection.exec_driver_sql('PRAGMA busy_timeout = %d' % previous)
+                connection.commit()
+
+    def _owned(self, connection, scan_id, owner):
+        return (isinstance(owner, str) and bool(owner) and len(owner) <= 64
+                and connection.scalar(select(self.jobs.c.owner).where(self.jobs.c.scan_id == scan_id)) == owner)
+
+    @staticmethod
+    def _validate_snapshots(scan_id, output, snapshots):
+        if not isinstance(snapshots, list) or len(snapshots) != len(output['agents']):
+            raise ValueError('Checkpoint snapshots do not match report')
+        for ordinal, (agent, snapshot) in enumerate(zip(output['agents'], snapshots)):
+            if (snapshot.get('id') != snapshot_id(scan_id, ordinal)
+                    or snapshot.get('scan_id') != scan_id
+                    or snapshot.get('metadata', {}).get('asset_id') != agent['id']
+                    or snapshot.get('vulnerabilities') != agent.get('vulnerabilities', [])):
+                raise ValueError('Checkpoint snapshots do not match report')
+
+    def _save_projection(self, connection, scan_id, output, agents_table, snapshots, *, terminal=False):
+        summary = output['summary']
+        values = dict(agents_discovered=summary['agents_discovered'],
+                      vulnerabilities_found=summary['vulnerabilities_found'],
+                      critical_risks=summary['critical_risks'],
+                      overall_risk_score=summary['overall_risk_score'] or 0.0)
+        if terminal:
+            values['progress'] = 100.0
+        connection.execute(update(self.scans).where(self.scans.c.id == scan_id).values(**values))
+        if snapshots:
+            statement = sqlite_insert(agents_table)
+            # Preserve first-observed timestamp and stable per-scan row identity.
+            fields = {column.name: getattr(statement.excluded, column.name)
+                      for column in agents_table.c if column.name not in ('id', 'scan_id', 'discovered_at')}
+            connection.execute(statement.on_conflict_do_update(index_elements=['id'], set_=fields), snapshots)
+
+    def save_checkpoint(self, scan_id, output, agents_table, snapshots, *, owner):
+        """Atomically acknowledge a newer nonterminal projection from its owner."""
+        output = deepcopy(output)
+        snapshots = deepcopy(snapshots)
+        validate_checkpoint_report(output)
+        if output.get('scan_id') != scan_id:
+            raise ValueError('Checkpoint scan identity does not match')
+        self._validate_snapshots(scan_id, output, snapshots)
+        sequence = output['checkpoint']['sequence']
+        with self._checkpoint_transaction() as connection:
+            status = self._locked_status(connection, scan_id)
+            if status not in ('running', 'cancel_requested') or not self._owned(connection, scan_id, owner):
+                return False
+            previous = connection.scalar(select(self.results.c.result).where(self.results.c.scan_id == scan_id))
+            if previous is not None:
+                validate_checkpoint_report(previous)
+                if sequence <= previous['checkpoint']['sequence'] or not _evidence_extension(previous, output):
+                    return False
+            self._save_projection(connection, scan_id, output, agents_table, snapshots)
+            statement = sqlite_insert(self.results).values(scan_id=scan_id, result=output)
+            connection.execute(statement.on_conflict_do_update(index_elements=['scan_id'],
+                                                               set_={'result': statement.excluded.result}))
+        return True
+
+    def save_result(self, scan_id, output, agents_table, snapshots, *, owner=None):
         """Commit the report, snapshots, terminal queue state and event together."""
+        output, snapshots = deepcopy(output), deepcopy(snapshots)
         if output["status"] not in {"completed", "partial"}:
             raise ValueError("Pipeline result must be completed or partial")
-        with self.engine.begin() as connection:
+        with self._checkpoint_transaction() as connection:
             status = self._locked_status(connection, scan_id)
             if status in TERMINAL_STATES:
-                return
+                return False
+            if status is not None and (status not in ('running', 'cancel_requested')
+                                       or not self._owned(connection, scan_id, owner)):
+                return False
             if status is None:
                 scan_status = connection.scalar(select(self.scans.c.status).where(self.scans.c.id == scan_id))
                 if scan_status in TERMINAL_STATES:
-                    return
+                    return False
                 if scan_status is None:
                     raise ValueError("Job has no scan session")
-            summary = output["summary"]
-            connection.execute(update(self.scans).where(self.scans.c.id == scan_id).values(
-                agents_discovered=summary["agents_discovered"],
-                vulnerabilities_found=summary["vulnerabilities_found"],
-                critical_risks=summary["critical_risks"],
-                overall_risk_score=summary["overall_risk_score"] or 0.0, progress=100.0))
-            if snapshots:
-                connection.execute(insert(agents_table), snapshots)
+            previous = connection.scalar(select(self.results.c.result).where(self.results.c.scan_id == scan_id))
+            if previous is not None and 'checkpoint' in previous:
+                validate_checkpoint_report(previous)
+                validate_checkpoint_report(output, final=True)
+                if (output['checkpoint']['sequence'] != previous['checkpoint']['sequence']
+                        or not _evidence_extension(previous, output)):
+                    return False
+                self._validate_snapshots(scan_id, output, snapshots)
+            self._save_projection(connection, scan_id, output, agents_table, snapshots, terminal=True)
             if status == "cancel_requested":
                 self._finalize(connection, scan_id, "cancelled", "Scan cancelled by operator", output)
             else:
                 self._finalize(connection, scan_id, output["status"], output=output)
+        return True
 
-    def finish(self, scan_id, error=None, *, status=None):
+    def finish(self, scan_id, error=None, *, status=None, owner=None):
         explicit_status = status is not None
-        with self.engine.begin() as connection:
+        with self._checkpoint_transaction() as connection:
             # Lock before reading so a concurrent accepted cancellation cannot be overwritten.
             job_status = self._locked_status(connection, scan_id)
+            if owner is not None and not self._owned(connection, scan_id, owner):
+                return
             if job_status in TERMINAL_STATES:
                 return
             scan_status = connection.scalar(select(self.scans.c.status).where(self.scans.c.id == scan_id))
@@ -258,12 +386,13 @@ class JobDispatcher:
     def _work(self, scan_id, cancelled):
         error = None
         try:
-            self.run(scan_id, cancelled)
+            with worker_claim(scan_id, self.owner):
+                self.run(scan_id, cancelled)
         except Exception:
             error = "Scan worker failed"
             self.logger.error("Scan worker failed for %s", scan_id)
         finally:
-            self.store.finish(scan_id, error)
+            self.store.finish(scan_id, error, owner=self.owner)
 
     def _tick(self):
         for scan_id, (future, cancelled) in list(self._active.items()):
@@ -272,7 +401,7 @@ class JobDispatcher:
                     future.result()
                 except Exception:
                     # Retry transient persistence failures before releasing worker capacity.
-                    self.store.finish(scan_id)
+                    self.store.finish(scan_id, owner=self.owner)
                 del self._active[scan_id]
             elif self._stop.is_set() or self.store.cancellation_requested(scan_id):
                 cancelled.set()

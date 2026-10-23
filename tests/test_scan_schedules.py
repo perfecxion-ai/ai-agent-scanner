@@ -1,5 +1,7 @@
 """Finite scheduling uses synthetic time, local policy, and real SQLite transactions."""
 
+from tests.claimed_execution import execute_job
+
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -341,7 +343,7 @@ def test_scheduled_job_worker_revalidates_after_admission(api, monkeypatch):
     monkeypatch.setitem(module.app.config, "SCAN_ALLOWED_NETWORKS", ())
     with patch.object(module, "_run_scan_in_thread") as run:
         with pytest.raises(ScopeValidationError):
-            module._execute_job(current["outstanding_scan_id"], threading.Event())
+            execute_job(module, current["outstanding_scan_id"], threading.Event())
     run.assert_not_called()
 
 

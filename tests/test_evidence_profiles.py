@@ -1,5 +1,7 @@
 """Private server evidence inputs, public reference pins, and fail-closed binding."""
 
+from tests.claimed_execution import execute_scan, execute_job
+
 from copy import deepcopy
 import hashlib
 import json
@@ -235,7 +237,7 @@ async def make_source(module, monkeypatch):
     monkeypatch.setattr(module, "discovery_engine", SimpleNamespace(discover_agents=AsyncMock(return_value=[agent])))
     add_scan(module, "profile-source", mode="discovery_only")
     with scan_transport(ScanBudget()):
-        await module._execute_scan("profile-source", "discovery_only", {}, {})
+        await execute_scan(module, "profile-source", "discovery_only", {}, {})
     module.db.session.expire_all()
     return agent
 
@@ -262,7 +264,7 @@ async def test_api_refs_are_canonical_private_and_rechecked(api, monkeypatch, ca
     security = Mock()
     monkeypatch.setattr(module, "security_engine", security)
     monkeypatch.delenv(ENV)
-    await module._execute_scan(scan.id, scan.scan_type, {}, scan.scan_config)
+    await execute_scan(module, scan.id, scan.scan_type, {}, scan.scan_config)
     security.test_agents.assert_not_called()
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, scan.id).status == "failed"
@@ -293,7 +295,7 @@ async def test_queued_references_fail_before_worker_network(api, monkeypatch, ca
     execute = Mock()
     monkeypatch.setattr(module, "_run_scan_in_thread", execute)
     with pytest.raises(EvidenceProfileError):
-        module._execute_job(scan.id, None)
+        execute_job(module, scan.id, None)
     execute.assert_not_called()
     assert CANARY not in caplog.text and ENV not in caplog.text
 
@@ -304,7 +306,7 @@ def test_profile_references_only_apply_to_security_sources(api, mode):
     response = client.post("/api/scans", headers=headers(module), json={
         "scan_type": mode, "target_scope": {"network_ranges": ["192.0.2.1/32"]},
         "scan_config": {"evidence_profiles": {"asset": "fixture-v1"}}})
-    assert response.status_code == 400 and module.ScanJob.query.count() == 0
+    assert response.status_code == 400 and module.ScanJob.query.filter(module.ScanJob.scan_id != 'profile-source').count() == 0
 
 
 @pytest.mark.asyncio
@@ -316,7 +318,7 @@ async def test_api_cannot_submit_internal_pins_raw_secrets_or_paths(api, monkeyp
     definition["scan_config"][field] = CANARY
     response = client.post("/api/scans", headers=headers(module), json=definition)
     assert response.status_code == 400 and CANARY not in json.dumps(response.json)
-    assert module.ScanJob.query.count() == 0
+    assert module.ScanJob.query.filter(module.ScanJob.scan_id != 'profile-source').count() == 0
 
 
 @pytest.mark.asyncio
@@ -329,7 +331,7 @@ async def test_top_level_protected_options_are_not_silently_ignored(api, monkeyp
     definition = {**body(), field: CANARY}
     response = client.post("/api/scans", headers=headers(module), json=definition)
     assert response.status_code == 400 and CANARY not in json.dumps(response.json)
-    assert module.ScanJob.query.count() == 0
+    assert module.ScanJob.query.filter(module.ScanJob.scan_id != 'profile-source').count() == 0
 
 
 @pytest.mark.asyncio
@@ -341,7 +343,7 @@ async def test_public_definition_cannot_persist_selected_marker(api, monkeypatch
     definition = {**body(), "scan_name": "A public label with " + CANARY}
     response = client.post(route, headers=headers(module), json=definition)
     assert response.status_code == 400 and CANARY not in json.dumps(response.json)
-    assert module.ScanTemplate.query.count() == module.ScanJob.query.count() == 0
+    assert module.ScanTemplate.query.count() == module.ScanJob.query.filter(module.ScanJob.scan_id != 'profile-source').count() == 0
 
 
 @pytest.mark.asyncio
@@ -377,7 +379,7 @@ async def test_template_and_schedule_revalidate_public_pins(api, monkeypatch):
     module._schedule_admit(candidate, validated, threading.Event())
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSchedule, schedule["id"]).state == "paused"
-    assert module.ScanJob.query.count() == 0
+    assert module.ScanJob.query.filter(module.ScanJob.scan_id != 'profile-source').count() == 0
 
 
 @pytest.mark.parametrize("marker", ["fixture-\u00e9-protected-1234567890", 'fixture-"secret"-1234567890',
