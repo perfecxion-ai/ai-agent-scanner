@@ -42,7 +42,11 @@ def snapshot_id(scan_id, ordinal):
 
 
 def _evidence_extension(previous, output):
-    """A later projection cannot erase an acknowledged check or its findings."""
+    """A later projection cannot erase acknowledged checks, receipts, or findings."""
+    versions = {'1.0': 1, '2.0': 2}
+    if versions.get(output.get('checkpoint', {}).get('version'), 0) < versions.get(
+            previous.get('checkpoint', {}).get('version'), 0):
+        return False
     old_agents, new_agents = previous['agents'], output['agents']
     identity = ('id', 'provider', 'model', 'endpoint', 'endpoint_redacted')
     if len(old_agents) != len(new_agents):
@@ -50,6 +54,19 @@ def _evidence_extension(previous, output):
     for old, new in zip(old_agents, new_agents):
         if any(old.get(key) != new.get(key) for key in identity):
             return False
+        if 'check_evidence_schema_version' in old:
+            if new.get('check_evidence_schema_version') != old['check_evidence_schema_version']:
+                return False
+            receipts, current = old.get('check_evidence'), new.get('check_evidence')
+            if not isinstance(receipts, list) or not isinstance(current, list) or current[:len(receipts)] != receipts:
+                return False
+            if 'check_evidence_run_id' in old:
+                if new.get('check_evidence_run_id') != old['check_evidence_run_id']:
+                    return False
+            elif receipts:
+                return False
+            if current and not new.get('check_evidence_run_id'):
+                return False
         for field in ('checks', 'vulnerabilities', 'observations'):
             before = Counter(json.dumps(item, sort_keys=True, allow_nan=False)
                              for item in old.get(field, [])

@@ -45,10 +45,30 @@ verdicts; original reports and findings remain untouched and unresolved. Genuine
 current sampled zero and confirmed findings remain supported. Local acceptance
 passes 2,899 tests with warnings treated as errors, 143 dashboard cases, real
 Chromium, independent review, both backup modes, and installed-wheel smoke.
-PR/post-merge CI remains pending. See
+PR #66 and merged revision `8135310` pass all eight CI jobs. See
 [compatibility acceptance](VALIDATION.md#historical-protected-access-compatibility-follow-up).
-This also protects the planned nullable-score migration. Within-check confirmation
-retention follows under a separate versioned evidence contract.
+This also protects the planned nullable-score migration. The prompt-only
+within-check retention slice now passes 3,216 local coverage tests, 793 overlapping
+independent cases, 143 dashboard cases, both backup modes, and installed-wheel
+smoke. Immutable receipts bind a finding to an actual evaluated response without
+inventing a completed check; real loopback CLI/server and dispatcher-kill cases
+retain the evidence. PR #67 records independent review and cross-platform CI. See
+[prompt receipt acceptance](VALIDATION.md#within-check-prompt-receipt-local-acceptance).
+Tenant/access observation retention and CLI process-crash files remain separate
+gates; this work does not close them.
+All eight PR CI jobs passed at `9c411ad`, but a subsequent prompt request-reflection
+audit held the merge. The correction now binds a private complete outbound request
+to the response, rejecting case-changed request values and automatic-header echoes
+as confirmation evidence. The final local gate and independent review pass;
+PR #67 records required CI results for the corrected revision.
+Historical finalized prompt scores remain an explicit compatibility limitation,
+not reverified request-exclusion evidence; their guard precedes score migration.
+See the [reflection correction evidence](VALIDATION.md#prompt-request-reflection-correction).
+The next read-only review also reproduces an existing tenant false-confirmation
+path: a fixture echoing a model or credential equal to the foreign-tenant canary
+produces eligible confirmed findings without tenant data. Close this request
+reflection/provenance gap before making tenant observations durable. See
+[tenant prerequisite evidence](VALIDATION.md#tenant-evidence-prerequisite-for-the-next-increment).
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned

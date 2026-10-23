@@ -11,6 +11,7 @@ from src.core.contracts import CHECK_INTERRUPTED_REASON, record_interaction
 from src.core.transport import current_budget
 from src.evaluation import benchmark_validation as validator
 from src.evaluation import prompt_benchmark as producer
+from tests.request_provenance_fixture import declared_request_evidence
 
 
 MARKER = 'synthetic-validator-marker-826f15'
@@ -33,7 +34,8 @@ async def report(monkeypatch):
         current_budget().reserve('http://127.0.0.1')
         record_interaction(True)
         text = MARKER if category in {'system_prompt_extraction', 'role_manipulation'} else 'No disclosure.'
-        finding = self._analyze_response(agent, category, payload, json.dumps({'response': text}), 200)
+        finding = self._analyze_response(agent, category, payload, json.dumps({'response': text}), 200,
+                                        request_evidence=declared_request_evidence(agent, payload))
         if finding and finding['evidence_status'] == 'confirmed':
             self.detected_categories.add(category)
         return finding

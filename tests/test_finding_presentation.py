@@ -15,6 +15,7 @@ from src.core.pipeline import run_pipeline, to_sarif
 from src.reporting.workflows import apply_policy, compare_reports, inventory
 from src.risk.risk_assessor import RiskAssessment
 from src.security.prompt_injection_tests import PromptInjectionTester
+from tests.request_provenance_fixture import declared_request_evidence
 
 
 @pytest.fixture
@@ -28,7 +29,8 @@ async def sampled_report():
     async def disclose(target, category, payload):
         record_interaction(True)
         response = json.dumps({"choices": [{"message": {"content": target["system_prompt_canary"]}}]})
-        return tester._analyze_response(target, category, payload, response, 200)
+        return tester._analyze_response(target, category, payload, response, 200,
+                                        request_evidence=declared_request_evidence(target, payload))
 
     findings = []
     with collect_checks() as checks, patch.object(tester, "_test_single_payload", side_effect=disclose), patch(

@@ -201,12 +201,12 @@ async def test_invalid_callback_preserves_previous_valid_checkpoint(tmp_path, mo
 
 
 class FinalizedThenStalled:
-    @checked('prompt_injection.system_prompt_extraction', ['fixture-probe'],
+    @checked('fixture.finalized_disclosure', ['fixture-probe'],
              oracle=lambda agent: True)
     async def complete(self, agent):
         record_interaction(True, decisive=True)
         return [{
-            'vulnerability_type': 'prompt_injection',
+            'vulnerability_type': 'fixture_disclosure',
             'severity': 'high',
             'description': 'Protected fixture disclosure confirmed',
             'evidence_status': 'confirmed',
@@ -242,7 +242,7 @@ async def test_real_pipeline_deadline_keeps_finalized_check(tmp_path, monkeypatc
         assert document['agents'][0]['security_status'] == 'partial'
         assert document['agents'][0]['risk_coverage_status'] == 'partial'
         check = next(item for item in document['agents'][0]['checks']
-                     if item['rule_id'] == 'prompt_injection.system_prompt_extraction')
+                     if item['rule_id'] == 'fixture.finalized_disclosure')
         assert check['status'] == 'completed'
         assert check['outcome'] == 'confirmed'
     else:

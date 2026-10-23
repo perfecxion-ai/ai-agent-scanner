@@ -3,7 +3,10 @@
 from collections import Counter
 from math import isfinite
 
-from src.core.contracts import CHECK_SCHEMA_VERSION, confirmed_findings, risk_assessment_eligible, validate_scan_result
+from src.core.contracts import (
+    CHECK_SCHEMA_VERSION, CHECK_EVIDENCE_SCHEMA_VERSION, confirmed_findings,
+    risk_assessment_eligible, validate_scan_result,
+)
 from src.risk.risk_assessor import SEVERITY_SCORES, risk_level_for_score
 
 
@@ -11,7 +14,10 @@ def _score(value):
     return type(value) in {int, float} and 0 <= value <= 100 and isfinite(value)
 
 
-def project_agent_risk(agent=None, *, assessed=False):
+_UNSPECIFIED = object()
+
+
+def project_agent_risk(agent=None, *, assessed=False, evidence_schema_version=_UNSPECIFIED):
     """Unknown is distinct from an assessed zero; database defaults are not evidence."""
     agent = agent if isinstance(agent, dict) else {}
     security_status = agent.get('security_status')
@@ -22,6 +28,18 @@ def project_agent_risk(agent=None, *, assessed=False):
               'risk_coverage_status': 'not_assessed', 'risk_scoring_policy': None,
               'risk_assessment_status': 'not_assessed',
               'security_status': security_status}
+    findings = agent.get('vulnerabilities', [])
+    has_evidence = any(key in agent for key in (
+        'check_evidence_schema_version', 'check_evidence_run_id', 'check_evidence')) or (
+            isinstance(findings, list) and any(isinstance(finding, dict) and 'check_evidence_id' in finding
+                                              for finding in findings))
+    if evidence_schema_version == CHECK_EVIDENCE_SCHEMA_VERSION and (
+            agent.get('check_evidence_schema_version') != evidence_schema_version):
+        return result
+    if has_evidence and evidence_schema_version is not _UNSPECIFIED and (
+            evidence_schema_version != CHECK_EVIDENCE_SCHEMA_VERSION
+            or agent.get('check_evidence_schema_version') != evidence_schema_version):
+        return result
     if not assessed or agent.get('risk_scoring_policy') != 'severity-floor-v2':
         return result
     if not _score(agent.get('risk_score')) or agent.get('risk_level') != risk_level_for_score(agent['risk_score']):
@@ -54,7 +72,9 @@ def project_report_risk(report):
     if not isinstance(report, dict) or report.get('check_schema_version') != CHECK_SCHEMA_VERSION:
         return summary, {}
     try:
-        validate_scan_result(report)
+        # Receipt provenance is checked per asset below. One unsupported public
+        # ledger must not erase an independent asset's valid assessment.
+        validate_scan_result(report, validate_evidence=False)
     except (TypeError, ValueError):
         return summary, {}
     status = report.get('risk_assessment_status')
@@ -63,7 +83,8 @@ def project_report_risk(report):
     if status in {'not_run', 'not_assessed', 'failed'}:
         summary['risk_assessment_status'] = status
     counts = Counter(agent['id'] for agent in report['agents'])
-    agents = {agent['id']: project_agent_risk(agent, assessed=assessed)
+    agents = {agent['id']: project_agent_risk(
+        agent, assessed=assessed, evidence_schema_version=report.get('check_evidence_schema_version'))
               for agent in report['agents'] if counts[agent['id']] == 1}
     scores = [agent['risk_score'] for agent in agents.values() if agent['risk_score'] is not None]
     declared = report.get('summary')

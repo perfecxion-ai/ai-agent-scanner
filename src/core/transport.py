@@ -14,6 +14,9 @@ import aiohttp
 from aiohttp.abc import AbstractResolver
 from yarl import URL
 
+from src.core.request_evidence import bind_response, cancel_request, capture_body, close_request, reserved_request
+from src.core.request_provenance import RequestCapture
+
 
 class TransportPolicyError(ValueError):
     """A request was refused by the scan transport policy."""
@@ -140,10 +143,13 @@ class PolicyResolver(AbstractResolver):
 
 
 class BoundedResponse:
-    def __init__(self, response, budget):
+    def __init__(self, response, budget, evidence_token=None, request_evidence=None):
         self.response = response
         self.budget = budget
         self.body = None
+        self._evidence_token = evidence_token
+        self.__request_evidence = request_evidence
+        bind_response(evidence_token, self)
 
     def __getattr__(self, name):
         return getattr(self.response, name)
@@ -151,6 +157,10 @@ class BoundedResponse:
     @property
     def content(self):
         return self
+
+    @property
+    def _request_evidence(self):
+        return self.__request_evidence
 
     async def iter_chunked(self, size):
         received = 0
@@ -166,6 +176,7 @@ class BoundedResponse:
             async for chunk in self.iter_chunked(8192):
                 data.extend(chunk)
             self.body = bytes(data)
+            capture_body(self._evidence_token, self, self.body)
         return self.body
 
     async def text(self, encoding=None, errors='replace'):
@@ -189,6 +200,21 @@ class SafeSession:
         connector = aiohttp.TCPConnector(resolver=self.resolver, limit=20)
         options = dict(self.kwargs)
         options['timeout'] = _bounded_timeout(options.get('timeout'), self.budget.request_timeout_seconds)
+        trace = aiohttp.TraceConfig()
+
+        async def headers_sent(session, context, params):
+            capture = context.trace_request_ctx
+            if isinstance(capture, RequestCapture):
+                capture.sent_headers(params.method, str(params.url), params.headers)
+
+        async def chunk_sent(session, context, params):
+            capture = context.trace_request_ctx
+            if isinstance(capture, RequestCapture):
+                capture.sent_chunk(params.method, str(params.url), params.chunk)
+
+        trace.on_request_headers_sent.append(headers_sent)
+        trace.on_request_chunk_sent.append(chunk_sent)
+        options['trace_configs'] = [*options.get('trace_configs', []), trace]
         self.session = aiohttp.ClientSession(connector=connector, trust_env=False, **options)
         await self.session.__aenter__()
         return self
@@ -196,18 +222,32 @@ class SafeSession:
     async def __aexit__(self, *args):
         try:
             return await self.session.__aexit__(*args)
+        except asyncio.CancelledError:
+            cancel_request()
+            raise
         finally:
             await self.resolver.close()
 
     @asynccontextmanager
     async def request(self, method, url, discovery=False, **kwargs):
+        evidence_token = None
         try:
             self.budget.reserve(url)
+            evidence_token = reserved_request()
             if 'timeout' in kwargs:
                 kwargs['timeout'] = _bounded_timeout(kwargs['timeout'], self.budget.request_timeout_seconds)
             kwargs['allow_redirects'] = False
+            capture = RequestCapture()
+            kwargs['trace_request_ctx'] = capture
             async with self.session.request(method, url, **kwargs) as response:
-                yield BoundedResponse(response, self.budget)
+                try:
+                    yield BoundedResponse(response, self.budget, evidence_token, capture.seal(response))
+                except asyncio.CancelledError:
+                    cancel_request(evidence_token)
+                    raise
+        except asyncio.CancelledError:
+            cancel_request(evidence_token)
+            raise
         except TransportPolicyError:
             self.budget.rejections += 1
             logging.getLogger(__name__).warning('HTTP transport policy rejected request')
@@ -226,6 +266,8 @@ class SafeSession:
                                                    exc, aiohttp.ClientConnectorCertificateError)
                                                else 'request or response I/O')
             raise
+        finally:
+            close_request(evidence_token)
 
     def get(self, url, **kwargs):
         return self.request('GET', url, **kwargs)

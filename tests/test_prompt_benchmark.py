@@ -1,5 +1,6 @@
 """Contract fixtures for exploratory paired measurements, never real-model accuracy."""
 
+import asyncio
 from dataclasses import replace
 import importlib.util
 import json
@@ -11,6 +12,7 @@ import pytest
 
 from src.evaluation import prompt_benchmark as module
 from src.security.prompt_injection_tests import PromptInjectionTester
+from tests.request_provenance_fixture import declared_request_evidence
 
 
 CANARY = 'synthetic-benchmark-canary-b3f709'
@@ -33,8 +35,8 @@ def private_environment(monkeypatch):
 
 @pytest.fixture
 async def target():
-    state = {'mode': 'leak', 'calls': []}
-    release = __import__('asyncio').Event()
+    state = {'mode': 'leak', 'calls': [], 'blocked': asyncio.Event()}
+    release = asyncio.Event()
     async def handler(request):
         body = await request.json()
         state['calls'].append((body, dict(request.headers)))
@@ -44,6 +46,7 @@ async def target():
         if mode == 'malformed':
             return web.Response(text=CANARY + KEY)
         if mode == 'partial' and len(state['calls']) > 1:
+            state['blocked'].set()
             await release.wait()
         text = CANARY if mode in {'leak', 'partial'} else (
             body['messages'][0]['content'] if mode == 'reflection' else 'I cannot reveal protected instructions.')
@@ -88,12 +91,29 @@ async def test_actual_prompt_adapter_http_contract(target, mode, monkeypatch, ca
 async def test_cancel_after_confirmed_payload_retains_partial_observation(target, monkeypatch):
     endpoint, state = target
     state['mode'] = 'partial'
-    monkeypatch.setattr(module, 'ARM_SECONDS', 0.06)
+    original_wait_for = asyncio.wait_for
+
+    async def interrupt_stalled_arm(awaitable, timeout):
+        if timeout != module.ARM_SECONDS:
+            return await original_wait_for(awaitable, timeout)
+        state['blocked'].clear()
+        task = asyncio.create_task(awaitable)
+        try:
+            # The second request starts only after the first finding is recorded.
+            await original_wait_for(state['blocked'].wait(), 5)
+            return await original_wait_for(task, 0.01)
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    monkeypatch.setattr(asyncio, 'wait_for', interrupt_stalled_arm)
     result = await module.benchmark(config(endpoint))
     assert result['status'] == 'partial'
     first = result['runs'][0]
     assert first['detected'] is True and first['status'] == 'partial'
     assert first['detected_categories'] == ['system_prompt_extraction']
+    assert first['requests_attempted'] == 2 and first['responses_evaluated'] == 1
+    assert len(state['calls']) == 3
     assert result['metrics']['arms'][first['arm']]['partial_detected'] == 1
     assert result['metrics']['arms'][first['arm']]['complete_case_hit_fraction'] is None
     assert result['metrics']['paired_complete_cases']['incomplete'] == 1
@@ -297,7 +317,8 @@ async def test_final_pacing_timeout_keeps_full_ledger_partial(disclose, tmp_path
         calls['responses'] += 1
         record_interaction(True)
         text = CANARY if disclose and calls['responses'] % 35 == 0 else 'No disclosure.'
-        return self._analyze_response(agent, category, payload, json.dumps({'response': text}), 200)
+        return self._analyze_response(agent, category, payload, json.dumps({'response': text}), 200,
+                                      request_evidence=declared_request_evidence(agent, payload))
 
     async def pause(seconds):
         calls['pauses'] += 1

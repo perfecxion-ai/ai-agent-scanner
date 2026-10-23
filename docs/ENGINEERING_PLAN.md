@@ -39,8 +39,8 @@ proposed calls and observed actions are distinct outcomes.
 | Slice | Finding and work | Required acceptance | State |
 | --- | --- | --- | --- |
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Merged in PR #64; local, independent, and all eight PR/post-merge CI gates passed |
-| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence merged in PR #65; local, independent, and all eight PR/post-merge CI gates passed. In-progress evidence and CLI crash recovery remain separate gates |
-| R1.3 | Database score columns retain unknown as `0.0`; historical authentication evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Historical-evidence prerequisite passes local and independent gates; PR/CI pending. Migration follows |
+| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence merged in PR #65 with all gates passed. Prompt-only within-check receipts in PR #67 pass local acceptance and focused review; required CI results are recorded on the PR. Tenant/access receipts and CLI crash recovery remain separate gates |
+| R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Protected-access prerequisite merged in PR #66 with all gates passed. Historical prompt eligibility still requires a guard before migration |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | Planned |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | Planned |
 | R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
@@ -94,6 +94,39 @@ with a nonzero exit. An in-memory accumulator is not CLI process-crash durabilit
 that claim needs a separate explicit private checkpoint-file contract and tests.
 Within-check observations need real provenance/counters before the next await.
 Neither missing evidence nor an interrupted category can establish a pass.
+
+R1.2b begins with prompt-disclosure observations only. Its reviewed design uses
+immutable, per-asset execution receipts bound to one reserved request and evaluated
+response. Receipts and finalized checks are distinct ledgers; `checks_unfinished`
+counts receipt-backed checks lacking a terminal record, including after recovery.
+New-mode prompt confirmations require supported receipts even after completion;
+unsupported custom catalogs remain visible but cannot fall back to legacy scoring.
+Actual legacy reports and standalone benchmark execution retain their old contract.
+Their historical prompt confirmations do not acquire the new request-exclusion
+guarantee. Existing numeric eligibility for pre-receipt prompt reports remains an
+open historical-evidence guard prerequisite before the R1.3 nullable migration;
+preserve archive contents and never resolve those claims from nondisclosure.
+Privacy guards cover newly emitted descriptors before security work, and every
+projection uses the same secret basis. Acceptance must interrupt the same category
+after an acknowledged receipt, not merely stop a later category. Tenant/access
+receipts and CLI crash files remain explicit follow-ups.
+
+Next-slice review reproduced a tenant correctness prerequisite: a local endpoint
+without tenant data can echo a configured canary supplied as the model or
+Authorization value and produce five eligible confirmed findings. The existing
+guard excludes only prompt reflection, and no authorized tenant-data baseline
+establishes provenance. Correct this boundary and define positive/negative tenant
+controls before extending within-check receipts to tenant observations. Preserve
+historical reports but do not mistake their recorded claims for supported current
+evidence. See the [scoped reproduction](VALIDATION.md#tenant-evidence-prerequisite-for-the-next-increment).
+The prompt audit also reproduces false confirmations from case-changed outbound
+values and transport-added headers. PR #67 now requires a complete private
+request snapshot to exclude these marker sources before confirmation and receipt
+minting. Source version 2.0 distinguishes the tightened receipt semantics from
+the unmerged draft. Response matching remains exact, frozen probe bytes/hashes and
+budgets are unchanged, and missing or incomplete request provenance cannot confirm. This does
+not prove independent target-side seeding or exclusion of arbitrary transformations.
+See the [reflection correction evidence](VALIDATION.md#prompt-request-reflection-correction).
 
 Proposed R2 usability acceptance is five unfamiliar operators completing the
 public vulnerable/defended lab within 15 minutes without editing JSON or receiving
@@ -263,12 +296,15 @@ the strategic review does not retroactively expand any acceptance claim.
   R1.2 remains open. Completed-check persistence is merged in PR #65 with local,
   independent, and all eight PR/post-merge gates passing. In-progress confirmation
   recovery requires a separate contract. Historical protected-access eligibility
-  passes local and independent acceptance; PR/CI remains pending. It is a
-  prerequisite for that work and the nullable-score migration. See
+  is merged in PR #66 with all local, independent, and PR/post-merge CI gates passed.
+  The prompt-only within-check evidence slice passes 3,216 local coverage tests and 793
+  overlapping independent cases; required CI results are recorded on PR #67. Tenant/access
+  and CLI crash-file gates remain separate. See
   [review evidence](VALIDATION.md#strategic-review-and-revised-roadmap) and
   [local control acceptance](VALIDATION.md#protected-access-positive-control-local-acceptance),
   [checkpoint acceptance](VALIDATION.md#finalized-check-checkpoint-local-acceptance),
-  and [compatibility acceptance](VALIDATION.md#historical-protected-access-compatibility-follow-up).
+  [compatibility acceptance](VALIDATION.md#historical-protected-access-compatibility-follow-up),
+  and [prompt receipt acceptance](VALIDATION.md#within-check-prompt-receipt-local-acceptance).
 - Evaluation completed by architecture, security, and delivery reviewers.
 - M1 has implemented operator authentication, scan ownership, package/CI repairs,
   persisted results, conservative evidence checks, and initial discovery fixes.
