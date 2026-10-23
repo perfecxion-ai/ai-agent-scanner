@@ -1,9 +1,14 @@
 from datetime import datetime, timezone
+from copy import deepcopy
 from typing import List, Dict, Any, Optional, Callable
 import logging
 from src.core.transport import current_budget
 from src.utils.request_builder import construct_agent_request, missing_credential_reason
-from src.core.contracts import CHECK_SCHEMA_VERSION, CheckpointError, collect_checks, missing_checks, risk_assessment_eligible
+from src.core.contracts import (
+    CHECK_SCHEMA_VERSION, CHECK_EVIDENCE_SCHEMA_VERSION, CheckpointError,
+    collect_checks, collect_evidence, missing_checks, risk_assessment_eligible,
+    unfinished_evidence_checks,
+)
 from src.risk.risk_assessor import SEVERITY_SCORES
 
 # Import test modules from guardrail tester
@@ -56,6 +61,30 @@ class SecurityTestEngine:
     
     async def _test_single_agent(self, agent: Dict[str, Any]) -> Dict[str, Any]:
         """Test a single agent for security vulnerabilities"""
+        with collect_evidence(agent) as evidence:
+            result = await self._test_agent_result(agent, evidence)
+            self._attach_evidence(result, evidence)
+            return result
+
+    @staticmethod
+    def _attach_evidence(result, evidence):
+        """Retain exact observed occurrences even when a tester cannot return."""
+        result['check_evidence_schema_version'] = CHECK_EVIDENCE_SCHEMA_VERSION
+        result['check_evidence_run_id'] = evidence.run_id
+        result['check_evidence'] = deepcopy(evidence.receipts)
+        findings = result.setdefault('vulnerabilities', [])
+        for finding in evidence.findings:
+            matching = [item for item in findings if item.get('id') == finding['id']]
+            if len(matching) > 1 or any(item != finding for item in matching):
+                raise CheckpointError()
+            if not matching:
+                findings.append(deepcopy(finding))
+        unfinished = {identity[0] for identity in unfinished_evidence_checks(result)}
+        result['checks'] = [check for check in result.get('checks', [])
+                            if check['probe_version'] != '1:unexecuted' or check['rule_id'] not in unfinished]
+
+    async def _test_agent_result(self, agent, evidence):
+        """Run testers with an independently collected observation ledger."""
         
         test_results = {
             'agent_id': agent['id'],
@@ -117,6 +146,7 @@ class SecurityTestEngine:
             # Test 3: Data Privacy Violations
             privacy_results = await run_tester(self.privacy_tester)
             test_results['vulnerabilities'].extend(privacy_results)
+            self._attach_evidence(test_results, evidence)
             test_results['observations'] = [finding for finding in test_results['vulnerabilities']
                                             if finding.get('evidence_status') in ('heuristic', 'inconclusive')]
             test_results['vulnerabilities'] = [finding for finding in test_results['vulnerabilities']
@@ -145,6 +175,7 @@ class SecurityTestEngine:
             test_results['error'] = 'Security testing failed'
             test_results['overall_risk_score'] = None
         finally:
+            self._attach_evidence(test_results, evidence)
             test_results['observations'].extend(
                 finding for finding in test_results['vulnerabilities']
                 if finding.get('evidence_status') in ('heuristic', 'inconclusive'))

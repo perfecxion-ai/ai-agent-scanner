@@ -24,12 +24,12 @@ PRIVATE_CANARY = 'synthetic-checkpoint-recovery-canary'
 
 
 class RecoveryTester:
-    @checked('prompt_injection.system_prompt_extraction', ['recovery-fixture'],
+    @checked('fixture.finalized_disclosure', ['recovery-fixture'],
              oracle=lambda agent: True)
     async def complete(self, agent):
         record_interaction(True, decisive=True)
         return [{
-            'vulnerability_type': 'prompt_injection', 'severity': 'high',
+            'vulnerability_type': 'fixture_disclosure', 'severity': 'high',
             'description': 'Protected fixture ' + agent['system_prompt_canary'],
             'evidence_status': 'confirmed',
         }]

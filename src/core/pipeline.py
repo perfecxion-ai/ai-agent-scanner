@@ -12,12 +12,14 @@ from src.core.transport import current_budget, scan_transport, ScanBudget
 from src.core.redaction import collect_secrets, redact_secrets
 from src.core.risk_projection import project_agent_risk
 from src.core.access_probe_policy import PUBLIC_ACCESS_FIELDS
+from src.core.prompt_evidence_policy import PUBLIC_EVIDENCE_FIELDS, has_evidence_contract
 from src.reporting.sarif_output import generate_sarif
 from src.utils.request_builder import resolve_api_key
 from src.core.contracts import (
-    CHECK_SCHEMA_VERSION, CheckpointError, MAX_CHECKPOINTS, MAX_CHECKPOINT_BYTES,
+    CHECK_SCHEMA_VERSION, CHECK_EVIDENCE_SCHEMA_VERSION, CheckpointError, MAX_CHECKPOINTS, MAX_CHECKPOINT_BYTES,
     MAX_CHECKPOINT_TOTAL_BYTES, confirmed_findings, missing_checks, observe_checks,
     validate_checks, validate_scan_result, validate_checkpoint_report, risk_assessment_eligible,
+    observe_evidence, validate_check_evidence, unfinished_evidence_checks,
 )
 from src.security.prompt_suites import PROTECTED_DISCLOSURE_SUITE, validate_prompt_suite_agents
 from src.security.security_engine import SecurityTestEngine
@@ -30,6 +32,9 @@ def _validate_access_field_privacy(secrets):
     if any(secret and any(secret.casefold() in field.casefold() for field in PUBLIC_ACCESS_FIELDS)
            for secret in secrets):
         raise ValueError('Protected evidence conflicts with public access fields')
+    if any(secret and any(secret.casefold() in field.casefold() for field in PUBLIC_EVIDENCE_FIELDS)
+           for secret in secrets):
+        raise ValueError('Protected evidence conflicts with public evidence fields')
 
 
 def public_metadata(metadata):
@@ -74,13 +79,16 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
         if prompt_suite is not None:
             validate_prompt_suite_agents(observations)
     checkpoint = None
+    evidence_enabled = scan_type != 'discovery_only' and isinstance(security, SecurityTestEngine)
+    adapter_evidence_mode = None
     if scan_type != "discovery_only" and isinstance(security, SecurityTestEngine):
         # Ordinary and checkpointed reports use the same privacy/evidence basis.
         secrets.update(security.checkpoint_secrets(observations))
     if scan_type != "discovery_only":
         _validate_access_field_privacy(secrets)
     if checkpoint_callback is not None:
-        checkpoint = _CheckpointState(observations, risk, scan_type, prompt_suite, secrets, checkpoint_callback)
+        checkpoint = _CheckpointState(observations, risk, scan_type, prompt_suite, secrets,
+                                      checkpoint_callback, evidence_enabled=evidence_enabled)
         await checkpoint.publish()
     if scan_type != "discovery_only":
         for index, agent in enumerate(observations):
@@ -93,7 +101,10 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
                         await checkpoint.start(index)
                     async def observed(check, findings):
                         await checkpoint.accept(index, check, findings)
-                    with observe_checks(observed) if checkpoint else nullcontext():
+                    async def evidence_observed(receipt, finding):
+                        await checkpoint.accept_evidence(index, receipt, finding)
+                    with (observe_checks(observed) if checkpoint else nullcontext(),
+                          observe_evidence(evidence_observed) if checkpoint else nullcontext()):
                         results = await security.test_agents([agent])
                     result = results[0] if results else {}
                     if result.get("status") not in {"completed", "partial", "failed", "skipped"}:
@@ -108,6 +119,20 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
                 result["error"] = "Security testing failed"
             # Probe versions bind original public context, not tester-supplied labels.
             result['provider'], result['model'] = agent.get('provider'), agent.get('model')
+            supplied_evidence = has_evidence_contract(result)
+            if supplied_evidence:
+                validate_check_evidence(result, strict=not isinstance(security, SecurityTestEngine))
+            if not isinstance(security, SecurityTestEngine):
+                if adapter_evidence_mode is not None and adapter_evidence_mode != supplied_evidence:
+                    raise ValueError('Mixed evidence contracts are not supported by this adapter')
+                adapter_evidence_mode = supplied_evidence
+            if supplied_evidence:
+                evidence_enabled = True
+                if checkpoint:
+                    checkpoint.evidence_enabled = True
+            if evidence_enabled:
+                result.setdefault('check_evidence_schema_version', CHECK_EVIDENCE_SCHEMA_VERSION)
+                result.setdefault('check_evidence', [])
             if "checks" in result:
                 try:
                     validate_checks(result["checks"])
@@ -132,7 +157,8 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
     if checkpoint:
         return checkpoint.final_report()
     risks, risk_status = await _assess_results(risk, security_results)
-    return _project_report(observations, security_results, risks, risk_status, scan_type, prompt_suite, secrets)
+    return _project_report(observations, security_results, risks, risk_status, scan_type, prompt_suite, secrets,
+                           evidence_enabled=evidence_enabled)
 
 
 async def _assess_results(risk, security_results):
@@ -150,7 +176,7 @@ async def _assess_results(risk, security_results):
 
 
 def _project_report(observations, security_results, risks, risk_status, scan_type, prompt_suite, secrets,
-                    *, incomplete=False):
+                    *, incomplete=False, evidence_enabled=False):
     """One canonical projection for ordinary reports and durable evidence snapshots."""
     if scan_type != "discovery_only":
         _validate_access_field_privacy(secrets)
@@ -207,6 +233,12 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
         agent["vulnerabilities"] = test.get("vulnerabilities", [])
         agent["observations"] = test.get("observations", [])
         agent["checks"] = test.get("checks", missing_checks([], "Security testing was not requested"))
+        if evidence_enabled:
+            agent['check_evidence_schema_version'] = test.get(
+                'check_evidence_schema_version', CHECK_EVIDENCE_SCHEMA_VERSION)
+            agent['check_evidence'] = test.get('check_evidence', [])
+            if 'check_evidence_run_id' in test:
+                agent['check_evidence_run_id'] = test['check_evidence_run_id']
         if prompt_suite is not None and scan_type != "discovery_only":
             agent["prompt_suite"] = prompt_suite
         agent["risk_score"] = assessment.get("overall_risk_score")
@@ -224,6 +256,7 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
     report = redact_secrets({
         "schema_version": SCHEMA_VERSION,
         "check_schema_version": CHECK_SCHEMA_VERSION,
+        **({'check_evidence_schema_version': CHECK_EVIDENCE_SCHEMA_VERSION} if evidence_enabled else {}),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": scan_type,
         **({"prompt_suite": prompt_suite} if prompt_suite is not None and scan_type != "discovery_only" else {}),
@@ -245,6 +278,8 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
             "checks_completed": sum(check["status"] == "completed" for agent in observations for check in agent["checks"]),
             "checks_skipped": sum(check["status"] == "skipped" for agent in observations for check in agent["checks"]),
             "checks_failed": sum(check["status"] == "failed" for agent in observations for check in agent["checks"]),
+            **({'checks_unfinished': sum(len(unfinished_evidence_checks(agent)) for agent in observations)}
+               if evidence_enabled else {}),
         },
     }, secrets)
     return validate_scan_result(report)
@@ -253,13 +288,14 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
 class _CheckpointState:
     """Scan-local evidence ledger; only acknowledged independent copies escape."""
 
-    def __init__(self, observations, risk, scan_type, prompt_suite, secrets, callback):
+    def __init__(self, observations, risk, scan_type, prompt_suite, secrets, callback, *, evidence_enabled=False):
         self.observations = deepcopy(observations)
         identifiers = [agent.get("id") for agent in observations]
         if any(not isinstance(value, str) or not value for value in identifiers) or len(set(identifiers)) != len(identifiers):
             raise CheckpointError()
         self.risk, self.scan_type, self.prompt_suite = risk, scan_type, prompt_suite
         self.secrets, self.callback = secrets, callback
+        self.evidence_enabled = evidence_enabled
         self.results, self.assessed = {}, {}
         self.sequence = self.total_bytes = 0
         self.last = None
@@ -272,6 +308,8 @@ class _CheckpointState:
             "metadata": public_metadata(agent.get("metadata", {})),
             "check_schema_version": CHECK_SCHEMA_VERSION, "status": "partial",
             "vulnerabilities": [], "observations": [], "checks": [],
+            **({'check_evidence_schema_version': CHECK_EVIDENCE_SCHEMA_VERSION, 'check_evidence': []}
+               if self.evidence_enabled else {}),
         }
         await self.publish()
 
@@ -318,7 +356,7 @@ class _CheckpointState:
             raise CheckpointError()
         if any(finding["evidence_status"] == "confirmed" for finding in findings) != (check["outcome"] == "confirmed"):
             raise CheckpointError()
-        result = self.results[index]
+        result = deepcopy(self.results[index])
         unchanged = check in result["checks"]
         result["checks"] = self._merge_checks(result["checks"], [check])
         for key in ("vulnerabilities", "observations"):
@@ -327,9 +365,46 @@ class _CheckpointState:
             merged = self._merge_findings(result[key], incoming)
             unchanged &= merged == result[key]
             result[key] = merged
+        if self.evidence_enabled:
+            validate_check_evidence(result, strict=False)
+        self.results[index] = result
         self.secrets.update(collect_secrets(findings))
         if not unchanged and (check["status"] != "skipped" or findings):
             await self.refresh()
+
+    @staticmethod
+    def _merge_receipts(existing, incoming):
+        merged = deepcopy(existing)
+        by_id = {item['id']: item for item in existing}
+        if len(by_id) != len(existing):
+            raise CheckpointError()
+        for receipt in incoming:
+            previous = by_id.get(receipt['id'])
+            if previous is not None and previous != receipt:
+                raise CheckpointError()
+            if previous is None:
+                copied = deepcopy(receipt)
+                merged.append(copied)
+                by_id[copied['id']] = copied
+        return merged
+
+    async def accept_evidence(self, index, receipt, finding):
+        if not self.evidence_enabled:
+            raise CheckpointError()
+        previous = self.results[index]
+        result = deepcopy(previous)
+        if (result.get('check_evidence_run_id') not in (None, receipt.get('run_id'))
+                or receipt.get('agent_id') != self.observations[index]['id']):
+            raise CheckpointError()
+        result['check_evidence_run_id'] = receipt['run_id']
+        result['check_evidence'] = self._merge_receipts(result['check_evidence'], [receipt])
+        result['vulnerabilities'] = self._merge_findings(result['vulnerabilities'], [finding])
+        validate_check_evidence(result)
+        if result == previous:
+            return
+        self.results[index] = result
+        self.secrets.update(collect_secrets([receipt, finding]))
+        await self.refresh()
 
     async def finish(self, index, result):
         previous = self.results.get(index, {})
@@ -337,6 +412,18 @@ class _CheckpointState:
         merged["checks"] = self._merge_checks(previous.get("checks", []), result.get("checks", []))
         for key in ("vulnerabilities", "observations"):
             merged[key] = self._merge_findings(previous.get(key, []), result.get(key, []))
+        if self.evidence_enabled:
+            merged.setdefault('check_schema_version', CHECK_SCHEMA_VERSION)
+            merged['check_evidence_schema_version'] = result.get(
+                'check_evidence_schema_version', CHECK_EVIDENCE_SCHEMA_VERSION)
+            old_run, new_run = previous.get('check_evidence_run_id'), result.get('check_evidence_run_id')
+            if old_run is not None and new_run is not None and old_run != new_run:
+                raise CheckpointError()
+            if old_run is not None or new_run is not None:
+                merged['check_evidence_run_id'] = old_run or new_run
+            merged['check_evidence'] = self._merge_receipts(
+                previous.get('check_evidence', []), result.get('check_evidence', []))
+            validate_check_evidence(merged, strict=False)
         self.results[index] = merged
         self.secrets.update(collect_secrets(merged))
         await self.refresh()
@@ -389,18 +476,23 @@ class _CheckpointState:
     def _report(self, *, incomplete):
         results = deepcopy(list(self.results.values()))
         for result in results:
-            result["checks"].extend(missing_checks(result["checks"], "No finalized check evidence at checkpoint"))
+            unfinished = {identity[0] for identity in unfinished_evidence_checks(result)}
+            result["checks"].extend(check for check in missing_checks(
+                result["checks"], "No finalized check evidence at checkpoint") if check['rule_id'] not in unfinished)
         risks = self._current_risks()
         if risks:
             risk_status = "partial" if any(item["coverage_status"] == "partial" for item in risks) else "completed"
         else:
             risk_status = "not_assessed" if any(item["status"] == "completed" for item in results) else "not_run"
         return _project_report(self.observations, results, risks, risk_status, self.scan_type,
-                               self.prompt_suite, self.secrets, incomplete=incomplete)
+                               self.prompt_suite, self.secrets, incomplete=incomplete,
+                               evidence_enabled=self.evidence_enabled)
 
     def _preserves_previous(self, report):
         if self.last is None:
             return
+        if len(self.last['agents']) != len(report['agents']):
+            raise CheckpointError()
         for previous, current in zip(self.last["agents"], report["agents"]):
             fields = ("id", "name", "type", "provider", "model", "endpoint", "endpoint_redacted", "metadata")
             if any(previous.get(key) != current.get(key) for key in fields):
@@ -413,14 +505,25 @@ class _CheckpointState:
                 after = Counter(json.dumps(finding, sort_keys=True, allow_nan=False) for finding in current[key])
                 if before - after:
                     raise CheckpointError()
+            if previous.get('check_evidence_run_id') is not None and (
+                    previous['check_evidence_run_id'] != current.get('check_evidence_run_id')):
+                raise CheckpointError()
+            if 'check_evidence_schema_version' in previous and (
+                    previous['check_evidence_schema_version'] != current.get('check_evidence_schema_version')):
+                raise CheckpointError()
+            old_receipts = previous.get('check_evidence', [])
+            if current.get('check_evidence', [])[:len(old_receipts)] != old_receipts:
+                raise CheckpointError()
 
     async def publish(self):
         try:
             if self.sequence >= MAX_CHECKPOINTS:
                 raise CheckpointError()
             report = self._report(incomplete=True)
-            report["checkpoint"] = {"version": "1.0", "sequence": self.sequence + 1,
-                                    "coverage": "finalized_checks_only"}
+            report["checkpoint"] = {
+                "version": "2.0" if self.evidence_enabled else "1.0", "sequence": self.sequence + 1,
+                "coverage": "confirmed_observations_and_finalized_checks" if self.evidence_enabled
+                else "finalized_checks_only"}
             validate_checkpoint_report(report)
             encoded = json.dumps(report, ensure_ascii=True, allow_nan=False, separators=(",", ":")).encode("utf-8")
             if len(encoded) > MAX_CHECKPOINT_BYTES or self.total_bytes + len(encoded) > MAX_CHECKPOINT_TOTAL_BYTES:
@@ -470,6 +573,14 @@ def to_sarif(result):
         report["runs"][0]["properties"]["source_inventory"] = deepcopy(result["source_inventory"])
     if "checkpoint" in result:
         report["runs"][0]["properties"]["checkpoint"] = deepcopy(result["checkpoint"])
+    if 'check_evidence_schema_version' in result:
+        report['runs'][0]['properties']['check_evidence_schema_version'] = result['check_evidence_schema_version']
+        report['runs'][0]['properties']['check_evidence'] = [
+            {'agent_id': agent['id'],
+             **({'check_evidence_run_id': agent['check_evidence_run_id']}
+                if 'check_evidence_run_id' in agent else {}),
+             'check_evidence': deepcopy(agent.get('check_evidence', []))}
+            for agent in result.get('agents', [])]
     if result.get("prompt_suite") == PROTECTED_DISCLOSURE_SUITE:
         report["runs"][0]["properties"]["prompt_suite"] = PROTECTED_DISCLOSURE_SUITE
     return report
