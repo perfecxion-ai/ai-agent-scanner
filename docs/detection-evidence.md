@@ -61,8 +61,9 @@ controls succeed; successful responses without the marker remain inconclusive.
 An endpoint that denies every request is not evidence of effective protection.
 Earlier confirmations survive an ordinary later request/control failure.
 Cancellation marks an unfinished check failed, even after every response was
-evaluated. Durable retention of in-flight findings on cancellation or an outer
-scan deadline remains separate work.
+evaluated. [Finalized-check checkpoints](jobs.md#finalized-check-checkpoints)
+retain earlier checks through later termination. Findings still inside the
+unfinished check are not covered by that persistence contract.
 
 V2 access markers must use exactly `[A-Za-z0-9_.~-]{16,128}`. No trimming,
 decoding, case conversion, or other normalization is used for response matching.
@@ -262,9 +263,11 @@ provenance; nondisclosure cannot resolve a previous leak in either suite.
 Exact protected-marker disclosure can retain 70/high even if later requests
 fail; nondisclosure or an unseeded marker stays inconclusive with null risk unless
 other conclusive evidence supports assessment. Generated response text remains
-omitted. An outer scan deadline/cancellation may prevent a report from being
-produced; this feature does not add in-flight finding recovery or automatic
-retries. The benchmark's observation checkpoint is not a normal finding ledger.
+omitted. A later deadline or cancellation retains the last finalized-check
+checkpoint, if one exists; observations inside an unfinished check can still be
+lost. The CLI exports retained evidence on orderly interruption, but has no
+process-crash recovery. No automatic retry is added. The benchmark's observation
+checkpoint is not a normal finding ledger.
 
 Default discovery-only configurations cannot confirm prompt disclosure or
 authentication bypass. They may produce observations requiring manual validation.

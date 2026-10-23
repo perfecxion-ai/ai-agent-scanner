@@ -17,16 +17,17 @@ import threading
 import asyncio
 import hmac
 import uuid
+import json
 from copy import deepcopy
 from functools import wraps
-from contextlib import suppress
+from contextlib import suppress, contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
 
 from flask import Flask, render_template, request, jsonify, g
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, Session
 from sqlalchemy import String, DateTime, Integer, Float, Boolean, Text, JSON, select, update
 from werkzeug.exceptions import HTTPException, BadRequest, NotFound, TooManyRequests, Conflict
 
@@ -40,10 +41,10 @@ from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
 from src.core.risk_projection import project_agent_risk, project_report_risk
 from src.core.model_selection import apply_model_overrides, canonical_model_overrides
-from src.core.contracts import validate_scan_result
+from src.core.contracts import validate_scan_result, MAX_CHECKPOINT_TOTAL_BYTES, CheckpointError
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
 from src.core.transport import ScanBudget, scan_transport, current_budget
-from src.core.jobs import JobStore, JobDispatcher, TERMINAL_STATES
+from src.core.jobs import JobStore, JobDispatcher, TERMINAL_STATES, current_claim_owner, snapshot_id
 from src.core.schema import initialize_schema, SCHEMA_VERSION
 from src.core.templates import project_template, template_revision
 from src.core.schedules import ScheduleService, schedule_definition
@@ -1025,57 +1026,59 @@ def _snapshot_asset_id(agent):
     return identifier if isinstance(identifier, str) and identifier else None
 
 
+@contextmanager
+def _read_snapshot():
+    """Read related projections in one short actual SQLite transaction."""
+    with db.engine.connect() as connection, connection.begin():
+        # sqlite3 legacy transaction mode does not issue BEGIN for SELECT.
+        if connection.dialect.name == 'sqlite':
+            connection.exec_driver_sql('BEGIN')
+        with Session(bind=connection, expire_on_commit=False) as session:
+            yield session
+
+
+def _scan_result_payload(scan_id, organization_id):
+    with _read_snapshot() as session:
+        scan_session = session.query(ScanSession).filter_by(id=scan_id, organization_id=organization_id).first()
+        if not scan_session:
+            return None
+        agents = session.query(DiscoveredAgentModel).filter_by(scan_id=scan_id).all()
+        persisted = session.get(ScanResult, scan_id)
+        risk_summary, risk_agents = project_report_risk(persisted.result if persisted else None)
+        return {
+            'scan_info': {
+                'id': scan_session.id, 'name': scan_session.scan_name,
+                'type': scan_session.scan_type, 'status': scan_session.status,
+                'created_at': scan_session.created_at.isoformat(),
+                'completed_at': scan_session.completed_at.isoformat() if scan_session.completed_at else None,
+            },
+            'summary': {
+                'agents_discovered': scan_session.agents_discovered,
+                'vulnerabilities_found': scan_session.vulnerabilities_found,
+                'critical_risks': scan_session.critical_risks, **risk_summary,
+            },
+            'agents': [{
+                'id': agent.id, 'asset_id': _snapshot_asset_id(agent), 'name': agent.agent_name,
+                'type': agent.agent_type, 'provider': agent.provider, 'endpoint': agent.endpoint_url,
+                **risk_agents.get(_snapshot_asset_id(agent), project_agent_risk()),
+                'vulnerabilities': agent.vulnerabilities, 'discovered_at': agent.discovered_at.isoformat(),
+            } for agent in agents],
+            'pipeline': persisted.result if persisted else None,
+        }
+
+
 @app.route("/api/scans/<scan_id>/results")
 @require_auth
 def get_scan_results(scan_id):
     """Get complete scan results."""
     try:
-        scan_session = ScanSession.query.filter_by(
-            id=scan_id, organization_id=g.user["organization_id"]
-        ).first()
-        if not scan_session:
+        results = _scan_result_payload(scan_id, g.user['organization_id'])
+        if results is None:
             return jsonify({"success": False, "error": "Scan not found"}), 404
-
-        agents = DiscoveredAgentModel.query.filter_by(scan_id=scan_id).all()
-        persisted = db.session.get(ScanResult, scan_id)
-        risk_summary, risk_agents = project_report_risk(persisted.result if persisted else None)
-
-        results = {
-            "scan_info": {
-                "id": scan_session.id,
-                "name": scan_session.scan_name,
-                "type": scan_session.scan_type,
-                "status": scan_session.status,
-                "created_at": scan_session.created_at.isoformat(),
-                "completed_at": scan_session.completed_at.isoformat() if scan_session.completed_at else None,
-            },
-            "summary": {
-                "agents_discovered": scan_session.agents_discovered,
-                "vulnerabilities_found": scan_session.vulnerabilities_found,
-                "critical_risks": scan_session.critical_risks,
-                **risk_summary,
-            },
-            "agents": [
-                {
-                    "id": agent.id,
-                    "asset_id": _snapshot_asset_id(agent),
-                    "name": agent.agent_name,
-                    "type": agent.agent_type,
-                    "provider": agent.provider,
-                    "endpoint": agent.endpoint_url,
-                    **risk_agents.get(_snapshot_asset_id(agent), project_agent_risk()),
-                    "vulnerabilities": agent.vulnerabilities,
-                    "discovered_at": agent.discovered_at.isoformat(),
-                }
-                for agent in agents
-            ],
-        }
-        results["pipeline"] = persisted.result if persisted else None
-
         return jsonify({"success": True, "results": results})
 
-    except Exception as e:
-        app.logger.error(f"Error fetching results: {e}", exc_info=True)
+    except Exception:
+        app.logger.error("Error fetching results")
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
@@ -1105,28 +1108,27 @@ def list_agents():
         risk_level = request.args.get("risk_level")
         agent_type = request.args.get("agent_type")
 
-        query = db.session.query(DiscoveredAgentModel).join(
-            ScanSession, DiscoveredAgentModel.scan_id == ScanSession.id
-        ).filter(ScanSession.organization_id == org_id)
-
-        if agent_type:
-            query = query.filter(DiscoveredAgentModel.agent_type == agent_type)
-
-        window = query.order_by(DiscoveredAgentModel.discovered_at.desc(), DiscoveredAgentModel.id).limit(101).all()
-        agents = window[:100]
-        scan_ids = {agent.scan_id for agent in agents}
-        reports = db.session.query(ScanResult).join(ScanSession, ScanResult.scan_id == ScanSession.id).filter(
-            ScanSession.organization_id == org_id, ScanResult.scan_id.in_(scan_ids)).all() if scan_ids else []
-        risks = {row.scan_id: project_report_risk(row.result)[1] for row in reports}
-        projected = [{
-            "id": agent.id,
-            "asset_id": _snapshot_asset_id(agent),
-            "name": agent.agent_name,
-            "type": agent.agent_type,
-            "provider": agent.provider,
-            **risks.get(agent.scan_id, {}).get(_snapshot_asset_id(agent), project_agent_risk()),
-            "discovered_at": agent.discovered_at.isoformat(),
-        } for agent in agents]
+        with _read_snapshot() as session:
+            query = session.query(DiscoveredAgentModel).join(
+                ScanSession, DiscoveredAgentModel.scan_id == ScanSession.id
+            ).filter(ScanSession.organization_id == org_id)
+            if agent_type:
+                query = query.filter(DiscoveredAgentModel.agent_type == agent_type)
+            window = query.order_by(DiscoveredAgentModel.discovered_at.desc(), DiscoveredAgentModel.id).limit(101).all()
+            agents = window[:100]
+            scan_ids = {agent.scan_id for agent in agents}
+            reports = session.query(ScanResult).join(ScanSession, ScanResult.scan_id == ScanSession.id).filter(
+                ScanSession.organization_id == org_id, ScanResult.scan_id.in_(scan_ids)).all() if scan_ids else []
+            risks = {row.scan_id: project_report_risk(row.result)[1] for row in reports}
+            projected = [{
+                "id": agent.id,
+                "asset_id": _snapshot_asset_id(agent),
+                "name": agent.agent_name,
+                "type": agent.agent_type,
+                "provider": agent.provider,
+                **risks.get(agent.scan_id, {}).get(_snapshot_asset_id(agent), project_agent_risk()),
+                "discovered_at": agent.discovered_at.isoformat(),
+            } for agent in agents]
         if risk_level:
             projected = [agent for agent in projected if agent["risk_level"] == risk_level]
 
@@ -1142,8 +1144,8 @@ def list_agents():
             },
         })
 
-    except Exception as e:
-        app.logger.error(f"Error listing agents: {e}", exc_info=True)
+    except Exception:
+        app.logger.error("Error listing agents")
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
@@ -1202,6 +1204,7 @@ def stop_job_dispatcher():
 
 def _execute_job(scan_id, cancelled):
     with app.app_context():
+        _require_claim(scan_id)
         scan = db.session.get(ScanSession, scan_id)
         if not scan:
             raise ValueError("Job has no scan")
@@ -1216,7 +1219,42 @@ def _execute_job(scan_id, cancelled):
 
 def _record_terminal(scan_id, status, error):
     with app.app_context():
-        _get_job_store().finish(scan_id, error, status=status)
+        owner = current_claim_owner(scan_id)
+        if owner is not None:
+            _get_job_store().finish(scan_id, error, status=status, owner=owner)
+
+
+def _require_claim(scan_id):
+    owner = current_claim_owner(scan_id)
+    job = db.session.get(ScanJob, scan_id)
+    if not owner or not job or job.owner != owner or job.status not in ('running', 'cancel_requested'):
+        raise RuntimeError('Scan execution requires its active dispatcher claim')
+    return owner
+
+
+def _snapshot_rows(scan_id, result, discovered_at):
+    return [dict(
+        id=snapshot_id(scan_id, ordinal), scan_id=scan_id,
+        agent_name=agent['name'], agent_type=agent['type'], provider=agent.get('provider'),
+        model_name=agent.get('model'), endpoint_url=agent.get('endpoint'),
+        discovery_method=agent['discovery_method'],
+        security_tested=agent['security_status'] == 'completed',
+        vulnerabilities=agent['vulnerabilities'], risk_score=agent['risk_score'] or 0.0,
+        risk_level=agent['risk_level'], discovered_at=discovered_at,
+        metadata={**agent.get('metadata', {}), 'asset_id': agent['id'],
+                  'security_status': agent['security_status']})
+        for ordinal, agent in enumerate(result['agents'])]
+
+
+def _enrich_report(scan_id, result, source_coverage):
+    result = deepcopy(result)
+    result['scan_id'] = scan_id
+    if source_coverage is not None:
+        result['source_inventory'] = deepcopy(source_coverage)
+    budget = current_budget()
+    if budget and (budget.rejections or budget.failures):
+        result['status'] = 'partial'
+    return result
 
 
 async def _await_scan(scan_id, scan_type, target_scope, scan_config, cancelled):
@@ -1270,8 +1308,8 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
         _record_terminal(scan_id, status, "Scan cancelled" if requested else "Server stopped during scan")
     except TimeoutError:
         _record_terminal(scan_id, "failed", "Scan deadline exceeded")
-    except Exception as e:
-        app.logger.error(f"Scan thread error: {e}", exc_info=True)
+    except Exception:
+        app.logger.error("Scan thread failed")
         _record_terminal(scan_id, "failed", "Scan worker failed")
     finally:
         loop.close()
@@ -1283,6 +1321,8 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
     """Execute the full scan pipeline."""
 
     try:
+        with app.app_context():
+            owner = _require_claim(scan_id)
         _check_prompt_suite_pin(scan_config)
         if "prompt_suite" in scan_config and (scan_type != "security_only" or not scan_config.get("evidence_profiles")):
             raise ScopeValidationError("prompt_suite requires security_only with explicit evidence_profiles")
@@ -1307,6 +1347,7 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
         )
 
         source_agents = None
+        source_coverage = None
         if scan_type == "security_only":
             with app.app_context():
                 current = db.session.get(ScanSession, scan_id)
@@ -1338,40 +1379,46 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                 raise ScopeValidationError(str(exc)) from None
             execution_engine = SecurityTestEngine(prompt_suite=scan_config["prompt_suite"])
         _update_progress(scan_id, 10, "Running scan pipeline")
+        discovered_at = _utcnow()
+        checkpoint_bytes = 0
+
+        async def checkpoint(output):
+            nonlocal checkpoint_bytes
+            result = _enrich_report(scan_id, output, source_coverage)
+            snapshots = _snapshot_rows(scan_id, result, discovered_at)
+            # Count both durable JSON copies; SQL page/WAL amplification is not
+            # a portable byte measure. No detached writes survive cancellation.
+            encoded = json.dumps([result, [{key: value for key, value in row.items()
+                                          if key != 'discovered_at'} for row in snapshots]],
+                                 sort_keys=True, allow_nan=False, separators=(',', ':'))
+            size = len(encoded.encode('utf-8'))
+            if checkpoint_bytes + size > MAX_CHECKPOINT_TOTAL_BYTES:
+                raise CheckpointError()
+            try:
+                with app.app_context():
+                    accepted = _get_job_store().save_checkpoint(
+                        scan_id, result, DiscoveredAgentModel.__table__, snapshots, owner=owner)
+            except Exception:
+                raise CheckpointError() from None
+            if not accepted:
+                raise CheckpointError()
+            checkpoint_bytes += size
+
         result = await run_pipeline(discovery_engine, execution_engine, risk_assessor,
                                     scope, scan_type, agents=source_agents,
-                                    agent_validator=lambda agents: validate_agent_endpoints(agents, app.config))
-        result["scan_id"] = scan_id
-        if scan_type == "security_only":
-            result["source_inventory"] = source_coverage
-        budget = current_budget()
-        if budget and (budget.rejections or budget.failures):
-            result["status"] = "partial"
+                                    agent_validator=lambda agents: validate_agent_endpoints(agents, app.config),
+                                    checkpoint_callback=checkpoint)
+        result = _enrich_report(scan_id, result, source_coverage)
         _update_progress(scan_id, 95, "Saving results")
 
         # Save results
         with app.app_context():
-            snapshots = []
-            for agent_data in result["agents"]:
-                snapshots.append(dict(
-                    id=uuid.uuid4().hex,
-                    scan_id=scan_id,
-                    agent_name=agent_data["name"],
-                    agent_type=agent_data["type"],
-                    provider=agent_data.get("provider"),
-                    endpoint_url=agent_data.get("endpoint"),
-                    discovery_method=agent_data["discovery_method"],
-                    security_tested=agent_data["security_status"] == "completed",
-                    vulnerabilities=agent_data["vulnerabilities"],
-                    risk_score=agent_data["risk_score"] or 0.0,
-                    risk_level=agent_data["risk_level"],
-                    metadata={**agent_data.get("metadata", {}), "asset_id": agent_data["id"],
-                                   "security_status": agent_data["security_status"]},
-                ))
-            _get_job_store().save_result(scan_id, result, DiscoveredAgentModel.__table__, snapshots)
+            snapshots = _snapshot_rows(scan_id, result, discovered_at)
+            if not _get_job_store().save_result(scan_id, result, DiscoveredAgentModel.__table__, snapshots, owner=owner):
+                raise CheckpointError()
 
     except Exception as e:
-        app.logger.error(f"Scan execution error: {e}", exc_info=True)
+        app.logger.error("Scan execution failed")
         _record_terminal(scan_id, "failed", str(e) if isinstance(e, SourceReplayError) else "Scan execution failed")
 
 
@@ -1383,10 +1430,18 @@ def _update_progress(scan_id: str, progress: float, phase: str):
             _active_scans[scan_id]["current_phase"] = phase
 
     with app.app_context():
-        scan_session = db.session.get(ScanSession, scan_id)
-        if scan_session:
-            scan_session.progress = progress
-            db.session.commit()
+        owner = current_claim_owner(scan_id)
+        if owner is None:
+            return
+        # A late worker must not update a completed or newly claimed scan.
+        db.session.execute(update(ScanSession).where(
+            ScanSession.id == scan_id,
+            ScanSession.status == 'running',
+            ScanJob.scan_id == ScanSession.id,
+            ScanJob.owner == owner,
+            ScanJob.status.in_(('running', 'cancel_requested')),
+        ).values(progress=progress))
+        db.session.commit()
 
 
 # ---------------------------------------------------------------------------

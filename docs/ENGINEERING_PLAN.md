@@ -38,8 +38,8 @@ proposed calls and observed actions are distinct outcomes.
 
 | Slice | Finding and work | Required acceptance | State |
 | --- | --- | --- | --- |
-| R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Local gates and independent review passed; PR/CI pending |
-| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Design scoped; interruption prerequisite locally validated with R1.1; persistence pending |
+| R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Merged in PR #64; local, independent, and all eight PR/post-merge CI gates passed |
+| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence passes local and independent gates; PR/CI pending. In-progress evidence and CLI crash recovery remain separate gates |
 | R1.3 | Database score columns retain unknown as `0.0` despite correct public projections | Versioned migration derives values from validated saved evidence, preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Planned |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | Planned |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | Planned |
@@ -249,12 +249,14 @@ the strategic review does not retroactively expand any acceptance claim.
 
 ## Progress
 
-- The 2026-10-22 review establishes the active R1 through R4 roadmap. R1.1 and
-  R1.2 remain open delivery gates. The R1.1 working slice passes local and
-  independent acceptance, including interrupted-check accounting, but still
-  needs PR/post-merge CI. Durable checkpoint implementation is pending. See
+- The 2026-10-22 review establishes the active R1 through R4 roadmap. R1.1 is
+  merged with local, independent, and all eight PR/post-merge checks passing.
+  R1.2 remains open. Completed-check persistence passes local and independent
+  acceptance; PR/CI is pending. In-progress confirmation recovery requires a
+  separate contract. See
   [review evidence](VALIDATION.md#strategic-review-and-revised-roadmap) and
-  [local control acceptance](VALIDATION.md#protected-access-positive-control-local-acceptance).
+  [local control acceptance](VALIDATION.md#protected-access-positive-control-local-acceptance),
+  and [checkpoint acceptance](VALIDATION.md#finalized-check-checkpoint-local-acceptance).
 - Evaluation completed by architecture, security, and delivery reviewers.
 - M1 has implemented operator authentication, scan ownership, package/CI repairs,
   persisted results, conservative evidence checks, and initial discovery fixes.

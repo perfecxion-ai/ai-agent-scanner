@@ -79,6 +79,39 @@ and audit event. Agent snapshots and summary counts share that transaction.
 Known findings already persisted are retained when a job is finalized. Work that
 had not reached a persistence boundary cannot be reconstructed after a crash.
 
+## Finalized-check checkpoints
+
+The worker saves redacted inventory and finalized check/finding pairs while the
+scan remains running. Each checkpoint atomically updates the versioned report,
+agent snapshots, and summary counts. A write must match the current claim owner
+and advance the scan-local sequence; it cannot clear a cancellation request,
+create a terminal event, or overwrite a terminal scan. Snapshot IDs and original
+discovery timestamps stay stable across updates. Result and inventory API reads
+use a consistent database snapshot while these writes are active.
+
+A later timeout, cancellation, or server-process recovery retains the latest
+acknowledged checkpoint. Earlier confirmed findings remain visible with partial
+coverage. New evidence is saved before risk scoring, so a stalled scorer can
+leave a confirmed finding with a null score. A successful score is reused only
+while its evidence and scoring inputs are unchanged. Recovery never repeats a
+probe to reconstruct evidence.
+
+Checkpoints are bounded to 8 MiB each and 4,096 emissions. Cumulative serialization
+is capped at 128 MiB per scan; server accounting includes both reports and snapshot
+rows, but not SQLite page or WAL amplification. SQLite checkpoint lock waiting is
+capped at one second. Validation, size, ownership, or persistence failure stops further probes
+and retains any earlier committed checkpoint. These are execution limits, not a
+guarantee that every inventory fits. Duplicate or redaction-colliding source IDs
+are rejected before evidence can be associated with an ambiguous asset.
+
+This contract retains checks that have returned their evidence, not observations
+still inside an unfinished check. Process termination before an acknowledged
+commit can lose that check's findings. This is server-process recovery on the
+supported local SQLite deployment, not power-loss or storage-hardware validation.
+The CLI retains the same public reports in memory and exports on orderly timeout
+or cancellation with a nonzero exit. It does not persist a restartable checkpoint
+file and cannot recover from a CLI process crash or forced termination.
+
 `GET /health/live` (also `/health`) checks process liveness. `GET /health/ready`
 returns 200 only while the database schema is accessible and the dispatcher is
 healthy; otherwise it returns 503. Health responses do not expose credentials,

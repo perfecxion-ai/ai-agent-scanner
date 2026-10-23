@@ -1,5 +1,7 @@
 """Persistent queue tests use real SQLite transactions and synthetic workers."""
 
+from tests.claimed_execution import execute_job, run_scan_in_thread
+
 import asyncio
 import threading
 import time
@@ -202,11 +204,11 @@ def test_dispatcher_retries_failed_result_finalization(store, monkeypatch):
     original = store.finish
     calls = []
 
-    def finish(scan_id, error=None):
+    def finish(scan_id, error=None, **kwargs):
         calls.append(scan_id)
         if len(calls) == 1:
             raise RuntimeError("temporary database failure")
-        original(scan_id, error)
+        original(scan_id, error, **kwargs)
 
     monkeypatch.setattr(store, "finish", finish)
     dispatcher = JobDispatcher(store, lambda scan_id, cancelled: complete(store, scan_id),
@@ -342,7 +344,7 @@ def test_queued_job_revalidates_current_allowlist(api, monkeypatch):
     runner = Mock()
     monkeypatch.setattr(module, "_run_scan_in_thread", runner)
     with pytest.raises(ScopeValidationError, match="allowlist"):
-        module._execute_job(response.json["scan_id"], threading.Event())
+        execute_job(module, response.json["scan_id"], threading.Event())
     runner.assert_not_called()
 
 
@@ -359,7 +361,7 @@ def test_async_cancel_persists_matching_scan_and_report(api, monkeypatch):
         await asyncio.Event().wait()
 
     monkeypatch.setattr(module, "_execute_scan", running)
-    module._run_scan_in_thread("cancel", "discovery_only", {}, {}, cancelled)
+    run_scan_in_thread(module, "cancel", "discovery_only", {}, {}, cancelled)
     module.db.session.expire_all()
     assert module.db.session.get(module.ScanSession, "cancel").status == "cancelled"
     assert module.db.session.get(module.ScanResult, "cancel").result["status"] == "cancelled"
@@ -371,7 +373,7 @@ def test_cancelled_job_never_starts_pipeline(api, monkeypatch):
     cancelled.set()
     pipeline = AsyncMock()
     monkeypatch.setattr(module, "_execute_scan", pipeline)
-    module._run_scan_in_thread("absent", "discovery_only", {}, {}, cancelled)
+    run_scan_in_thread(module, "absent", "discovery_only", {}, {}, cancelled)
     pipeline.assert_not_called()
 
 

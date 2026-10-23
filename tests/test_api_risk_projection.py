@@ -1,5 +1,7 @@
 """API risk fields must not expose database compatibility placeholders as verdicts."""
 
+from tests.claimed_execution import execute_scan
+
 from copy import deepcopy
 from datetime import datetime, timedelta
 
@@ -210,7 +212,7 @@ async def test_actual_persisted_pipeline_and_api_agree_without_changing_storage(
     monkeypatch.setattr(module, 'security_engine', security)
     monkeypatch.setattr(module, 'risk_assessor', RiskAssessment())
     add_scan(module, 'fixture', mode=mode)
-    await module._execute_scan('fixture', mode, {}, {})
+    await execute_scan(module, 'fixture', mode, {}, {})
     module.db.session.expire_all()
     response = client.get('/api/scans/fixture/results', headers=headers(module))
     assert response.status_code == 200, response.json

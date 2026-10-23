@@ -294,7 +294,7 @@ def test_result_snapshots_and_summary_roll_back_with_failed_terminal_event(store
     original = store._event
     monkeypatch.setattr(store, "_event", Mock(side_effect=RuntimeError("terminal event write failed")))
     with pytest.raises(RuntimeError):
-        store.save_result("result", output, snapshots, records)
+        store.save_result("result", output, snapshots, records, owner='worker')
     with store.engine.connect() as connection:
         assert connection.execute(select(snapshots)).all() == []
         assert connection.scalar(select(store.scans.c.agents_discovered)) == 0
@@ -302,7 +302,7 @@ def test_result_snapshots_and_summary_roll_back_with_failed_terminal_event(store
     assert result(store, "result") is None
     monkeypatch.setattr(store, "_event", original)
     assert store.cancel("result") == "cancel_requested"
-    store.save_result("result", output, snapshots, records)
+    store.save_result("result", output, snapshots, records, owner='worker')
     with store.engine.connect() as connection:
         assert connection.scalar(select(snapshots.c.id)) == "snapshot"
         assert connection.scalar(select(store.scans.c.agents_discovered)) == 1
@@ -323,7 +323,7 @@ def test_concurrent_result_and_cancellation_have_one_consistent_terminal_event(s
 
         def save():
             barrier.wait(3)
-            store.save_result(scan_id, output, None, [])
+            store.save_result(scan_id, output, None, [], owner='worker')
 
         def cancel():
             barrier.wait(3)

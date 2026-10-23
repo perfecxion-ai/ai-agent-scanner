@@ -20,8 +20,9 @@ Groups omitted from a configured test suite are explicitly skipped.
 
 Evidence outcomes are independent of execution status:
 
-- `passed`: Protected access probes were explicitly denied after a valid denied
-  control. This is sampled evidence for the declared boundary, not target safety.
+- `passed`: Protected access probes were explicitly denied after successful
+  authorized and denied controls. This is sampled evidence for the declared
+  boundary, not target safety.
 - `confirmed`: A protected marker was disclosed; a failed group can retain
   confirmed evidence from interactions that succeeded.
 - `heuristic`: A sampled response matched an observation requiring review.
@@ -98,6 +99,29 @@ Generated response bodies and excerpts are omitted from new prompt, privacy, and
 access evidence. Reports retain rule/probe identity, status, sample counts and
 safe detection metadata rather than arbitrary target text or customer PII.
 Existing saved reports and exported copies are not retroactively sanitized.
+
+## Incremental report envelope
+
+Normal CLI/server executions add a `checkpoint` object with `version: "1.0"`, a
+positive `sequence`, and `coverage: "finalized_checks_only"`. Intermediate reports
+are partial; the final report keeps the last acknowledged sequence and its actual
+execution status. JSON and SARIF retain the envelope. It identifies persistence
+coverage, not a passed security control or an accuracy measurement.
+
+A finalized check and its provenance-stamped findings are retained together.
+Actual records are immutable, while `1:unexecuted` placeholders may be replaced
+by later evidence. Unstarted or unfinished assets stay incomplete. A completed
+sampled pass cannot establish zero risk for an asset still being tested.
+Confirmed evidence remains eligible for the shared scorer with partial coverage.
+If newly changed evidence has not been scored successfully, its score remains
+null even though the finding is retained. Unchanged valid assessments survive
+later quiet checks.
+
+Initial inventory alone is a valid checkpoint, not proof that any security check
+ran. Failed validation or persistence stops execution without weakening prior
+evidence. Missing or duplicate source IDs, including collisions after redaction,
+cannot be used to join security results to inventory. Historical reports are not
+rewritten to introduce this envelope. See [storage and recovery limits](jobs.md#finalized-check-checkpoints).
 
 Report comparison resolves an absent finding only when the same unambiguous,
 unredacted endpoint has explicit completed, passed evidence for every earlier
