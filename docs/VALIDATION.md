@@ -1,6 +1,6 @@
 # Engineering validation checkpoint
 
-Date: 2026-10-21. This records the beta build-out, not a release certification.
+Date: 2026-10-22. This records the beta build-out, not a release certification.
 The remediation hold is closed for limited single-operator beta testing on
 runtime revision `82ee7d5`, following reviewed core and targeted API retests.
 This is not production or enterprise approval and does not establish detection
@@ -23,6 +23,93 @@ PR #40 adds disposable stopped-SQLite backup/restore and recovery acceptance.
 PR #41 fixes offline replay detection of protected canaries in argument keys.
 PR #42 closes the local-beta acceptance slice with a real offline operator flow,
 authenticated container restart checks, corrected setup, and a finite test guide.
+
+## Strategic review and revised roadmap
+
+The strategic review at `aae186339dc2b0f4f59222d12ec77f07b11fb308` used source,
+the recorded lab evidence, independent architecture/detection/product reviews,
+and primary-source competitor documentation. It did not rerun the GCP lab or
+establish comparative detection performance. One hundred existing targeted
+pipeline/job/contract and API projection cases passed during review; these are
+regressions, not model observations. The full suite was not rerun for that review.
+
+Two isolated local reproductions establish open correctness work:
+
+- Actual generic authentication-check code, with an in-process always-401
+  transport and no network, records 36 evaluated interactions, no findings, and
+  a completed passed check for an unseeded protected marker. There is no valid
+  authenticated positive baseline. The isolated result is risk-assessment
+  eligible; this is not a claim that a full normal scan necessarily scores zero.
+  Independent comparison of tester-produced positive and later all-denied
+  records also resolves the earlier finding group. R1.1 must prevent unsupported
+  sampled passes and resolution, with versioned evidence semantics.
+- Independent actual analyzer/check/engine/pipeline/server-deadline testing with
+  deterministic in-process responses confirms prompt findings, then stalls a
+  later stage. Normal completion retains 70/high; the outer deadline saves a
+  failed empty report with null risk and loses the earlier confirmations.
+  This is distinct from ordinary failed-request partial-result retention and
+  from benchmark-only observation checkpoints. R1.2 needs durable sanitized
+  checkpoints, transactional terminalization, and interruption/recovery tests.
+
+Source and existing tests also establish that risk-level inventory filtering is
+limited to the newest 100 records, database columns still store placeholder zeros,
+advanced dashboard configuration uses raw JSON, and main retains package version
+`1.1.0` despite 285 commits beyond that tag. These are current limitations, not
+new cloud observations. Earlier successful lab cases do not close them.
+
+The [active roadmap](ENGINEERING_PLAN.md#active-roadmap) is approved direction,
+not completed acceptance. Each slice must add positive/negative regressions,
+independent review, and all required PR/post-merge checks. For R1.1, require
+valid/invalid credentials, absent/unseeded markers, failed controls, privacy,
+probe-version compatibility, and finding-lifecycle cases. For R1.2, require
+confirmation followed by timeout/cancel/crash, restart consistency, no replay,
+bounded checkpoints, no secret retention, and matching CLI/API/JSON/SARIF risk
+and coverage. Mark measured behavior separately from future acceptance targets.
+
+## Protected-access positive-control local acceptance
+
+The R1.1 working slice covers authentication bypass, weak credentials, weak API
+keys, and declared protected admin paths. Each group/path requires a successful
+issued-credential GET that returns its marker and a fresh invalid-credential
+denial before probes. Missing explicit credentials skip; unavailable, stale,
+unseeded, failed, or reflected controls cannot pass or confirm. Successful
+responses without the marker remain inconclusive. Controls use separate sessions
+and the shared scan limits. Default successful-denial samples use 20, 7, and 32
+requests for the first three groups, and three requests per protected admin path.
+
+Versioned protected-access evidence now requires opaque ASCII markers of 16 to
+128 characters, explicit credential environment references, and query/escape-free
+resource URLs. Exact response matching is unchanged. Explicit transport headers
+and collision checks cover normalized URL, credential, probe, wire-header, and
+case-variant public material. Review reproduced and closed automatic User-Agent
+and serialized/lowercase-header reflection, session-entry failure accounting,
+empty-sample passes, and empty-credential redaction corrupting report strings.
+Historical probe versions cannot establish resolution under the changed rules.
+
+The prerequisite contract fix propagates cancellation and records failed,
+inconclusive execution rather than a completed pass after successful controls.
+Counters remain actual interactions, not invented HTTP failures. The strict
+benchmark validator accepts the static interruption reason only on a final
+failed/inconclusive check in a partial arm. Actual final-pacing producer output
+and legacy partial reports both validate; benchmark observations do not become
+fabricated confirmed production checks.
+
+Combined local acceptance passes 2,220 tests with warnings treated as errors and
+an inherited nonexistent evidence-registry sentinel. Independent review passes
+646 focused cases, plus separately exercised 32 actual-loopback control/budget/
+scope/lifecycle cases and 32 reflection cases rejected before HTTP. These are
+overlapping regression gates, not independent model observations. Ruff,
+configured Bandit, whitespace checks, distribution build, Twine, and an
+installed-wheel smoke outside the checkout pass. The built access-control module
+matches the reviewed working source.
+
+This is local acceptance, not exact-revision CI or real-service compatibility.
+All required PR/post-merge jobs remain delivery prerequisites. No GCP service,
+real model, operator database, or registry was accessed; no package was published
+or service deployed. Supported controls are exact GET resources, not arbitrary
+credential schemes or POST-only model authorization. Server authorization-evidence
+configuration is unchanged. Durable findings through an unfinished category or
+outer deadline remain R1.2 work; the cancellation-status fix does not close them.
 
 ## Exact-revision external retest
 

@@ -2,6 +2,115 @@
 
 ## Product direction
 
+The revised direction, approved on 2026-10-22, is an open source tool for
+discovering deployed AI applications and agents, proving specific security
+boundary failures, and verifying remediation. Operators should be able to use a
+fully local assessment path with bounded execution and privacy-safe evidence.
+Leadership is an objective to measure, not a current market or accuracy claim.
+
+The strategic review at `aae1863` found a credible assessment foundation, but
+limited live-agent coverage, difficult configuration, and two additional evidence
+correctness gaps. Earlier lab acceptance remains valid only within its recorded
+scope; it does not close these newly reproduced gaps. The active roadmap below
+supersedes the old delivery order, not the historical validation record.
+
+Keep Python, Flask, the shared CLI/API pipeline, and the supported single-process,
+POSIX, local-filesystem SQLite server. Prefer small reviewed improvements over a
+rewrite. Distributed workers, PostgreSQL, and Kubernetes-first deployment are not
+prerequisites for the next milestones. Publication, deployment, paid targets,
+cloud startup, and live schedule enablement still need separate authorization.
+
+## Active roadmap
+
+| Milestone | Deliverables | Exit gate |
+| --- | --- | --- |
+| R1: Trustworthy results | Authorized positive controls; incremental durable evidence; canonical unknown scores; exhaustive inventory; accurate build identity | No false sampled pass or resolution from missing controls; earlier confirmations survive timeout/cancel/restart; unknown remains unknown in storage and exports; risk filters include older matching assets |
+| R2: Useful application assessment | Custom HTTP/session adapter; guided prerequisites and bounded scan preview; actionable findings; offline CI policy gate; extension contracts | CLI/API produce consistent results on a reproducible vulnerable/defended application lab; new operators complete the workflow without raw JSON or maintainer assistance |
+| R3: Meaningful live agent coverage | Indirect document/tool-result injection; cross-tenant retrieval; unauthorized tool selection/arguments and observed actions; public bounded benchmarks | Each supported objective has vulnerable/defended fixtures and explicit evidence criteria; held-out results report detection, false confirmations, incomplete coverage, and cost separately |
+| R4: Team-ready beta | Identity and roles; scoped service credentials; actor-attributed audit; secret-provider integration; retention; operational and accessibility acceptance | Documented supported deployment passes independent access-control, workload, restart, backup/upgrade, and operator acceptance; no broader enterprise claim from fixture-only tests |
+
+Release hygiene, public documentation, contributor support, and benchmark design
+run alongside these milestones. R4 does not imply distributed execution. Live
+tool tests must use explicit permissions and disposable side-effect destinations;
+proposed calls and observed actions are distinct outcomes.
+
+### Review findings and scoped delivery order
+
+| Slice | Finding and work | Required acceptance | State |
+| --- | --- | --- | --- |
+| R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Local gates and independent review passed; PR/CI pending |
+| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Design scoped; interruption prerequisite locally validated with R1.1; persistence pending |
+| R1.3 | Database score columns retain unknown as `0.0` despite correct public projections | Versioned migration derives values from validated saved evidence, preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Planned |
+| R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | Planned |
+| R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | Planned |
+| R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
+| R2.2 | Advanced model/evidence/suite setup depends on manual identifiers and JSON | Guided discovery-to-assessment flow and CLI setup/diagnostics/preview expose ready, unsupported, missing, and inapplicable prerequisites; secret references never become ordinary saved values | Planned |
+| R2.3 | Findings and exits need clearer remediation and policy meaning | Logical findings preserve occurrences, explain boundary/evidence/control/verification, and avoid uncalibrated numeric confidence; offline CI evaluation distinguishes policy violations, missing required coverage, and invalid reports | Planned |
+| R3.1 | Private, narrow cohorts do not establish general detection performance | Public reproducible vulnerable/defended pairs, held-out targets, fixed budgets, executed-driver identities, preserved captures, real exit codes, and explicit model/state provenance; no pooled heterogeneous accuracy | Planned |
+| R3.2 | Offline replay and MCP inventory do not test live retrieval or actions | Add one deeply supported agent integration and controlled MCP actions with per-objective positive/negative fixtures; missing traces cannot prove defenses; no uncontrolled external effects | Planned |
+| R4.1 | Current server is single-operator, not a team authorization product | OIDC/roles and scoped service credentials enforce tested ownership boundaries; attributable audit and secret rotation have explicit contracts before broader deployment claims | Planned |
+| R4.2 | Synthetic queue and backup checks do not establish operational readiness | Bounded load/soak, full-disk and stalled-target behavior, retention, deployed upgrade/restore, and comprehensive accessibility have separate recorded acceptance | Planned |
+| OSS.1 | Release lag, sparse contributor guidance, conflicting license headers, and chronological docs inhibit adoption | Clarify ownership/license headers without silently relicensing; publish task-oriented docs, reference extensions, contribution/issue templates, current roadmap, and a turnkey local lab; obtain external operator/contributor feedback | Planned |
+
+R1.1 is the first implementation slice. Its interrupted-check accounting
+prerequisite must land before or with the positive controls: cancellation after
+successful controls must not produce a passed check. R1.2 needs a reviewed
+persistence contract before implementation, including which completed checks and in-progress
+observations can safely be saved. R1.3 and R1.4 must share canonical risk semantics
+without silently rewriting historical findings. R2.1 and R3.1 design may proceed
+in parallel, but new execution surfaces must retain existing scope, privacy, and
+resource limits. The narrower HTTP adapter precedes a broad plugin ecosystem.
+
+R1.2 should land in separately reviewed increments: first correct interrupted
+check status, then persist completed check results through later failures and
+CLI/server termination, then retain actual confirmed observations from inside
+unfinished checks. The last increment needs a versioned progress/evidence
+contract, not a benchmark boolean or invented completed check. R1.2 remains open
+until both completed-check and in-progress confirmation recovery pass. Recovery
+must never replay an active probe to recreate lost evidence.
+
+The checkpoint design uses scan-local immutable check/finding pairs and the
+shared report/risk projection, not a second scorer or global-engine state. A
+nonterminal SQLite transaction must bind the current worker and checkpoint
+sequence, preserve snapshot identity, and atomically save report/snapshots/counts
+without clearing cancellation or marking completion. Stale or terminal writes
+must be rejected. Every checkpoint must pass existing redaction and validation
+before storage; bounded inline writes fail closed with a static error. Recovery
+preserves committed evidence and truthful failed/cancelled/interrupted job states.
+Tests must include commit rollback, cancellation races, stale writes, bounded
+contention, and child-process termination after an acknowledged commit.
+
+CLI orderly timeout/cancellation should export the same retained partial evidence
+with a nonzero exit. An in-memory accumulator is not CLI process-crash durability;
+that claim needs a separate explicit private checkpoint-file contract and tests.
+Within-check observations need real provenance/counters before the next await.
+Neither missing evidence nor an interrupted category can establish a pass.
+
+Proposed R2 usability acceptance is five unfamiliar operators completing the
+public vulnerable/defended lab within 15 minutes without editing JSON or receiving
+maintainer help. This is a future gate, not an existing measurement. Public
+benchmarks must report per-objective confirmed yield, false confirmations,
+inconclusive/error/coverage rates, and requests/tokens/time to confirmation.
+Competitor comparisons require compatible objectives and equal budgets; prompt
+counts, framework mappings, test counts, and code coverage are not effectiveness
+metrics. Adaptive prompts follow observable evidence criteria and session/reset
+support; model-based judges alone cannot upgrade a claim to confirmed.
+
+### Market reference points
+
+The review compared documented capabilities, not measured head-to-head results:
+[Promptfoo](https://www.promptfoo.dev/docs/red-team/strategies/) for application
+workflows and multi-turn strategies, [garak](https://github.com/NVIDIA/garak) for
+modular model probing, [PyRIT](https://github.com/microsoft/PyRIT/blob/main/doc/code/framework.md)
+for composable execution and scoring, [Giskard](https://github.com/Giskard-AI/giskard-oss)
+for scenario-based agent/RAG testing, [Snyk Agent Scan](https://github.com/snyk/agent-scan)
+for installed agent-component discovery, and
+[Cisco MCP Scanner](https://github.com/cisco-ai-defense/mcp-scanner) for focused
+MCP analysis. [AgentDojo](https://github.com/ethz-spylab/agentdojo) is a candidate
+complement to deployment-level fixtures, not a replacement for them.
+
+## Prior limited-beta evidence
+
 The [remediation gate](BETA_REMEDIATION.md) is closed for limited single-operator
 beta testing on runtime revision `82ee7d5`. Reviewed lab evidence and the targeted
 API retest support the core fixes, including unknown-risk projection. This is not
@@ -109,7 +218,11 @@ Priority defects found by three independent reviews:
 
 These are source-review findings, not evidence of exploitation in a deployment.
 
-## Milestones and acceptance
+## Historical milestones and acceptance
+
+M1 through M6 record the original build-out. R1 through R4 above govern the next
+delivery sequence. Implemented subsets and their limits remain recorded below;
+the strategic review does not retroactively expand any acceptance claim.
 
 | Milestone | Work | Acceptance |
 | --- | --- | --- |
@@ -136,6 +249,12 @@ These are source-review findings, not evidence of exploitation in a deployment.
 
 ## Progress
 
+- The 2026-10-22 review establishes the active R1 through R4 roadmap. R1.1 and
+  R1.2 remain open delivery gates. The R1.1 working slice passes local and
+  independent acceptance, including interrupted-check accounting, but still
+  needs PR/post-merge CI. Durable checkpoint implementation is pending. See
+  [review evidence](VALIDATION.md#strategic-review-and-revised-roadmap) and
+  [local control acceptance](VALIDATION.md#protected-access-positive-control-local-acceptance).
 - Evaluation completed by architecture, security, and delivery reviewers.
 - M1 has implemented operator authentication, scan ownership, package/CI repairs,
   persisted results, conservative evidence checks, and initial discovery fixes.
