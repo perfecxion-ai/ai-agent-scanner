@@ -2,6 +2,7 @@
 """Disposable stopped-SQLite backup, upgrade, and recovery acceptance only."""
 
 import argparse
+import asyncio
 from collections import Counter
 from contextlib import closing
 import hashlib
@@ -19,7 +20,7 @@ import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = ("v1", "v2", "v3", "rollback1", "rollback2", "future", "incomplete", "lock")
+CASES = ("v1", "v2", "v3", "v4", "rollback1", "rollback2", "rollback3", "future", "incomplete", "lock")
 FILENAMES = {"source.sqlite", "backup.sqlite", "restore.sqlite", "old-copy.sqlite"}
 
 
@@ -28,6 +29,7 @@ def expected_assertions(case):
     if case.startswith("v"):
         assertions.extend(["upgrade_and_terminal_recovery", "queued_executed_once_without_active_replay",
                            "completed_evidence_audit_templates_preserved", "schedule_recovery_without_admission",
+                           "nullable_score_cache_preserves_unknown_zero_and_partial_confirmation",
                            "second_restart_idempotent"])
     else:
         assertions.append({"lock": "lock_rejected_before_initializer_without_database_changes",
@@ -115,14 +117,40 @@ def report(scan_id):
                         "critical_risks": 0, "overall_risk_score": None}}
 
 
+def controlled_report(scan_id, *, disclose=False, partial=False):
+    """Use real access-check production with a synthetic non-network transport."""
+    from unittest.mock import AsyncMock
+    from src.core.pipeline import run_pipeline
+    from src.risk.risk_assessor import RiskAssessment
+    from src.security.security_engine import SecurityTestEngine
+    from tests.controlled_access import target, transport
+
+    async def produce():
+        security = SecurityTestEngine()
+        security.prompt_tester.test_agent = AsyncMock(return_value=[])
+        security.access_tester.test_agent = security.access_tester._test_authentication_bypass
+        security.privacy_tester.test_agent = (AsyncMock(side_effect=RuntimeError('Synthetic later failure'))
+                                             if partial else AsyncMock(return_value=[]))
+        with transport(disclose=disclose):
+            value = await run_pipeline(None, security, RiskAssessment(), None, 'security_only',
+                                       agents=[target(id=scan_id + '-asset')])
+        value['scan_id'] = scan_id
+        return value
+
+    value = asyncio.run(produce())
+    expected = 70 if disclose else 0
+    require(value['summary']['overall_risk_score'] == expected, 'Controlled fixture lost its assessed score')
+    require(value['status'] == ('partial' if partial else 'completed'), 'Controlled fixture status changed')
+    return value
+
+
 def seed(server, engine, version):
-    from sqlalchemy import MetaData, insert
-    from src.core.schema import VERSION_ONE_TABLES, VERSION_TWO_TABLES, VERSION_THREE_TABLES
-    layouts = {1: VERSION_ONE_TABLES, 2: VERSION_TWO_TABLES, 3: VERSION_THREE_TABLES}
-    metadata = MetaData()
-    for name in sorted(layouts[version]):
-        server.db.metadata.tables[name].to_metadata(metadata)
+    from sqlalchemy import insert
+    from tests.historical_schema import historical_metadata
+    metadata = historical_metadata(version=version) if version < 4 else server.db.metadata
     metadata.create_all(engine)
+    controlled = {'assessed-zero': controlled_report('assessed-zero'),
+                  'retained-partial': controlled_report('retained-partial', disclose=True, partial=True)}
     with engine.begin() as connection:
         connection.execute(insert(metadata.tables["schema_version"]).values(id=1, version=version))
         for identifier, status in (("completed", "completed"), ("queued", "queued"),
@@ -130,7 +158,7 @@ def seed(server, engine, version):
             connection.execute(insert(metadata.tables["scan_session"]).values(
                 id=identifier, organization_id="backup-fixture", scan_name="Synthetic " + identifier,
                 scan_type="discovery_only", status="running" if identifier == "cancel" else status,
-                target_scope={}, scan_config={}))
+                target_scope={}, scan_config={}, overall_risk_score=0.0 if version < 4 else None))
             connection.execute(insert(metadata.tables["scan_job"]).values(scan_id=identifier, status=status))
             connection.execute(insert(metadata.tables["audit_event"]).values(
                 scan_id=identifier, organization_id="backup-fixture", event="admitted", status="queued"))
@@ -140,12 +168,31 @@ def seed(server, engine, version):
         connection.execute(insert(metadata.tables["scan_result"]).values(scan_id="completed", result=report("completed")))
         connection.execute(insert(metadata.tables["discovered_agent"]).values(
             id="completed-snapshot", scan_id="completed", agent_name="Retained synthetic asset",
-            agent_type="fixture", discovery_method="synthetic", metadata={"retained": "asset-snapshot"}))
+            agent_type="fixture", discovery_method="synthetic", metadata={"retained": "asset-snapshot"},
+            risk_score=0.0 if version < 4 else None))
+        for identifier, output in controlled.items():
+            asset = output['agents'][0]
+            connection.execute(insert(metadata.tables['scan_session']).values(
+                id=identifier, organization_id='backup-fixture', scan_name='Synthetic ' + identifier,
+                scan_type='security_only', status=output['status'], target_scope={}, scan_config={},
+                overall_risk_score=output['summary']['overall_risk_score']))
+            connection.execute(insert(metadata.tables['scan_job']).values(scan_id=identifier, status=output['status']))
+            for event_name in ('admitted', 'terminal'):
+                connection.execute(insert(metadata.tables['audit_event']).values(
+                    scan_id=identifier, organization_id='backup-fixture', event=event_name,
+                    previous_status='running' if event_name == 'terminal' else None,
+                    status=output['status'] if event_name == 'terminal' else 'queued'))
+            connection.execute(insert(metadata.tables['scan_result']).values(scan_id=identifier, result=output))
+            connection.execute(insert(metadata.tables['discovered_agent']).values(
+                id=identifier + '-snapshot', scan_id=identifier, agent_name='Retained controlled asset',
+                agent_type='fixture', discovery_method='synthetic', risk_score=asset['risk_score'],
+                risk_level=asset['risk_level'], metadata={'asset_id': asset['id']},
+                vulnerabilities=asset['vulnerabilities']))
         if version >= 2:
             connection.execute(insert(metadata.tables["scan_template"]).values(
                 id="recipe", organization_id="backup-fixture", scan_name="Retained recipe",
                 scan_type="discovery_only", target_scope={}, scan_config={}, revision=4))
-        if version == 3:
+        if version >= 3:
             from datetime import datetime
             for identifier, state in (("enabled", "enabled"), ("overdue", "enabled"), ("disabled", "disabled")):
                 connection.execute(insert(metadata.tables["scan_schedule"]).values(
@@ -166,7 +213,7 @@ def wait_until(predicate, deadline):
 
 
 def exercise(server, engine, directory, version, case, baseline, deadline, checks):
-    from sqlalchemy import event, select
+    from sqlalchemy import event, inspect, select
     from src.core.jobs import DispatcherLock, JobDispatcher, JobStore, current_claim_owner
     from src.core.schema import SchemaError, initialize_schema
     observed = {"initialized": 0, "recovered": 0, "executed": [], "preflight": 0, "admitted": 0}
@@ -251,7 +298,9 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
         with engine.connect() as connection:
             jobs = dict(connection.execute(select(store.jobs.c.scan_id, store.jobs.c.status)).all())
             outstanding = connection.scalar(select(server.ScanSchedule.outstanding_scan_id).where(server.ScanSchedule.id == "enabled"))
-        return jobs == {"completed": "completed", "queued": "completed", "running": "interrupted", "cancel": "cancelled"} and outstanding is None
+        return jobs == {"completed": "completed", "queued": "completed", "running": "interrupted",
+                        "cancel": "cancelled", 'assessed-zero': 'completed',
+                        'retained-partial': 'partial'} and outstanding is None
 
     first = dispatcher()
     try:
@@ -264,12 +313,25 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
     recovered = snapshot(restored)
     rows = recovered["rows"]
     original = baseline["rows"]
-    require(rows["schema_version"] == [(1, 3)], "Schema upgrade did not reach version 3")
+    from src.core.schema import SCHEMA_VERSION
+    require(rows["schema_version"] == [(1, SCHEMA_VERSION)], "Schema upgrade did not reach the current version")
     require(observed["executed"] == ["queued"], "Queued work did not execute exactly once")
-    require(rows["discovered_agent"] == original["discovered_agent"], "Agent snapshot changed")
-    require(next(row for row in original["scan_session"] if row[0] == "completed") in rows["scan_session"],
-            "Completed scan metadata changed")
-    require(original["scan_result"][0] in rows["scan_result"], "Completed finding/report changed")
+    asset_columns = list(server.DiscoveredAgentModel.__table__.columns.keys())
+    scan_columns = list(server.ScanSession.__table__.columns.keys())
+
+    def without_caches(values, columns, omitted):
+        return [tuple(value for name, value in zip(columns, row, strict=True) if name not in omitted) for row in values]
+
+    require(without_caches(rows['discovered_agent'], asset_columns, {'risk_score', 'risk_level'})
+            == without_caches(original['discovered_agent'], asset_columns, {'risk_score', 'risk_level'}),
+            'Agent snapshot fields outside score caches changed')
+    for identifier in ('completed', 'assessed-zero', 'retained-partial'):
+        before = [row for row in original['scan_session'] if row[0] == identifier]
+        after = [row for row in rows['scan_session'] if row[0] == identifier]
+        require(without_caches(before, scan_columns, {'overall_risk_score'})
+                == without_caches(after, scan_columns, {'overall_risk_score'}),
+                'Terminal scan metadata outside score cache changed')
+    require(all(row in rows['scan_result'] for row in original['scan_result']), 'Completed finding/report changed')
     require(all(row in rows["audit_event"] for row in original["audit_event"]), "Existing audit history changed")
     require(rows["scan_template"] == original.get("scan_template", []), "Template rows changed")
     require(rows["scan_occurrence"] == original.get("scan_occurrence", []), "Schedule occurrence was added or changed")
@@ -279,11 +341,23 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
         reports = dict(connection.execute(select(store.results.c.scan_id, store.results.c.result)).all())
         events = connection.execute(select(store.audit)).mappings().all()
         schedules = {row["id"]: row for row in connection.execute(select(server.ScanSchedule.__table__)).mappings()}
+        score_columns = {name: {column['name']: column for column in inspect(connection).get_columns(name)}
+                         for name in ('scan_session', 'discovered_agent')}
+        scan_scores = dict(connection.execute(select(server.ScanSession.id, server.ScanSession.overall_risk_score)).all())
+        asset_scores = {row.id: (row.risk_score, row.risk_level) for row in connection.execute(select(
+            server.DiscoveredAgentModel.id, server.DiscoveredAgentModel.risk_score, server.DiscoveredAgentModel.risk_level))}
+    require(all(score_columns[table][column]['nullable'] and score_columns[table][column]['default'] is None
+                for table, column in (('scan_session', 'overall_risk_score'), ('discovered_agent', 'risk_score'))),
+            'Score columns are not nullable without SQL defaults')
+    require(scan_scores == {'completed': None, 'queued': None, 'running': None, 'cancel': None,
+                            'assessed-zero': 0.0, 'retained-partial': 70.0}, 'Scan score caches lost canonical values')
+    require(asset_scores == {'completed-snapshot': (None, 'unknown'), 'assessed-zero-snapshot': (0.0, 'minimal'),
+                             'retained-partial-snapshot': (70.0, 'high')}, 'Asset score caches lost canonical values')
     require(all(scans[key] == value == reports[key]["status"] for key, value in jobs.items()),
             "Recovered job/session/report states disagree")
     require(Counter(row["scan_id"] for row in events if row["event"] == "claimed") == {"queued": 1}, "Unexpected claim history")
     require(Counter(row["scan_id"] for row in events if row["event"] == "terminal") == {key: 1 for key in jobs}, "Duplicated or missing terminal history")
-    if version == 3:
+    if version >= 3:
         enabled = schedules["enabled"]
         require(enabled["state"] == "paused" and enabled["pause_reason"] == "restart_review"
                 and enabled["next_due_at"] is None and enabled["outstanding_scan_id"] is None
@@ -299,7 +373,8 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
                 "Overdue schedule did not pause before candidate preflight")
     require(observed["preflight"] == observed["admitted"] == 0, "Restart scheduled new work")
     checks.extend(["upgrade_and_terminal_recovery", "queued_executed_once_without_active_replay",
-                   "completed_evidence_audit_templates_preserved", "schedule_recovery_without_admission"])
+                   "completed_evidence_audit_templates_preserved", "schedule_recovery_without_admission",
+                   "nullable_score_cache_preserves_unknown_zero_and_partial_confirmation"])
     second = dispatcher()
     try:
         second.start()

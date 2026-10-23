@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import pytest
-from sqlalchemy import MetaData, create_engine, event, inspect, insert, select
+from sqlalchemy import create_engine, event, inspect, insert, select
 
 from src.core.jobs import TERMINAL_STATES
 from src.core.schedules import schedule_definition
@@ -16,6 +16,7 @@ from src.core.schema import SCHEMA_VERSION, VERSION_TWO_TABLES, SchemaError, ini
 from src.core.scope import ScopeValidationError
 from tests.test_api_auth import api as api, headers
 from tests.test_scan_templates import file_api as file_api, save, definition, source_fixture, security_definition
+from tests.historical_schema import historical_metadata
 
 
 NOW = datetime(2026, 10, 14, tzinfo=timezone.utc)
@@ -503,9 +504,7 @@ def test_delete_requires_inactive_finished_pointer_and_preserves_scan(api, monke
 def test_exact_version_two_upgrade_is_atomic_and_preserves_template(api, tmp_path, fail):
     module, _ = api
     engine = create_engine(f"sqlite:///{tmp_path / 'schedule-upgrade.db'}")
-    metadata = MetaData()
-    for name in VERSION_TWO_TABLES:
-        module.db.metadata.tables[name].to_metadata(metadata)
+    metadata = historical_metadata(version=2)
     metadata.create_all(engine)
     with engine.begin() as connection:
         connection.execute(insert(metadata.tables["schema_version"]).values(id=1, version=2))
@@ -540,9 +539,7 @@ def test_exact_version_two_upgrade_is_atomic_and_preserves_template(api, tmp_pat
 def test_unknown_version_two_layout_is_rejected_without_changes(api, tmp_path, mutation):
     module, _ = api
     engine = create_engine(f"sqlite:///{tmp_path / 'invalid-schedule.db'}")
-    metadata = MetaData()
-    for name in VERSION_TWO_TABLES:
-        module.db.metadata.tables[name].to_metadata(metadata)
+    metadata = historical_metadata(version=2)
     metadata.create_all(engine)
     with engine.begin() as connection:
         connection.execute(insert(metadata.tables["schema_version"]).values(id=1, version=2))

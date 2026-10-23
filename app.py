@@ -41,6 +41,7 @@ from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
 from src.core.tenant_evidence import TenantEvidenceError, reject_private_tenant_inputs
 from src.core.risk_projection import project_agent_risk, project_report_risk
+from src.core.stored_risk import project_stored_risk, snapshot_stored_risk
 from src.core.model_selection import apply_model_overrides, canonical_model_overrides
 from src.core.contracts import validate_scan_result, MAX_CHECKPOINT_TOTAL_BYTES, CheckpointError
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
@@ -148,7 +149,7 @@ class ScanSession(db.Model):
     agents_discovered: Mapped[int] = mapped_column(Integer, default=0)
     vulnerabilities_found: Mapped[int] = mapped_column(Integer, default=0)
     critical_risks: Mapped[int] = mapped_column(Integer, default=0)
-    overall_risk_score: Mapped[float] = mapped_column(Float, default=0.0)
+    overall_risk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
@@ -175,7 +176,7 @@ class DiscoveredAgentModel(db.Model):
 
     security_tested: Mapped[bool] = mapped_column(Boolean, default=False)
     vulnerabilities: Mapped[dict] = mapped_column(JSON, default=dict)
-    risk_score: Mapped[float] = mapped_column(Float, default=0.0)
+    risk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     risk_level: Mapped[str] = mapped_column(String(20), default="unknown")
 
     metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
@@ -1242,17 +1243,22 @@ def _require_claim(scan_id):
 
 
 def _snapshot_rows(scan_id, result, discovered_at):
-    return [dict(
-        id=snapshot_id(scan_id, ordinal), scan_id=scan_id,
-        agent_name=agent['name'], agent_type=agent['type'], provider=agent.get('provider'),
-        model_name=agent.get('model'), endpoint_url=agent.get('endpoint'),
-        discovery_method=agent['discovery_method'],
-        security_tested=agent['security_status'] == 'completed',
-        vulnerabilities=agent['vulnerabilities'], risk_score=agent['risk_score'] or 0.0,
-        risk_level=agent['risk_level'], discovered_at=discovered_at,
-        metadata={**agent.get('metadata', {}), 'asset_id': agent['id'],
-                  'security_status': agent['security_status']})
-        for ordinal, agent in enumerate(result['agents'])]
+    _, projected = project_stored_risk(result)
+    rows = []
+    for ordinal, agent in enumerate(result['agents']):
+        metadata = {**agent.get('metadata', {}), 'asset_id': agent['id'],
+                    'security_status': agent['security_status']}
+        identifier = snapshot_id(scan_id, ordinal)
+        score, level = snapshot_stored_risk(projected, identifier, metadata)
+        rows.append(dict(
+            id=identifier, scan_id=scan_id,
+            agent_name=agent['name'], agent_type=agent['type'], provider=agent.get('provider'),
+            model_name=agent.get('model'), endpoint_url=agent.get('endpoint'),
+            discovery_method=agent['discovery_method'],
+            security_tested=agent['security_status'] == 'completed',
+            vulnerabilities=agent['vulnerabilities'], risk_score=score,
+            risk_level=level, discovered_at=discovered_at, metadata=metadata))
+    return rows
 
 
 def _enrich_report(scan_id, result, source_coverage):

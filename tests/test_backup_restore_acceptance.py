@@ -78,6 +78,39 @@ def test_complete_command_with_symlinked_temp_ancestor(optimized, tmp_path):
     assert not list(real_temp.iterdir())
 
 
+@pytest.mark.parametrize('table, identifier, column, value', [
+    ('scan_session', 'completed', 'overall_risk_score', 0.0),
+    ('discovered_agent', 'completed-snapshot', 'risk_score', 0.0),
+    ('scan_session', 'assessed-zero', 'overall_risk_score', None),
+    ('discovered_agent', 'assessed-zero-snapshot', 'risk_score', None),
+    ('scan_session', 'retained-partial', 'overall_risk_score', None),
+    ('discovered_agent', 'retained-partial-snapshot', 'risk_level', 'unknown'),
+])
+def test_acceptance_rejects_corrupted_unknown_zero_or_partial_cache(table, identifier, column, value):
+    code = '''
+import runpy
+from src.core import schema
+original = schema.initialize_schema
+def corrupt(engine, metadata):
+    original(engine, metadata)
+    with engine.begin() as connection:
+        connection.exec_driver_sql(STATEMENT, (VALUE, IDENTIFIER))
+schema.initialize_schema = corrupt
+'''
+    statement = 'UPDATE ' + table + ' SET ' + column + ' = ? WHERE id = ?'
+    code = ('STATEMENT = ' + repr(statement) + '\nVALUE = ' + repr(value)
+            + '\nIDENTIFIER = ' + repr(identifier) + '\n' + code)
+    code += 'raise SystemExit(runpy.run_path(' + repr(str(SCRIPT)) + ')["child_main"]())'
+    environment = dict(os.environ, PYTHONPATH=str(SCRIPT.parents[1]))
+    with owned_directory('v3') as directory:
+        returncode, stdout = acceptance.child_output([sys.executable, '-c', code],
+            {'directory': str(directory), 'case': 'v3', 'timeout': 5}, environment, 10)
+        output = json.loads(stdout)
+        assert returncode == 1 and output['accepted'] is False
+        assert 'score caches lost canonical values' in output['failure']
+        assert acceptance.snapshot(directory / 'source.sqlite') == acceptance.snapshot(directory / 'backup.sqlite')
+
+
 def test_owned_directory_alias_is_still_rejected(tmp_path):
     with owned_directory() as directory:
         alias = tmp_path / "case-alias"

@@ -18,7 +18,8 @@ from tests.test_jobs import enqueue, result, state, store as store
 
 
 def report(sequence=1, *, scan_id='checkpoint', finding=True):
-    check = CheckRecord('authorization_bypass', 'auth.sample', '2', 'completed',
+    # A generic fixture isolates checkpoint transactions from security controls.
+    check = CheckRecord('fixture.disclosure', 'fixture.sample', '2', 'completed',
                         'confirmed' if finding else 'inconclusive', 2, 2).to_dict()
     findings = [{'id': 'finding-1', 'rule_id': check['rule_id'], 'probe_id': check['probe_id'],
                  'probe_version': '2', 'evidence_status': 'confirmed', 'severity': 'high'}] if finding else []

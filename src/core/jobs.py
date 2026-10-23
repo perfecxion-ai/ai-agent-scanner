@@ -16,6 +16,7 @@ from sqlalchemy import select, update, insert, func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from src.core.contracts import validate_checkpoint_report
+from src.core.stored_risk import project_stored_risk, snapshot_stored_risk
 
 
 TERMINAL_STATES = frozenset({"completed", "partial", "failed", "cancelled", "interrupted"})
@@ -163,6 +164,9 @@ class JobStore:
         output["status"] = status
         if error:
             output["error"] = error
+        summary, _ = project_stored_risk(output)
+        connection.execute(update(self.scans).where(self.scans.c.id == scan_id).values(
+            overall_risk_score=summary['overall_risk_score']))
         if result is None:
             connection.execute(insert(self.results).values(scan_id=scan_id, result=output))
         else:
@@ -209,14 +213,18 @@ class JobStore:
 
     def _save_projection(self, connection, scan_id, output, agents_table, snapshots, *, terminal=False):
         summary = output['summary']
+        risk_summary, risk_agents = project_stored_risk(output)
         values = dict(agents_discovered=summary['agents_discovered'],
                       vulnerabilities_found=summary['vulnerabilities_found'],
                       critical_risks=summary['critical_risks'],
-                      overall_risk_score=summary['overall_risk_score'] or 0.0)
+                      overall_risk_score=risk_summary['overall_risk_score'])
         if terminal:
             values['progress'] = 100.0
         connection.execute(update(self.scans).where(self.scans.c.id == scan_id).values(**values))
         if snapshots:
+            for snapshot in snapshots:
+                score, level = snapshot_stored_risk(risk_agents, snapshot['id'], snapshot.get('metadata'))
+                snapshot.update(risk_score=score, risk_level=level)
             statement = sqlite_insert(agents_table)
             # Preserve first-observed timestamp and stable per-scan row identity.
             fields = {column.name: getattr(statement.excluded, column.name)
