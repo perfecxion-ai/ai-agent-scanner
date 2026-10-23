@@ -19,6 +19,7 @@ from src.security.prompt_suites import (
 from src.risk.risk_assessor import RiskAssessment
 from src.frameworks.owasp_llm_top10 import get_coverage_summary
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.tenant_evidence import TenantEvidenceError, validate_tenant_input
 from src.core.contracts import validate_checkpoint_report
 from src.core.model_selection import apply_model_overrides, validate_model_overrides
 from src.core.transport import ScanBudget, scan_transport
@@ -106,7 +107,7 @@ def load_targets(network, domain, repository=(), traffic=(), config=None, allow_
             allowed = {'id', 'name', 'endpoint', 'provider', 'type', 'discovery_method', 'metadata',
                        'system_prompt_canary', 'cross_tenant_canary', 'authentication_required',
                        'protected_response_marker', 'protected_path_markers', 'model', 'api_key_env',
-                       'evidence_context_id'}
+                       'evidence_context_id', 'tenant_evidence'}
             if set(agent) - allowed:
                 raise click.ClickException("Unsupported agent configuration fields")
             for field in ('model', 'api_key_env'):
@@ -135,6 +136,10 @@ def load_targets(network, domain, repository=(), traffic=(), config=None, allow_
                 raise click.ClickException("protected_path_markers requires paths mapped to markers of at least 16 characters")
             if agent['id'] in seen:
                 raise click.ClickException("Agent IDs must be unique")
+            try:
+                validate_tenant_input(agent)
+            except TenantEvidenceError as exc:
+                raise click.ClickException(str(exc)) from None
             seen.add(agent['id'])
             agent.setdefault('type', 'assistant')
             agent.setdefault('discovery_method', 'explicit')

@@ -16,6 +16,7 @@ from src.security.prompt_injection_tests import PromptInjectionTester
 from src.security.access_control_tests import AccessControlTester
 from src.security.data_privacy_tests import DataPrivacyTester
 from src.risk.risk_assessor import RiskAssessment
+from src.core.contracts import collect_checks
 
 
 class TestPromptInjectionTester:
@@ -359,21 +360,18 @@ class TestDataPrivacyTester:
 
         assert len(detected_pii) == 0
 
-    def test_data_leakage_detection(self):
-        """Test detection of potential data leakage"""
-        suspicious_response = "Here's data from user: admin with email: admin@company.com"
-
-        indicates_leakage = self.tester._indicates_data_leakage(suspicious_response)
-
-        assert indicates_leakage is False  # Generated records have no verified provenance.
-
-    def test_no_data_leakage_detection(self):
-        """Test when no data leakage is detected"""
-        normal_response = "I can help you with general questions about our services."
-
-        indicates_leakage = self.tester._indicates_data_leakage(normal_response)
-
-        assert indicates_leakage is False
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('response', [
+        "Here's data from user: admin with email: admin@company.com",
+        "I can help you with general questions about our services.",
+    ])
+    async def test_unconfigured_tenant_response_cannot_establish_leakage(self, response):
+        self.tester._send_prompt = AsyncMock(return_value=response)
+        with collect_checks() as checks:
+            assert await self.tester._test_tenant_isolation(self.sample_agent) == []
+        assert checks[0]['status'] == 'skipped'
+        assert checks[0]['outcome'] == 'not_evaluated'
+        self.tester._send_prompt.assert_not_awaited()
 
     def test_privacy_transparency_lack(self):
         """Test detection of lack of privacy transparency"""

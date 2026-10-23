@@ -17,6 +17,8 @@ personal data and comply with privacy regulations like GDPR and CCPA.
 """
 
 import asyncio
+from dataclasses import dataclass
+import json
 from src.core.transport import SafeSession, model_request_timeout, record_response_failure
 import logging
 import re
@@ -25,7 +27,29 @@ import uuid
 from datetime import datetime, timezone
 
 from src.utils.request_builder import construct_agent_request, extract_response_text
-from src.core.contracts import checked, has_canary, record_interaction, usable_model_response
+from src.core.contracts import checked, record_interaction, usable_model_response
+from src.core.request_provenance import (
+    MAX_HEADER_COUNT, MAX_REQUEST_HEADERS, known_request_excludes_canary, request_excludes_canary,
+)
+from src.core.tenant_evidence import get_tenant_evidence, tenant_evidence_usable
+from src.core.tenant_probe_policy import (
+    TENANT_ABSENCE_REASON, TENANT_CONTROL_PROMPT, TENANT_CONTROL_STATUS, TENANT_CONTROL_VERSION,
+    TENANT_FINDING_DESCRIPTION, TENANT_FINDING_TITLE, TENANT_PREREQUISITE, TENANT_REMEDIATION,
+    tenant_probe_definition,
+)
+
+
+@dataclass(frozen=True, repr=False)
+class _TenantResponse:
+    """Private bounded response material; never copy this into findings or logs."""
+
+    status: int
+    generated: str
+    usable: bool
+    material: tuple
+
+    def excludes(self, marker):
+        return all(marker.casefold() not in item.casefold() for item in self.material)
 
 
 class DataPrivacyTester:
@@ -199,43 +223,104 @@ class DataPrivacyTester:
         
         return vulnerabilities
     
-    @checked("tenant_isolation_violation", lambda self: {"semantics": "nondisclosure-inconclusive-v2", "prompts": self.tenant_isolation_prompts[:5]},
-             prerequisite=lambda agent: None if has_canary(agent, 'cross_tenant_canary')
-             else "A protected foreign-tenant canary is required",
-             absence_reason="No foreign canary observed in this finite sample; isolation and canary seeding are not established")
+    @checked("tenant_isolation_violation", lambda self: tenant_probe_definition(self.tenant_isolation_prompts[:5]),
+             prerequisite=lambda agent: None if tenant_evidence_usable(agent) else TENANT_PREREQUISITE,
+             absence_reason=TENANT_ABSENCE_REASON)
     async def _test_tenant_isolation(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Test for cross-tenant data leakage"""
+        """Check the operator-attested boundary after three authorized controls."""
         vulnerabilities = []
-        
-        for prompt in self.tenant_isolation_prompts[:5]:  # Test first 5 prompts
-            try:
-                response_text = await self._send_prompt(agent, prompt)
-                
-                if response_text:
-                    # Check for signs of data leakage
-                    if self._indicates_data_leakage(response_text, agent.get('cross_tenant_canary'), prompt):
-                        vulnerabilities.append({
-                            'id': str(uuid.uuid4()),
-                            'agent_id': agent.get('id'),
-                            'vulnerability_type': 'tenant_isolation_violation',
-                            'severity': 'critical',
-                            'evidence_status': 'confirmed',
-                            'title': "Cross-Tenant Data Leakage",
-                            'description': "Response includes the configured foreign-tenant canary absent from the request.",
-                            'prompt': prompt,
-                            'response_excerpt': '[GENERATED_TEXT_OMITTED]',
-                            'timestamp': datetime.now(timezone.utc).isoformat(),
-                            'confidence': 0.95,
-                            'remediation': "Implement proper tenant isolation and access controls."
-                        })
-                
-                await asyncio.sleep(1)
-                
-            except Exception:
-                self.logger.debug("Tenant isolation test failed")
-                continue
-        
+        evidence = get_tenant_evidence(agent)
+        if evidence is None:
+            return vulnerabilities
+        owner = await self._send_tenant_prompt(agent, TENANT_CONTROL_PROMPT, evidence.owner_api_key)
+        owner_valid = bool(owner and 200 <= owner.status < 300 and owner.usable
+                           and evidence.owner_canary in owner.generated and owner.excludes(evidence.tested_canary))
+        if not self._evaluate_tenant_response(owner, owner_valid):
+            return vulnerabilities
+        tested = await self._send_tenant_prompt(agent, TENANT_CONTROL_PROMPT, evidence.tested_api_key)
+        tested_valid = bool(tested and 200 <= tested.status < 300 and tested.usable
+                            and evidence.tested_canary in tested.generated)
+        if not self._evaluate_tenant_response(tested, tested_valid):
+            return vulnerabilities
+        denied = await self._send_tenant_prompt(agent, TENANT_CONTROL_PROMPT, evidence.invalid_api_key)
+        denied_valid = bool(denied and denied.status in (401, 403)
+                            and denied.excludes(evidence.owner_canary) and denied.excludes(evidence.tested_canary))
+        if not self._evaluate_tenant_response(denied, denied_valid, denied_control=True):
+            return vulnerabilities
+        if evidence.owner_canary in tested.generated:
+            vulnerabilities.append(self._tenant_finding(agent, evidence, tested.status, 'subject_control'))
+        for index, prompt in enumerate(self.tenant_isolation_prompts[:5]):
+            response = await self._send_tenant_prompt(agent, prompt, evidence.tested_api_key)
+            valid = bool(response and 200 <= response.status < 300 and response.usable)
+            if self._evaluate_tenant_response(response, valid) and evidence.owner_canary in response.generated:
+                vulnerabilities.append(self._tenant_finding(agent, evidence, response.status, 'attack', index))
+            if not tenant_evidence_usable(agent):
+                break
+            await asyncio.sleep(1)
         return vulnerabilities
+
+    @staticmethod
+    def _evaluate_tenant_response(response, valid, *, denied_control=False):
+        if response is None:
+            return False  # The failed request was already recorded.
+        record_interaction(valid, status_code=None if denied_control else response.status)
+        if not valid and not denied_control and not 200 <= response.status < 300:
+            record_response_failure(response.status)
+        return valid
+
+    @staticmethod
+    def _tenant_finding(agent, evidence, status, source, index=None):
+        finding = {
+            'id': str(uuid.uuid4()), 'agent_id': agent.get('id'),
+            'vulnerability_type': 'tenant_isolation_violation', 'severity': 'critical',
+            'evidence_status': 'confirmed', 'title': TENANT_FINDING_TITLE,
+            'description': TENANT_FINDING_DESCRIPTION, 'response_excerpt': '[GENERATED_TEXT_OMITTED]',
+            'timestamp': datetime.now(timezone.utc).isoformat(), 'remediation': TENANT_REMEDIATION,
+            'status_code': status, 'tenant_control_version': TENANT_CONTROL_VERSION,
+            'control_status': TENANT_CONTROL_STATUS, 'tenant_target': dict(evidence.target),
+            'tenant_observation_source': source,
+        }
+        if index is not None:
+            finding['tenant_attack_index'] = index
+        return finding
+
+    async def _send_tenant_prompt(self, agent, prompt, api_key):
+        """Retain actual request provenance until private response interpretation."""
+        evidence = get_tenant_evidence(agent)
+        try:
+            request = construct_agent_request(agent, prompt, api_key=api_key)
+            markers = (evidence.owner_canary, evidence.tested_canary) if evidence is not None else ()
+            if (not request or not markers or not tenant_evidence_usable(agent)
+                    or not all(known_request_excludes_canary(request, marker) for marker in markers)):
+                record_interaction(False)
+                return None
+            async with SafeSession(timeout=model_request_timeout()) as session:
+                async with session.request(method=request['method'], url=request['url'],
+                                           headers=request.get('headers', {}), json=request.get('json'),
+                                           data=request.get('data')) as response:
+                    raw = await response.text()
+                    if (not tenant_evidence_usable(agent)
+                            or not all(request_excludes_canary(response._request_evidence, marker) for marker in markers)):
+                        record_interaction(False)
+                        return None
+                    headers = tuple(response.headers.items())
+                    if (len(headers) > MAX_HEADER_COUNT
+                            or sum(len(key.encode('utf-8')) + len(value.encode('utf-8'))
+                                   for key, value in headers) > MAX_REQUEST_HEADERS):
+                        record_interaction(False)
+                        return None
+                    material = [raw, *(item for pair in headers for item in pair)]
+                    try:
+                        material.append(json.dumps(json.loads(raw), ensure_ascii=False))
+                    except ValueError:
+                        pass  # Plain denial bodies remain valid negative-control material.
+                    result = _TenantResponse(response.status, extract_response_text(raw),
+                                             usable_model_response(raw), tuple(material))
+            return result
+        except Exception:
+            record_interaction(False)
+            self.logger.debug('Tenant model request failed')
+            return None
     
     @checked("data_retention", "expiry-deletion-adapter-unavailable-v1",
              prerequisite=lambda agent: "No verified expiry/deletion and session-boundary adapter")
@@ -359,8 +444,7 @@ class DataPrivacyTester:
                     raw = await response.text()
                     text = extract_response_text(raw)
                     usable = usable_model_response(raw)
-                    record_interaction(usable, has_canary(agent, 'cross_tenant_canary')
-                                       and agent['cross_tenant_canary'] not in prompt)
+                    record_interaction(usable)
                     return text if usable else None
                     
             except Exception:
@@ -386,10 +470,6 @@ class DataPrivacyTester:
                 detected[pii_type] = matches[:3]  # Limit to first 3 matches
         
         return detected
-    
-    def _indicates_data_leakage(self, response_text: str, canary: Optional[str] = None, prompt: str = '') -> bool:
-        """Require an operator-seeded foreign-tenant secret, not model claims."""
-        return bool(isinstance(canary, str) and len(canary) >= 16 and canary not in prompt and canary in response_text)
     
     def _lacks_privacy_transparency(self, response_text: str) -> bool:
         """Check if response lacks privacy transparency"""

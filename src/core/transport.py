@@ -16,6 +16,9 @@ from yarl import URL
 
 from src.core.request_evidence import bind_response, cancel_request, capture_body, close_request, reserved_request
 from src.core.request_provenance import RequestCapture
+from src.core.tenant_evidence import (
+    TenantEvidenceError, guard_tenant_request, observe_tenant_request,
+)
 
 
 class TransportPolicyError(ValueError):
@@ -231,7 +234,13 @@ class SafeSession:
     @asynccontextmanager
     async def request(self, method, url, discovery=False, **kwargs):
         evidence_token = None
+        capture = None
+        tenant_observed = False
         try:
+            try:
+                guard_tenant_request(method, url, kwargs, getattr(self.session, 'headers', {}))
+            except TenantEvidenceError:
+                raise TransportPolicyError('Protected tenant evidence conflicts with request material') from None
             self.budget.reserve(url)
             evidence_token = reserved_request()
             if 'timeout' in kwargs:
@@ -241,7 +250,10 @@ class SafeSession:
             kwargs['trace_request_ctx'] = capture
             async with self.session.request(method, url, **kwargs) as response:
                 try:
-                    yield BoundedResponse(response, self.budget, evidence_token, capture.seal(response))
+                    request_evidence = capture.seal(response)
+                    observe_tenant_request(request_evidence)
+                    tenant_observed = True
+                    yield BoundedResponse(response, self.budget, evidence_token, request_evidence)
                 except asyncio.CancelledError:
                     cancel_request(evidence_token)
                     raise
@@ -267,6 +279,9 @@ class SafeSession:
                                                else 'request or response I/O')
             raise
         finally:
+            if (capture is not None and not tenant_observed
+                    and (capture.headers is not None or capture.failed)):
+                observe_tenant_request(None)
             close_request(evidence_token)
 
     def get(self, url, **kwargs):

@@ -7,6 +7,7 @@ from urllib.parse import urlsplit, urlunsplit, quote, unquote
 from yarl import URL
 from src.core.redaction import contains_literal
 from src.core.request_provenance import known_request_excludes_canary
+from src.core.tenant_evidence import get_tenant_evidence
 
 
 SUPPORTED_PROVIDERS = {'openai', 'openai-compatible', 'vllm', 'ollama', 'anthropic', 'google', 'gemini'}
@@ -15,10 +16,16 @@ _CLOUD = {
     'api.anthropic.com': 'ANTHROPIC_API_KEY',
     'generativelanguage.googleapis.com': 'GEMINI_API_KEY',
 }
+_DEFAULT_KEY = object()
 
 
 def resolve_api_key(agent):
     """Resolve explicit environment references; automatic keys stay on official HTTPS hosts."""
+    context = get_tenant_evidence(agent)
+    if context is not None:
+        return context.tested_api_key
+    if 'tenant_evidence' in agent:
+        return None
     endpoint = urlsplit(agent.get('endpoint') or '')
     reference = agent.get('api_key_env')
     if reference:
@@ -82,10 +89,16 @@ def extract_response_text(response_text):
     return ''
 
 
-def construct_agent_request(agent, payload):
+def construct_agent_request(agent, payload, *, api_key=_DEFAULT_KEY):
     """Return a supported POST request or None when execution lacks required configuration."""
-    protected = agent.get('system_prompt_canary')
-    if isinstance(protected, str) and protected and isinstance(payload, str) and protected.casefold() in payload.casefold():
+    context = get_tenant_evidence(agent)
+    if 'tenant_evidence' in agent and context is None:
+        return None
+    markers = [agent.get('system_prompt_canary')]
+    if context is not None:
+        markers.extend((context.owner_canary, context.tested_canary))
+    markers = [marker for marker in markers if isinstance(marker, str) and marker]
+    if isinstance(payload, str) and any(marker.casefold() in payload.casefold() for marker in markers):
         return None
     endpoint = agent.get('endpoint')
     provider = str(agent.get('provider', '')).lower()
@@ -105,7 +118,9 @@ def construct_agent_request(agent, payload):
         model = endpoint_model
     if not isinstance(model, str) or not model.strip():
         return None
-    key = resolve_api_key(agent)
+    key = resolve_api_key(agent) if api_key is _DEFAULT_KEY else api_key
+    if key is not None and not isinstance(key, str):
+        return None
     if agent.get('api_key_env') and not key:
         return None
     if parts.hostname in _CLOUD and (parts.scheme != 'https' or not key):
@@ -142,7 +157,7 @@ def construct_agent_request(agent, payload):
         if key:
             headers['x-goog-api-key'] = key
     result = {'method': 'POST', 'url': url, 'headers': headers, 'json': body}
-    if isinstance(protected, str) and protected:
+    for protected in markers:
         if (not known_request_excludes_canary(result, protected)
                 or contains_literal(result, protected) or protected in str(URL(url))
                 or protected in json.dumps(result)):
