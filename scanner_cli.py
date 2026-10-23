@@ -4,6 +4,7 @@
 import asyncio
 import json
 import re
+from copy import deepcopy
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -18,6 +19,7 @@ from src.security.prompt_suites import (
 from src.risk.risk_assessor import RiskAssessment
 from src.frameworks.owasp_llm_top10 import get_coverage_summary
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.contracts import validate_checkpoint_report
 from src.core.model_selection import apply_model_overrides, validate_model_overrides
 from src.core.transport import ScanBudget, scan_transport
 from src.core.files import write_private_text
@@ -216,6 +218,14 @@ def scan(network, domain, repository, traffic, config, output, fmt, verbose, ski
 async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
                    max_response_bytes=1048576, timeout_seconds=300, allow_loopback=False,
                    selections=None, request_timeout_seconds=30, prompt_suite=None):
+    latest_checkpoint = None
+    interruption = None
+    cancelled = False
+
+    async def retain_checkpoint(report):
+        nonlocal latest_checkpoint
+        latest_checkpoint = deepcopy(validate_checkpoint_report(report))
+
     try:
         with scan_transport(ScanBudget(max_requests=max_requests, max_response_bytes=max_response_bytes,
                                        allow_loopback=allow_loopback,
@@ -225,27 +235,50 @@ async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
                 run_pipeline(DiscoveryEngine(), security, RiskAssessment(),
                              scope, mode, agents=agents,
                              agent_validator=(lambda values: apply_model_overrides(values, selections))
-                             if selections else None), timeout=timeout_seconds)
+                             if selections else None,
+                             checkpoint_callback=retain_checkpoint), timeout=timeout_seconds)
+    except asyncio.CancelledError:
+        if latest_checkpoint is None:
+            raise
+        cancelled = True
+        interruption = 'Scan cancelled; retained partial report'
     except ValueError as exc:
-        if str(exc).startswith(('model_overrides', 'Source assets', 'Source asset')):
-            raise click.ClickException(str(exc)) from exc
-        raise click.ClickException('Scan execution failed') from exc
+        if latest_checkpoint is None:
+            if str(exc).startswith(('model_overrides', 'Source assets', 'Source asset')):
+                raise click.ClickException(str(exc)) from exc
+            raise click.ClickException('Scan execution failed') from exc
+        interruption = 'Scan execution failed; retained partial report'
     except (TimeoutError, asyncio.TimeoutError) as exc:
-        raise click.ClickException('Scan deadline exhausted; no complete report was produced') from exc
+        if latest_checkpoint is None:
+            raise click.ClickException('Scan deadline exhausted; no report checkpoint was produced') from exc
+        interruption = 'Scan deadline exhausted; retained partial report'
     except Exception as exc:
-        raise click.ClickException("Scan execution failed") from exc
-    report = to_sarif(result) if fmt == 'sarif' else result
-    serialized = json.dumps(report, indent=2)
-    if output:
-        try:
+        if latest_checkpoint is None:
+            raise click.ClickException("Scan execution failed") from exc
+        interruption = 'Scan execution failed; retained partial report'
+    if interruption is not None:
+        result = latest_checkpoint
+        result['status'] = 'cancelled' if cancelled else 'failed'
+        result['error'] = interruption
+    try:
+        report = to_sarif(result) if fmt == 'sarif' else result
+        serialized = json.dumps(report, indent=2, allow_nan=False)
+        if output:
             write_private_text(output, serialized + '\n')
-        except (OSError, ValueError) as exc:
-            raise click.ClickException("Unable to write report") from exc
-        click.echo(f"Report saved to {output}")
-    else:
-        click.echo(serialized)
+            click.echo(f"Report saved to {output}")
+        else:
+            click.echo(serialized)
+    except (OSError, ValueError, TypeError) as exc:
+        if cancelled:
+            click.echo('Unable to write partial report after cancellation', err=True)
+            raise asyncio.CancelledError from None
+        raise click.ClickException("Unable to write report") from exc
     if verbose:
         click.echo(f"Scan status: {result['status']}", err=True)
+    if cancelled:
+        raise asyncio.CancelledError
+    if interruption is not None:
+        raise click.ClickException(interruption)
     if mode != 'discovery_only' and result.get('agents') and not result.get('summary', {}).get('checks_completed'):
         raise click.ClickException('No security checks completed; configure an explicit model or inspect skipped prerequisites')
     if result['status'] != 'completed':
