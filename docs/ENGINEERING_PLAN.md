@@ -40,7 +40,7 @@ proposed calls and observed actions are distinct outcomes.
 | --- | --- | --- | --- |
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Merged in PR #64; local, independent, and all eight PR/post-merge CI gates passed |
 | R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence merged in PR #65 with all gates passed. Prompt-only within-check receipts in PR #67 pass local acceptance and focused review; required CI results are recorded on the PR. Tenant/access receipts and CLI crash recovery remain separate gates |
-| R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Protected-access prerequisite merged in PR #66 and historical prompt guard in PR #68 with all gates passed. Tenant controls and historical eligibility are the current reviewed correctness slice; nullable-score migration remains separate work |
+| R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Historical access, prompt, and tenant eligibility prerequisites are merged with all gates passed. The scoped tenant CLI/TLS retest is accepted with recorded qualifications. Nullable-score migration is next |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | Planned |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | Planned |
 | R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
@@ -130,9 +130,12 @@ requires the original endpoint/provider/model/context, recognized control versio
 and bounded finalized-check accounting. Historical tenant positives remain
 unassessed without changing archived evidence. Server admission, source replay,
 queued execution, and discovered inputs reject private tenant declarations before
-credential resolution. The first external gate is the
-[scoped tenant retest](tenant-retest.md) after merge and required CI. This does not
-close tenant within-check retention or establish representative model sensitivity.
+credential resolution. The supplied
+[tenant CLI/TLS retest](VALIDATION.md#supplied-tenant-workflow-acceptance) closes
+that scoped workflow gate. This does not close tenant within-check retention or
+establish representative model sensitivity. Next implement nullable score storage
+locally, preserving legitimate assessed zero, supported partial evidence, archives,
+and rollback/backup integrity through explicit historical schema upgrades.
 The prompt audit also reproduces false confirmations from case-changed outbound
 values and transport-added headers. PR #67 now requires a complete private
 request snapshot to exclude these marker sources before confirmation and receipt
@@ -326,9 +329,12 @@ the strategic review does not retroactively expand any acceptance claim.
   PR #68 and merged revision `a8ea520` pass all eight CI jobs. Tenant provenance
   controls and historical eligibility pass 3,515 local coverage tests and 247
   overlapping independent review cases; see
-  [acceptance](VALIDATION.md#controlled-tenant-evidence-local-acceptance). The next
-  external gate is the scoped tenant workflow retest after merge and CI. Nullable
-  score storage remains open.
+  [acceptance](VALIDATION.md#controlled-tenant-evidence-local-acceptance). PR #69
+  merged as `1072d8b` with all eight PR/post-merge jobs passing. The supplied
+  tenant CLI/TLS retest closes its scoped workflow gate with
+  [recorded qualifications](VALIDATION.md#supplied-tenant-workflow-acceptance).
+  Nullable score storage is the next local slice; real-model sensitivity remains
+  open.
 - Evaluation completed by architecture, security, and delivery reviewers.
 - M1 has implemented operator authentication, scan ownership, package/CI repairs,
   persisted results, conservative evidence checks, and initial discovery fixes.

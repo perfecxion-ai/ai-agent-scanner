@@ -486,6 +486,71 @@ GCP service, deployed configuration, operator database, or package publication w
 used. The next external step is a pinned
 [tenant workflow retest](tenant-retest.md) against genuine tenant-aware fixtures.
 
+### Supplied tenant workflow acceptance
+
+The operator supplied a scoped HTTPS fixture retest of merged revision
+`1072d8b8b7763bb9a09b0d4047cbd4afa3ffbf93` (PR #69) on Debian 12/Python 3.11.2.
+Two independent artifact reviews inspected the nine original reports, ten real
+CLI exit files, fixture source/outcomes, job captures, and driver behavior. These
+are reviews of supplied evidence, not new cloud executions. Private artifacts,
+infrastructure identifiers, configurations, and secrets remain outside Git.
+
+All nine reports validate under the current contracts. Independent rederivation
+matches all 70 recorded expectations and the complete recognized probe version.
+The shared eligibility and risk projection preserve these results:
+
+| Fixture | Runs | CLI / scan | Tenant check | Attempt / evaluated | Findings / risk |
+| --- | --- | --- | --- | --- | --- |
+| Vulnerable | 3 | 0 / completed | completed / confirmed | 8 / 8 | 5 each, 90/critical, sampled |
+| Defended | 3 | 0 / completed | completed / inconclusive | 8 / 8 | 0, null/unknown |
+| Unseeded owner | 1 | 1 / partial | failed / inconclusive | 1 / 0 | 0, null/unknown |
+| Marker-bearing invalid denial | 1 | 1 / partial | failed / inconclusive | 3 / 2 | 0, null/unknown |
+| Unseeded reflection endpoint | 1 | 1 / partial | failed / inconclusive | 1 / 0 | 0, null/unknown |
+| Missing environment value | 1 | 1 / no report | no security execution | none | no report |
+
+All six successful tenant sequences have owner, tested, and invalid controls
+followed by attacks 0 through 4. The negative cases stop at their intended
+controls and send no tenant attacks. No tenant check passes. All 521 captured
+fixture POST entries reconcile with the supplied outcome summary; fixture GET
+requests are unlogged, so that count is not a complete scan wire total.
+The normal installed CLI and default verifying HTTPS path were used. Setup and
+job captures record a successful verifying TLS 1.3 handshake through a private
+trusted CA on a non-loopback endpoint. Trust-store provenance and cleanup remain
+operator attestations. No model server participated; these deterministic fixtures
+validate the configured workflow, not representative detection sensitivity.
+
+The original nine reports contain 110 response-excerpt omission sentinels and no
+other recognized raw-text evidence fields. Secret absence and original modes
+remain operator attestations because actual values are excluded. The captured
+privacy sweep covers the original 37-file deliverable, not all 50 files in the
+final expanded bundle. Its twelve JSON-mode entries comprise nine reports and
+three summary/dependency JSON files. Added private driver sources contain their
+synthetic PII constants; do not claim zero such constants across the whole final
+archive or publish those drivers as acceptance artifacts.
+
+Two negative-case claims in the supplied narrative need narrower interpretation.
+The contaminated-denial fixture returns only the tested marker in the tested
+control, so it verifies rejection of a marker-bearing denial and attack
+suppression, not disposal of a held positive candidate. The reflection fixture
+stops at an unseeded owner baseline; it does not exercise a protected marker
+embedded in reflected material. Those stronger cases retain local regression
+coverage, without new external acceptance from this run. Versioned finding
+control fields apply to the confirmed findings, not every inconclusive run.
+
+The private job wrapper masks analysis-command failures, and its privacy failure
+count omits several conditions that its report prints. Its overall exit alone
+cannot certify acceptance. Actual per-scan exits, all 70 captured expectations,
+and recorded privacy counts support the observations above. Before another
+external run, propagate analysis/privacy failures, check every privacy condition,
+capture cleanup outcomes, and add any claimed held-candidate negative explicitly.
+These harness and wording limits do not require another broad GCP run.
+
+This closes the scoped CLI/TLS workflow gate with the stated qualifications.
+Server tenant profiles, tenant/access within-check receipts, CLI crash files,
+real-model sensitivity, and enterprise acceptance remain open. The next local
+R1.3 slice is nullable score storage with explicit historical schema definitions,
+canonical cache projection, rollback, and disposable backup/restore acceptance.
+
 ## Exact-revision external retest
 
 The operator supplied a private live-lab retest for
