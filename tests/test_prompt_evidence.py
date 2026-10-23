@@ -448,7 +448,7 @@ async def test_custom_catalog_does_not_gain_receipts_or_downgrade_new_contract(t
         with scan_transport(ScanBudget(allow_loopback=True)), collect_checks() as checks:
             findings = await tester._test_injection_category(item, CATEGORY, payloads)
         result = dict(item, status='completed', check_schema_version='1.0', checks=checks, vulnerabilities=findings)
-        assert risk_assessment_eligible(result)
+        assert not risk_assessment_eligible(result)
     assert len(findings) == 1 and checks[0]['outcome'] == 'confirmed'
 
 

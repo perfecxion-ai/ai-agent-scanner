@@ -7,6 +7,7 @@ import json
 import pytest
 
 from src.core.contracts import CheckRecord
+from src.core.pipeline import to_sarif
 from src.core.prompt_catalog import baseline_payloads
 from src.core.risk_projection import project_report_risk
 from src.reporting.workflows import compare_reports
@@ -45,7 +46,7 @@ def legacy_prompt_report(*, partial=False):
 
 
 @pytest.mark.parametrize('partial', [False, True])
-def test_legacy_prompt_score_is_unchanged_but_not_upgraded_to_request_proof(api, partial):
+def test_legacy_prompt_score_is_unknown_without_rewriting_archived_evidence(api, partial):
     module, client = api
     archived = legacy_prompt_report(partial=partial)
     encoded = json.dumps(archived, sort_keys=True)
@@ -53,15 +54,28 @@ def test_legacy_prompt_score_is_unchanged_but_not_upgraded_to_request_proof(api,
 
     results, listed = outputs(module, client)
     summary, agents = project_report_risk(archived)
-    # This compatibility limitation remains open until the historical guard lands.
-    assert summary['overall_risk_score'] == agents['stable-asset']['risk_score'] == 70
-    assert results['summary']['overall_risk_score'] == listed['risk_score'] == 70
+    assert summary['overall_risk_score'] is None
+    assert summary['risk_assessment_status'] == 'not_assessed'
+    assert results['summary']['overall_risk_score'] is None
+    for item in (agents['stable-asset'], results['agents'][0], listed):
+        assert item['risk_score'] is None
+        assert item['risk_level'] == 'unknown'
+        assert item['risk_assessment_status'] == 'not_assessed'
+        assert item['risk_coverage_status'] == 'not_assessed'
+        assert item['risk_scoring_policy'] is None
     assert results['pipeline'] == archived
     exported = client.get('/api/scans/fixture/report?format=json', headers=headers(module))
     assert exported.status_code == 200 and exported.json == archived
     stored = module.ScanResult.query.filter_by(scan_id='fixture').one().result
     assert json.dumps(stored, sort_keys=True) == encoded
     assert json.dumps(exported.json, sort_keys=True) == encoded
+    sarif = client.get('/api/scans/fixture/report?format=sarif', headers=headers(module))
+    assert sarif.status_code == 200 and sarif.json == to_sarif(archived)
+    assert sarif.json['runs'][0]['properties']['summary']['overall_risk_score'] == 70
+    assert sarif.json['runs'][0]['results'][0]['properties']['vulnerability_id'] == 'historical-prompt-finding'
+    assert client.get('/api/agents?risk_level=high', headers=headers(module)).json['agents'] == []
+    assert [item['id'] for item in client.get(
+        '/api/agents?risk_level=unknown', headers=headers(module)).json['agents']] == ['fixture-snapshot']
     assert 'check_evidence_schema_version' not in archived
     assert all('check_evidence' not in item for item in archived['agents'])
 

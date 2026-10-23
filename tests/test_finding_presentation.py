@@ -1,45 +1,69 @@
 """Presentation grouping cannot rewrite raw evidence, scoring, or finding lifecycle."""
 
+import asyncio
 from copy import deepcopy
 import json
 from pathlib import Path
 import shutil
 import subprocess
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
+from aiohttp import web
 import pytest
 
-from src.core.contracts import collect_checks, record_interaction
+from src.core.contracts import collect_checks, collect_evidence
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.transport import ScanBudget, scan_transport
 from src.reporting.workflows import apply_policy, compare_reports, inventory
 from src.risk.risk_assessor import RiskAssessment
 from src.security.prompt_injection_tests import PromptInjectionTester
-from tests.request_provenance_fixture import declared_request_evidence
 
 
 @pytest.fixture
-async def sampled_report():
+async def sampled_report(monkeypatch):
     tester = PromptInjectionTester()
     agent = {"id": "synthetic-asset", "name": "Synthetic fixture", "type": "assistant",
              "provider": "openai-compatible", "model": "fixture-model", "discovery_method": "fixture",
-             "endpoint": "https://fixture.invalid/api", "system_prompt_canary": "synthetic-protected-marker-8c4b21",
+             "system_prompt_canary": "synthetic-protected-marker-8c4b21",
              "evidence_context_id": "synthetic-policy-v1"}
+    calls = []
+    disclosures = [3, 3, 3, 3, 2, 2, 2]
 
-    async def disclose(target, category, payload):
-        record_interaction(True)
-        response = json.dumps({"choices": [{"message": {"content": target["system_prompt_canary"]}}]})
-        return tester._analyze_response(target, category, payload, response, 200,
-                                        request_evidence=declared_request_evidence(target, payload))
+    async def disclose(request):
+        calls.append(await request.json())
+        category, sample = divmod(len(calls) - 1, 5)
+        content = agent['system_prompt_canary'] if sample < disclosures[category] else 'No disclosure.'
+        return web.json_response({'choices': [{'message': {'content': content}}]})
 
-    findings = []
-    with collect_checks() as checks, patch.object(tester, "_test_single_payload", side_effect=disclose), patch(
-            "asyncio.sleep", AsyncMock()):
-        for category, count in zip(tester.injection_payloads, [3, 3, 3, 3, 2, 2, 2]):
-            findings.extend(await tester._test_injection_category(
-                agent, category, [f"Synthetic payload {index}" for index in range(count)]))
+    # Only pacing is shortened. Adapters, request traces, analysis, and receipts run.
+    monkeypatch.setattr('src.security.prompt_injection_tests.asyncio',
+                        SimpleNamespace(sleep=AsyncMock(), CancelledError=asyncio.CancelledError))
+    app = web.Application()
+    app.router.add_post('/{path:.*}', disclose)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '127.0.0.1', 0)
+    await site.start()
+    agent['endpoint'] = 'http://127.0.0.1:' + str(site._server.sockets[0].getsockname()[1])
+    budget = ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True,
+                        max_requests=35, request_timeout_seconds=2)
+
+    async def execute():
+        with scan_transport(budget), collect_checks() as checks, collect_evidence(agent) as evidence:
+            return await tester.test_agent(agent), checks, evidence
+
+    try:
+        findings, checks, evidence = await asyncio.wait_for(execute(), 20)
+    finally:
+        await runner.cleanup()
+    assert len(calls) == budget.requests == 35
+    assert len(findings) == len(evidence.receipts) == 18
     result = {"agent_id": agent["id"], "agent_name": agent["name"], "status": "completed",
-              "check_schema_version": "1.0", "checks": checks, "vulnerabilities": findings}
+              "check_schema_version": "1.0", "checks": checks, "vulnerabilities": findings,
+              "provider": agent['provider'], "model": agent['model'],
+              "check_evidence_schema_version": "1.0", "check_evidence_run_id": evidence.run_id,
+              "check_evidence": deepcopy(evidence.receipts)}
     report = await run_pipeline(SimpleNamespace(discover_agents=AsyncMock(return_value=[agent])),
                                 SimpleNamespace(test_agents=AsyncMock(return_value=[result])), RiskAssessment(), None)
     # Exercise the actual stored/exported JSON contract rather than Python tuples.
@@ -71,7 +95,7 @@ async def test_actual_prompt_evidence_forms_seven_groups_without_losing_samples(
     originals = report["agents"][0]["vulnerabilities"]
     assert [item for group in displayed["groups"] for item in group["occurrences"]] == originals
     assert len({finding["id"] for finding in originals}) == 18
-    assert sum(check["responses_evaluated"] for check in report["agents"][0]["checks"]) == 18
+    assert sum(check["responses_evaluated"] for check in report["agents"][0]["checks"]) == 35
     assert report["summary"]["checks_completed"] == 7
     assert displayed["source"] == report == original
 
@@ -113,10 +137,14 @@ async def test_diff_and_suppression_keys_and_original_occurrences_remain_unchang
 @pytest.mark.asyncio
 async def test_nondisclosure_cannot_resolve_after_presentation_grouping(sampled_report):
     before = sampled_report
-    after = deepcopy(before)
-    after["agents"][0]["vulnerabilities"] = []
-    for check in after["agents"][0]["checks"]:
+    quiet = deepcopy(before['security_results'][0])
+    quiet.update(vulnerabilities=[], check_evidence=[])
+    for check in quiet['checks']:
         check["outcome"] = "inconclusive"
+    after = await run_pipeline(
+        SimpleNamespace(discover_agents=AsyncMock(return_value=deepcopy(before['agents']))),
+        SimpleNamespace(test_agents=AsyncMock(return_value=[quiet])), RiskAssessment(), None)
+    assert after['summary']['overall_risk_score'] is None
     comparison = compare_reports(before, after)
     assert not comparison["resolved"] and len(comparison["resolution_unverified"]) == 7
     assert sum(len(item["occurrences"]) for item in comparison["resolution_unverified"]) == 18
