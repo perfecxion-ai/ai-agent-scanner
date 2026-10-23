@@ -14,6 +14,8 @@ import aiohttp
 from aiohttp.abc import AbstractResolver
 from yarl import URL
 
+from src.core.request_evidence import bind_response, cancel_request, capture_body, close_request, reserved_request
+
 
 class TransportPolicyError(ValueError):
     """A request was refused by the scan transport policy."""
@@ -140,10 +142,12 @@ class PolicyResolver(AbstractResolver):
 
 
 class BoundedResponse:
-    def __init__(self, response, budget):
+    def __init__(self, response, budget, evidence_token=None):
         self.response = response
         self.budget = budget
         self.body = None
+        self._evidence_token = evidence_token
+        bind_response(evidence_token, self)
 
     def __getattr__(self, name):
         return getattr(self.response, name)
@@ -166,6 +170,7 @@ class BoundedResponse:
             async for chunk in self.iter_chunked(8192):
                 data.extend(chunk)
             self.body = bytes(data)
+            capture_body(self._evidence_token, self, self.body)
         return self.body
 
     async def text(self, encoding=None, errors='replace'):
@@ -196,18 +201,30 @@ class SafeSession:
     async def __aexit__(self, *args):
         try:
             return await self.session.__aexit__(*args)
+        except asyncio.CancelledError:
+            cancel_request()
+            raise
         finally:
             await self.resolver.close()
 
     @asynccontextmanager
     async def request(self, method, url, discovery=False, **kwargs):
+        evidence_token = None
         try:
             self.budget.reserve(url)
+            evidence_token = reserved_request()
             if 'timeout' in kwargs:
                 kwargs['timeout'] = _bounded_timeout(kwargs['timeout'], self.budget.request_timeout_seconds)
             kwargs['allow_redirects'] = False
             async with self.session.request(method, url, **kwargs) as response:
-                yield BoundedResponse(response, self.budget)
+                try:
+                    yield BoundedResponse(response, self.budget, evidence_token)
+                except asyncio.CancelledError:
+                    cancel_request(evidence_token)
+                    raise
+        except asyncio.CancelledError:
+            cancel_request(evidence_token)
+            raise
         except TransportPolicyError:
             self.budget.rejections += 1
             logging.getLogger(__name__).warning('HTTP transport policy rejected request')
@@ -226,6 +243,8 @@ class SafeSession:
                                                    exc, aiohttp.ClientConnectorCertificateError)
                                                else 'request or response I/O')
             raise
+        finally:
+            close_request(evidence_token)
 
     def get(self, url, **kwargs):
         return self.request('GET', url, **kwargs)
