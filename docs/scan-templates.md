@@ -126,12 +126,13 @@ This history is operational and is not tamper-resistant.
 
 ## Database upgrade
 
-Templates introduced `scan_template` in schema version 2. Current startup uses
-version 3 for finite scheduling. Exact version 1 layouts add the template and
-two schedule tables; exact version 2 layouts add only the schedule tables.
-Each upgrade updates the version stamp in one SQLite transaction. Existing scan,
-job, result, asset, audit, and template rows are preserved. Fresh databases and
-previously supported unversioned layouts initialize directly to version 3. See
+Templates introduced `scan_template` in schema version 2, and version 3 added
+finite scheduling. Current startup uses version 4. Exact version 1 layouts add
+the template and two schedule tables; exact version 2 layouts add the schedule
+tables. Recognized old layouts then migrate nullable risk caches transactionally.
+Archives, IDs, template definitions and other non-cache fields are preserved;
+unsupported risk becomes SQL NULL while genuine assessed zero remains zero.
+Fresh databases and recognized unversioned layouts initialize to version 4. See
 [job and upgrade constraints](jobs.md).
 
 No template feature changes the single-process, file-backed SQLite, POSIX, local

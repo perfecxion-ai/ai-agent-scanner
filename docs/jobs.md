@@ -124,31 +124,60 @@ database URLs, or queue contents.
 ## Schema upgrades
 
 Stop the server and back up the SQLite database with a consistent SQLite backup
-operation before upgrading. Startup validates schema version 3 while holding the
+operation before upgrading. Startup validates schema version 4 while holding the
 dispatcher lock. An empty database is initialized automatically. Recognized
 unversioned layouts are the original `scan_session` and `discovered_agent` tables,
 those tables plus `scan_result`, or those tables plus `scan_result` and `scan_job`.
 Existing column definitions and primary keys must match the supported layout.
-Extra non-unique indexes are accepted. Existing records are preserved; missing additive
-tables and the version stamp are committed in one SQLite transaction.
+Ordinary and partial non-unique indexes are accepted. Explicit historical
+definitions validate old layouts independently of the current ORM. Missing
+additive tables, the score-column migration, and the version stamp commit in one
+SQLite transaction.
 
 The exact version 1 layout contains `scan_session`, `discovered_agent`,
 `scan_result`, `scan_job`, `audit_event`, and `schema_version`. Exact version 1
 upgrades add `scan_template`, `scan_schedule`, and `scan_occurrence`. Exact version
-2 already contains `scan_template` and adds only the two schedule tables. All
-additions and the version stamp commit in the same transaction. Existing rows
-remain unchanged. Fresh and recognized unversioned layouts initialize directly
-to version 3. An unstamped extra template/schedule table or a partial versioned
+2 already contains `scan_template` and adds only the two schedule tables. Version
+3 already has all nine tables. Every recognized old layout then upgrades the two
+score columns; it does not recreate existing schedule tables. Fresh and recognized
+unversioned layouts initialize to version 4. An unstamped extra template/schedule table or a partial versioned
 layout is not a recognized upgrade path. See [saved template boundaries](scan-templates.md)
 and [finite schedule boundaries](scan-schedules.md).
 
-Unknown tables, views, triggers, additional constraints or unique indexes,
+Schema 4 stores unknown `scan_session.overall_risk_score` and
+`discovered_agent.risk_score` as SQL `NULL`, without a zero default. Genuine
+assessed zero remains `0.0`. Migration interprets saved evidence through the same
+canonical risk projection used by the API, including supported partial findings.
+Missing or unsupported evidence becomes null, and an unassessed snapshot's cached
+level becomes `unknown`. Snapshot aliases follow the API's explicit `asset_id` or
+row-ID fallback; malformed explicit aliases cannot supply a score.
+
+Only the two score-bearing tables are rebuilt. SQL copying preserves IDs and
+stored JSON/text bytes; archived reports, findings, job/audit records, and other
+row fields are preserved. Accepted indexes are recreated from their original SQL.
+A failure during copying, index recreation, cache projection, or version stamping
+rolls the upgrade back. New writes use the canonical projection for scalar caches
+and preserve null through checkpoint, terminal, cancellation, and recovery paths.
+API reads and exports continue to use the saved report; inventory pagination is
+a separate roadmap item.
+
+Migration bounds each report and snapshot-metadata interpretation to 8 MiB before
+fetching its raw bytes and processes records incrementally. Malformed, deeply
+nested, or oversized evidence leaves the cache unknown while its stored bytes
+remain intact. This does not repair a malformed archive. Startup performs this
+upgrade before recovering jobs, under the existing exclusive dispatcher lock.
+
+Unknown tables, views, triggers, expression indexes, additional constraints or unique indexes,
+`WITHOUT ROWID`/`STRICT` table options, explicit column collations or conflict policies,
 database column defaults, changed columns,
 missing versioned tables, or an unsupported
 version stop startup without changing the database. Restore a backup or perform
 an explicit reviewed migration; deleting the version stamp is not a repair.
 This is an acceptance path for these known SQLite releases, not a general
 migration engine or support for PostgreSQL.
+Downgrading the version stamp is unsupported. To roll back a deployed upgrade,
+stop the service and restore the untouched pre-upgrade backup with the prior
+binary; keep that backup until deployment validation is complete.
 
 ## Disposable backup/restore acceptance
 
@@ -167,7 +196,7 @@ parent bounds child output, kills/reaps timed-out children, and removes the
 temporary databases after success or failure. JSON includes `accepted`, each
 case's assertions, and bounded failure details; failure returns nonzero.
 
-Exact schema 1/2/3 fixtures contain completed evidence, an agent snapshot, audit
+Exact schema 1/2/3/4 fixtures contain completed evidence, agent snapshots, audit
 history, queued work, and previously active work. Templates and schedules are
 seeded where supported. After stopping and disposing seed connections, a read-only
 SQLite backup is restored into absent files. Integrity, schema, and every logical
@@ -177,7 +206,12 @@ schedules require restart review, including an overdue schedule with no outstand
 scan. Existing occurrences remain intact and no schedule preflight/admission is
 allowed. A second restart must not change rows, evidence, or audit history.
 
-Negative cases verify exclusive ownership precedes initialization, schema 1/2
+Successful upgrades assert null for unsupported cached scores, preserve a genuine
+assessed zero and a retained confirmed partial score, and allow only the documented
+score/level fields to change in existing completed rows. Archived report JSON and
+all other completed fields stay exact.
+
+Negative cases verify exclusive ownership precedes initialization, schema 1/2/3
 version-stamp failures roll back, future versions remain unchanged, and a restored
 copy missing a report is rejected before initialization even though its SQLite
 integrity check passes. An independent restore of the untouched backup must retain

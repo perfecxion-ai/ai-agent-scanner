@@ -157,10 +157,12 @@ process cancellation; blocked synchronous libraries can still delay process exit
 Shutdown invalidates results before ownership release. A late read-only preflight
 cannot enqueue work in an old process after a replacement dispatcher starts.
 
-Schema version 3 adds `scan_schedule` and `scan_occurrence`. Exact version 2
-databases add both tables and update the version stamp transactionally; exact
-version 1 databases also add `scan_template`. Existing records are preserved.
-Fresh and recognized unversioned layouts initialize directly to version 3.
+Schema version 3 introduced `scan_schedule` and `scan_occurrence`. Current version
+4 also migrates nullable risk caches. Exact version 2 databases add both schedule
+tables; exact version 1 databases also add `scan_template`. Schedule definitions,
+occurrences and archived reports are preserved through the transactional upgrade.
+Fresh and recognized unversioned layouts initialize to version 4. See
+[score migration and rollback](jobs.md#schema-upgrades) for cache-field changes.
 An admitted occurrence, its count/pointer, scan, queue row, and admitted audit event
 commit together; a failed transaction leaves none of them partially admitted.
 
