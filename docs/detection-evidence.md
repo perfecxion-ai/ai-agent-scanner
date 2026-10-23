@@ -80,8 +80,13 @@ evidence. Baseline text and issued credentials are never finding
 fields. Configure opaque synthetic markers separately from credentials.
 
 The `authorized-and-denied-resource-controls-v2` definition changes probe
-versions for all four check groups. Historical checks and findings remain
-readable but cannot establish verified resolution across this version boundary.
+versions for all four check groups. Records using earlier control definitions
+remain readable but cannot establish current risk or verified resolution, even
+when both compared records share an obsolete version. Current projections require
+recognized control semantics, matching asset context, and valid sample accounting.
+Custom protected-access sample catalogs are unverified until supported by this
+contract; their archived observations are not deleted. See
+[historical evidence handling](result-contracts.md) for mixed-evidence limits.
 Keep the public `evidence_context_id` stable only while the tested resource,
 authorization policy, and protected fixture remain the same.
 

@@ -157,12 +157,70 @@ distribution build, Twine, and an installed-wheel checkpoint smoke outside the
 checkout pass. Installed pipeline and CLI hashes match the reviewed source.
 Ordinary and optimized disposable backup acceptance pass all eight cases each.
 
-PR/post-merge CI remains a delivery prerequisite. This slice does not retain
+PR #65 and merged revision `4f9de3ff3217aac93f1ea0933d790d07316f94ac` pass all
+eight CI jobs: Python 3.10 through 3.13, macOS, lint, security, and container.
+This slice does not retain
 observations still inside unfinished checks or implement CLI process-crash
 recovery. Duplicate or redaction-colliding source IDs fail closed rather than
 silently rebinding findings. Unknown database score placeholders and newest-100
 inventory filtering remain R1.3/R1.4 work. No external model, GCP service, deployed
 database, package publication, or deployment was used for this acceptance.
+
+### Historical protected-access compatibility follow-up
+
+Independent follow-up review reproduced current risk eligibility and a zero/minimal
+API projection from a pre-positive-control authentication check using the public
+`18-header-variations-denied-control-v1` definition. Matching that obsolete version
+on both records also established resolution. R1.1 changed producer semantics and
+blocked cross-version resolution, but did not reject two matching unsupported
+historical records. Existing synthetic zero fixtures did not exercise valid
+positive-control provenance.
+
+The corrective slice passes 2,899 local tests with warnings treated as errors and
+an overlapping 943-case independent focused gate. A pure shared policy recognizes the frozen
+current protected-access definitions, original provider/model context, bounded
+counters, response/control provenance, and covered paths. Only supported current
+passes establish sampled zero or verified absence. Unsupported historical
+confirmations make their asset's current score unknown, including mixed-evidence
+assets, without changing archived reports or suppressing their original findings.
+Other assets retain independently supported scores. Modern direct scorer inputs
+without supported evidence fail closed instead of becoming zero.
+
+Tests execute all four real protected-access producer groups against deterministic
+vulnerable and defended fixture transports. Current findings, partial cleanup
+failures, valid native-model context, sampled zero, and matching controlled
+resolution remain supported. Old/old and old/current comparisons cannot establish
+resolution. Unknown/custom definitions, missing or redacted contexts, invalid
+counters, conflicting resource references, and unsupported positive claims cannot
+become current verdicts. Frozen request definitions and version hashes are unchanged.
+
+Ordinary and checkpointed paths use the same secret collection and public evidence
+basis. Redacted evidence or invalidated risk labels remove only the unsupported
+numeric assessment and recompute the summary. Tests cover credential collisions
+with public labels and paths, and canary/credential collisions with the two new
+control/path field names across source, validator, probe, and multiple-asset inputs.
+Known field collisions fail before security requests or checkpoints; newly learned
+collisions cannot escape projection. These fixtures do not establish a general
+solution to every public-schema collision. JSON/SARIF and saved checkpoints retain
+privacy, and no redaction exemption is used to keep a score.
+
+The dashboard reads canonical risk projections from the same API response and
+joins by unique asset ID, without reinterpreting archived checks. All 143 JavaScript
+cases pass. Real Chromium verifies historical zero/high records display Not assessed
+with their original findings and downloads available, alongside current high and
+partial states. Node/API tests also verify legitimate sampled zero. The owned
+browser fixture passes at 320, 390, and 1440 pixels,
+without external requests or page/CSP errors; its process and temporary database
+are cleaned up. This is scoped browser acceptance, not a comprehensive accessibility
+or deployed-service certification.
+
+Ruff, configured Bandit, whitespace/privacy checks, distribution build, Twine, and
+fresh installed-wheel smoke outside the checkout pass. Normal and optimized
+disposable backup acceptance pass all eight cases each. Independent review found
+no remaining runtime blockers. PR/post-merge CI remains a delivery prerequisite.
+No GCP service, external model, operator database, package publication, or deployment
+was used. Nullable database storage, within-check confirmation retention, and CLI
+process-crash files remain separate roadmap work.
 
 ## Exact-revision external retest
 

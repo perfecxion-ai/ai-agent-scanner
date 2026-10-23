@@ -31,14 +31,24 @@ interruption, and server-process recovery. The combined tree passes 2,307 tests
 with warnings treated as errors, independent review, and installed-wheel smoke.
 The process-kill fixture waits for an acknowledged SQLite checkpoint, kills the
 actual dispatcher process, and verifies exact evidence/snapshot retention without
-probe replay. PR/post-merge CI remains pending. See
+probe replay. PR #65 and merged revision `4f9de3f` pass all eight CI jobs. See
 [checkpoint acceptance and limits](VALIDATION.md#finalized-check-checkpoint-local-acceptance).
 
 R1.2 remains open: observations inside unfinished checks need a separate
 versioned progress/evidence contract, and CLI process-crash recovery needs a
 private checkpoint-file contract. Neither is implemented by R1.2a. Do not equate
 the benchmark's observation checkpoint with genuine normal-scan finding evidence.
-Next work defines within-check confirmation retention before expanding coverage.
+The historical compatibility prerequisite now centralizes supported
+protected-access evidence eligibility for scoring, API/dashboard projection, and
+comparison. Unsupported historical passes and confirmations cannot become current
+verdicts; original reports and findings remain untouched and unresolved. Genuine
+current sampled zero and confirmed findings remain supported. Local acceptance
+passes 2,899 tests with warnings treated as errors, 143 dashboard cases, real
+Chromium, independent review, both backup modes, and installed-wheel smoke.
+PR/post-merge CI remains pending. See
+[compatibility acceptance](VALIDATION.md#historical-protected-access-compatibility-follow-up).
+This also protects the planned nullable-score migration. Within-check confirmation
+retention follows under a separate versioned evidence contract.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
