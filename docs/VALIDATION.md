@@ -217,10 +217,92 @@ or deployed-service certification.
 Ruff, configured Bandit, whitespace/privacy checks, distribution build, Twine, and
 fresh installed-wheel smoke outside the checkout pass. Normal and optimized
 disposable backup acceptance pass all eight cases each. Independent review found
-no remaining runtime blockers. PR/post-merge CI remains a delivery prerequisite.
+no remaining runtime blockers. PR #66 and merged revision
+`81353109936ce3afcc61eac9a9f1bff071f585db` pass all eight CI jobs: Python 3.10
+through 3.13, macOS, lint, security, and container.
 No GCP service, external model, operator database, package publication, or deployment
 was used. Nullable database storage, within-check confirmation retention, and CLI
 process-crash files remain separate roadmap work.
+
+## Within-check prompt receipt local acceptance
+
+The R1.2b prompt-only increment saves configured-canary confirmations before their
+prompt category returns, including before response/session cleanup and pacing.
+An immutable receipt binds one actual evaluated transport response to its finding,
+asset execution, frozen probe definition, public context, and as-of counters.
+Receipts are separate from finalized checks: unfinished coverage stays explicit,
+and neither an interrupted check nor nondisclosure establishes a pass.
+
+New checkpoint version 2 preserves both ledgers. Receipt IDs and run identities
+cannot be replaced, and acknowledged receipt order is an exact immutable prefix.
+Asset and security-result copies must agree. Malformed raw adapter receipts fail
+before report admission; unsupported custom engine findings remain visible but cannot
+fall back to legacy scoring. Current-root reports with missing asset contracts
+also fail closed. Actual historical reports and the standalone paired benchmark
+retain their earlier contract; frozen prompt bytes, hashes, and budgets are unchanged.
+
+Local producer and contract cases, including actual loopback HTTP, cover response/session cleanup failures, pacing and
+later-request cancellation, request budgets, task isolation, missing/unbound tokens,
+metadata-only canary echoes, reflected prompts, raw/public validation, and native
+model-in-endpoint adapters. A persistence error or cancellation remains fatal even
+if cleanup raises a second ordinary error. Counters exclude callbacks and cleanup;
+they count reserved attempts, not guaranteed delivered wire requests.
+
+Eight actual CLI-path cases cover baseline/candidate suites, JSON/SARIF, and
+deadline/cancellation while the first category is unfinished. Outputs retain the
+confirmed finding, receipt, 70/high with partial coverage, and truthful terminal
+status in owner-only files. Two spawned dispatcher cases wait for the actual
+first-response evidence commit, kill the process before category return, and
+verify exact evidence/snapshot retention, one interrupted event, idempotent restart,
+and no probe replay. These are acknowledged-commit process tests, not power-loss
+or CLI process-crash durability.
+
+The real server worker and Flask API client retain the same evidence through
+deadline/cancellation in private fixture SQLite. Result, inventory, high-risk filter,
+and SARIF views agree on risk and coverage. Negative writes execute while the real
+claim is still running, and rejected changes leave report/snapshots/counts unchanged.
+Their oracle comes from private fixture discovery, not a new API field. Separately,
+the existing actual dispatcher/profile/template workflow runs frozen production
+prompts against vulnerable and quiet fixtures with unchanged privacy assertions.
+No finding or score is seeded in these normal-execution retention tests.
+
+Scan-wide guards protect newly emitted public descriptors. Redaction never exempts
+secrets to preserve scores; unsupported or redacted provenance stays unassessed
+without erasing independently eligible assets. Raw generated text, canaries,
+credentials, and private request tokens remain out of JSON/SARIF and retained state.
+Public receipts attest scanner observations, not independently verified target
+seeding or cryptographic report authenticity.
+
+Combined Linux/Python 3.10 acceptance passes 3,081 cases with warnings treated as
+errors and an inherited nonexistent evidence-registry sentinel. Independent review
+passes 762 overlapping focused cases. All 143 dashboard JavaScript cases, Ruff,
+configured Bandit, whitespace checks, distribution build, Twine, and a fresh
+installed-wheel smoke outside the checkout pass. All eleven changed runtime
+modules in the wheel match the working source. Normal and optimized disposable
+backup acceptance each pass all eight cases. These counts are regression coverage,
+not independent model observations or detection-effectiveness measurements.
+
+PR and cross-platform CI acceptance remain pending. This local prompt-only slice
+does not close tenant/access within-check retention, CLI crash files, nullable
+database scores, or exhaustive inventory filtering. No GCP service, external model,
+operator registry/database, package publication, or deployment was used.
+
+### Tenant evidence prerequisite for the next increment
+
+Read-only next-slice review reproduced an existing cross-tenant reflection gap
+with the unchanged five-prompt privacy tester, actual adapter/SafeSession, owned
+loopback HTTP, and synthetic values. A server with no tenant data echoes either
+the request's model value or Authorization value. When that request value equals
+the configured foreign-tenant canary, each fixture produces five confirmed
+findings and a completed/confirmed check. The shared eligibility function accepts
+that check. This is not a full-server score measurement or a new external lab run.
+
+The tenant canary is excluded from the prompt but not from every outbound request
+field. The tester also lacks an independently successful authorized tenant-data
+baseline. This predates prompt receipts. Correct the outbound reflection boundary
+and define the tenant authorization/provenance contract before persisting these
+observations inside unfinished checks. Existing legacy findings must remain
+readable without being silently promoted to stronger current evidence.
 
 ## Exact-revision external retest
 

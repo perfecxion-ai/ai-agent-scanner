@@ -71,8 +71,9 @@ without prerequisites remain skipped. An active assessment where every check
 was skipped is partial, not a clean completed scan. Completion is execution
 accounting, not a claim that every rule passed or that the asset is safe.
 
-Modern results require a confirmed finding matched to its confirmed check, or a
-completed protected-access sampled pass, before risk assessment. An execution
+Modern results require a confirmed finding matched to its confirmed check or a
+supported prompt-disclosure receipt, or a completed protected-access sampled pass,
+before risk assessment. An execution
 containing only heuristic/inconclusive responses and skipped oracles has unknown
 risk and a null score; it must not infer minimal risk from missing evidence.
 `risk_assessment_status` is `not_assessed` or `not_run` when none qualifies,
@@ -145,8 +146,11 @@ Existing saved reports and exported copies are not retroactively sanitized.
 
 ## Incremental report envelope
 
-Normal CLI/server executions add a `checkpoint` object with `version: "1.0"`, a
-positive `sequence`, and `coverage: "finalized_checks_only"`. Intermediate reports
+Normal CLI/server security executions add a `checkpoint` object with
+`version: "2.0"`, a positive `sequence`, and
+`coverage: "confirmed_observations_and_finalized_checks"`. Older finalized-only
+and discovery-only checkpoints retain version `1.0` and
+`coverage: "finalized_checks_only"`. Intermediate reports
 are partial; the final report keeps the last acknowledged sequence and its actual
 execution status. JSON and SARIF retain the envelope. It identifies persistence
 coverage, not a passed security control or an accuracy measurement.
@@ -165,6 +169,51 @@ ran. Failed validation or persistence stops execution without weakening prior
 evidence. Missing or duplicate source IDs, including collisions after redaction,
 cannot be used to join security results to inventory. Historical reports are not
 rewritten to introduce this envelope. See [storage and recovery limits](jobs.md#finalized-check-checkpoints).
+
+### Prompt observation receipts
+
+New engine security reports advertise `check_evidence_schema_version: "1.0"`.
+Each asset and its matching security result carry an independent `check_evidence`
+array and, once assigned, an immutable `check_evidence_run_id`. Pending empty
+inventory may omit that run ID. A receipt does not mark a check completed, failed,
+or passed. `summary.checks_unfinished` counts distinct receipt-backed checks with
+no terminal check record; the count can remain nonzero after recovery.
+
+An actual successful model response containing the configured protected system
+canary can produce a prompt-disclosure receipt. It binds a finding UUID to the
+asset, execution UUID, rule/probe version, public evidence context, zero-based
+sample index, per-check observation sequence, and actual reserved-request and
+evaluated-response counters as of that observation. The source is
+`protected_system_canary_match`, version `1.0`. These counters exclude report
+callbacks and cleanup failures; reserved attempts are not guaranteed delivered
+wire requests. A private task-bound transport token prevents a
+generic finding dictionary or an unbound response from supplying this provenance;
+tokens, raw responses, and protected canaries are never exported.
+Receipts attest scanner observations, not independently verified target-side
+canary seeding or cryptographic report authenticity.
+
+Only the frozen first-five baseline and opt-in protected-disclosure catalogs are
+supported. Their prompt bytes, probe versions, and request budgets are unchanged.
+New engine prompt confirmations require supported receipts even after their check
+finishes. Unsupported custom findings remain visible but cannot fall back to
+legacy numeric scoring. Historical reports and explicit legacy-only standalone
+adapters keep their earlier finalized-check contract; mixed adapter modes are
+rejected. This is not a general plugin evidence protocol.
+
+The producer publishes before response/session cleanup or the next prompt await.
+Receipts and findings are immutable, append-only, and saved before asynchronous
+scoring. A receipt-backed finding may therefore have a null score until scoring
+succeeds; an acknowledged high finding retains its score and partial coverage
+through later interruption. No skipped placeholder is invented for its unfinished
+check. Final check counters must reconcile with the retained receipts.
+
+New public descriptors have scan-wide secret-collision guards. Privacy redaction
+never exempts protected values; redacted or unsupported provenance cannot establish
+current numeric risk. Other independently eligible assets remain assessed. JSON
+retains the ledger on each asset; SARIF stores per-asset ledgers in run properties
+and links each receipt's `finding_id` to a result's `vulnerability_id`.
+Tenant/access observations inside unfinished checks and CLI process-crash files
+are not covered by this prompt-only increment.
 
 Report comparison resolves an absent finding only when the same unambiguous,
 unredacted endpoint has explicit completed, passed evidence for every earlier
