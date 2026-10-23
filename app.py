@@ -39,6 +39,7 @@ from src.reporting.report_generator import ReportGenerator
 from src.utils.auth import require_auth, create_jwt_token
 from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
+from src.core.tenant_evidence import TenantEvidenceError, reject_private_tenant_inputs
 from src.core.risk_projection import project_agent_risk, project_report_risk
 from src.core.model_selection import apply_model_overrides, canonical_model_overrides
 from src.core.contracts import validate_scan_result, MAX_CHECKPOINT_TOTAL_BYTES, CheckpointError
@@ -448,6 +449,7 @@ def _source_inventory(source):
         raise BadRequest("Source scan has no versioned results")
     report = previous.result
     agents = report.get("agents", [])
+    _reject_server_tenant_inputs(agents)
     if not isinstance(agents, list):
         raise BadRequest("Source inventory must be an array")
     if source.status == "partial":
@@ -492,6 +494,13 @@ def _source_inventory(source):
     if source.status == "partial" and not any(agent.get("endpoint") for agent in agents):
         raise BadRequest("Partial source has no usable endpoints")
     return deepcopy(agents), aliases
+
+
+def _reject_server_tenant_inputs(agents):
+    try:
+        return reject_private_tenant_inputs(agents)
+    except TenantEvidenceError:
+        raise ScopeValidationError("Tenant evidence is supported only in local CLI or Python scans") from None
 
 
 def _queue_scan(definition, tenant, actor, user_ip, *, before_commit=None):
@@ -1323,6 +1332,7 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
     try:
         with app.app_context():
             owner = _require_claim(scan_id)
+        _reject_server_tenant_inputs([target_scope, scan_config])
         _check_prompt_suite_pin(scan_config)
         if "prompt_suite" in scan_config and (scan_type != "security_only" or not scan_config.get("evidence_profiles")):
             raise ScopeValidationError("prompt_suite requires security_only with explicit evidence_profiles")
@@ -1407,6 +1417,7 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
         result = await run_pipeline(discovery_engine, execution_engine, risk_assessor,
                                     scope, scan_type, agents=source_agents,
                                     agent_validator=lambda agents: validate_agent_endpoints(agents, app.config),
+                                    early_agent_validator=_reject_server_tenant_inputs,
                                     checkpoint_callback=checkpoint)
         result = _enrich_report(scan_id, result, source_coverage)
         _update_progress(scan_id, 95, "Saving results")

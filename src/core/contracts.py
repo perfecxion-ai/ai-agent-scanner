@@ -16,6 +16,7 @@ from src.utils.request_builder import extract_response_text
 from src.core.access_probe_policy import (
     PROTECTED_ACCESS_RULES, protected_access_pass, protected_access_confirmation,
 )
+from src.core.tenant_probe_policy import tenant_claim, tenant_confirmation
 from src.core.prompt_evidence_policy import (
     CHECK_EVIDENCE_SCHEMA_VERSION, EVIDENCE_SOURCE, MAX_CHECK_EVIDENCE,
     has_evidence_contract, prompt_claim, prompt_probe_payloads, validate_prompt_evidence,
@@ -469,6 +470,11 @@ def _protected_access_claim(value):
 def _supported_confirmation(check, finding, asset):
     if prompt_claim(check) or prompt_claim(finding):
         return False
+    if tenant_claim(check) or tenant_claim(finding):
+        context = _access_context(asset)
+        return context is not None and tenant_confirmation(
+            check, finding, endpoint=asset.get('endpoint'),
+            evidence_context_id=asset.get('evidence_context_id'), **context)
     if _protected_access_claim(check) or _protected_access_claim(finding):
         context = _access_context(asset)
         return context is not None and protected_access_confirmation(check, finding, **context)
@@ -487,6 +493,20 @@ def _unsupported_access_confirmation(result):
                 return True
     for check in checks:
         if _protected_access_claim(check) and check.get('outcome') == 'confirmed':
+            if not any(_supported_confirmation(check, finding, result) for finding in findings):
+                return True
+    return False
+
+
+def _unsupported_tenant_confirmation(result):
+    """Old or unbound tenant positives cannot expose a companion assessed zero."""
+    checks, findings = result.get('checks', []), result.get('vulnerabilities', [])
+    for finding in findings:
+        if tenant_claim(finding) and finding.get('evidence_status') == 'confirmed':
+            if not any(_supported_confirmation(check, finding, result) for check in checks):
+                return True
+    for check in checks:
+        if tenant_claim(check) and check.get('outcome') == 'confirmed':
             if not any(_supported_confirmation(check, finding, result) for finding in findings):
                 return True
     return False
@@ -576,7 +596,8 @@ def risk_assessment_eligible(result):
         validate_check_evidence(result)
     except (TypeError, ValueError):
         return False
-    if _unsupported_access_confirmation(result) or _unsupported_prompt_confirmation(result):
+    if (_unsupported_access_confirmation(result) or _unsupported_prompt_confirmation(result)
+            or _unsupported_tenant_confirmation(result)):
         return False
     confirmed = confirmed_findings(result)
     if confirmed:

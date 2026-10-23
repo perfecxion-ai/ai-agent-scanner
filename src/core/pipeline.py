@@ -3,7 +3,7 @@
 from dataclasses import asdict, is_dataclass
 import asyncio
 from collections import Counter
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from datetime import datetime, timezone
 from copy import deepcopy
 import json
@@ -13,6 +13,8 @@ from src.core.redaction import collect_secrets, redact_secrets
 from src.core.risk_projection import project_agent_risk
 from src.core.access_probe_policy import PUBLIC_ACCESS_FIELDS
 from src.core.prompt_evidence_policy import PUBLIC_EVIDENCE_FIELDS, has_evidence_contract
+from src.core.tenant_evidence import tenant_evidence_context, tenant_secrets
+from src.core.tenant_probe_policy import PUBLIC_TENANT_KEYS
 from src.reporting.sarif_output import generate_sarif
 from src.utils.request_builder import resolve_api_key
 from src.core.contracts import (
@@ -35,6 +37,9 @@ def _validate_access_field_privacy(secrets):
     if any(secret and any(secret.casefold() in field.casefold() for field in PUBLIC_EVIDENCE_FIELDS)
            for secret in secrets):
         raise ValueError('Protected evidence conflicts with public evidence fields')
+    if any(secret and any(secret.casefold() in field.casefold() for field in PUBLIC_TENANT_KEYS)
+           for secret in secrets):
+        raise ValueError('Protected evidence conflicts with public tenant fields')
 
 
 def public_metadata(metadata):
@@ -51,12 +56,13 @@ def public_metadata(metadata):
 
 
 async def run_pipeline(discovery, security, risk, scope, scan_type="full", agents=None,
-                       agent_validator=None, checkpoint_callback=None):
+                       agent_validator=None, checkpoint_callback=None, *, early_agent_validator=None):
     """Run requested phases, preserving unsuccessful security outcomes."""
     if current_budget() is None:
         with scan_transport(ScanBudget()):
             return await run_pipeline(discovery, security, risk, scope, scan_type,
-                                      agents, agent_validator, checkpoint_callback)
+                                      agents, agent_validator, checkpoint_callback,
+                                      early_agent_validator=early_agent_validator)
     if scan_type not in {"full", "discovery_only", "security_only"}:
         raise ValueError("Unsupported scan type")
     if scan_type == "security_only":
@@ -65,14 +71,30 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
     else:
         agents = await discovery.discover_agents(scope)
     observations = [asdict(agent) if is_dataclass(agent) else deepcopy(agent) for agent in agents]
+    if early_agent_validator:
+        early_agent_validator(observations)
+    with ExitStack() as preparation:
+        preparation.enter_context(tenant_evidence_context(observations))
+        return await _run_observations(security, risk, scan_type, observations, agent_validator,
+                                       checkpoint_callback, early_agent_validator, preparation)
+
+
+async def _run_observations(security, risk, scan_type, observations, agent_validator,
+                            checkpoint_callback, early_agent_validator, preparation):
+    """Keep prepared tenant credentials private and stable through every checkpoint."""
     prompt_suite = (PROTECTED_DISCLOSURE_SUITE
                     if getattr(security, "prompt_suite", None) == PROTECTED_DISCLOSURE_SUITE else None)
     secrets = collect_secrets(observations)
+    secrets.update(tenant_secrets())
     secrets.update(key for agent in observations if (key := resolve_api_key(agent)))
     security_results = []
     if scan_type != "discovery_only":
         if agent_validator:
             observations = agent_validator(observations)
+        if early_agent_validator:
+            early_agent_validator(observations)
+        preparation.enter_context(tenant_evidence_context(observations))
+        secrets.update(tenant_secrets())
         # Validators may attach protected evidence or resolve model configuration.
         secrets.update(collect_secrets(observations))
         secrets.update(key for agent in observations if (key := resolve_api_key(agent)))
@@ -119,6 +141,8 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
                 result["error"] = "Security testing failed"
             # Probe versions bind original public context, not tester-supplied labels.
             result['provider'], result['model'] = agent.get('provider'), agent.get('model')
+            result['endpoint'] = agent.get('endpoint')
+            result['evidence_context_id'] = agent.get('evidence_context_id')
             supplied_evidence = has_evidence_contract(result)
             if supplied_evidence:
                 validate_check_evidence(result, strict=not isinstance(security, SecurityTestEngine))
@@ -216,7 +240,7 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
         result["risk_scoring_policy"] = assessment.get("scoring_policy")
     public_agents = []
     for original in observations:
-        agent = {key: original[key] for key in ("id", "name", "type", "provider", "model", "endpoint", "discovery_method", "confidence") if key in original}
+        agent = {key: original[key] for key in ("id", "name", "type", "provider", "model", "endpoint", "discovery_method", "confidence", "evidence_context_id") if key in original}
         agent['provider'], agent['model'] = original.get('provider'), original.get('model')
         agent["metadata"] = public_metadata(original.get("metadata", {}))
         if agent.get("endpoint"):
@@ -305,6 +329,8 @@ class _CheckpointState:
         self.results[index] = {
             "agent_id": agent["id"], "agent_name": agent["name"], "type": agent.get("type", "unknown"),
             "provider": agent.get("provider"), "model": agent.get("model"),
+            "endpoint": agent.get("endpoint"),
+            "evidence_context_id": agent.get("evidence_context_id"),
             "metadata": public_metadata(agent.get("metadata", {})),
             "check_schema_version": CHECK_SCHEMA_VERSION, "status": "partial",
             "vulnerabilities": [], "observations": [], "checks": [],
@@ -436,6 +462,8 @@ class _CheckpointState:
             "agent_id": result.get("agent_id"), "agent_name": result.get("agent_name"),
             "agent_type": result.get("agent_type"), "type": result.get("type"),
             "provider": result.get("provider"), "model": result.get("model"),
+            "endpoint": result.get("endpoint"),
+            "evidence_context_id": result.get("evidence_context_id"),
             "metadata": result.get("metadata", {}),
             "vulnerabilities": confirmed_findings(result),
         })
@@ -494,7 +522,7 @@ class _CheckpointState:
         if len(self.last['agents']) != len(report['agents']):
             raise CheckpointError()
         for previous, current in zip(self.last["agents"], report["agents"]):
-            fields = ("id", "name", "type", "provider", "model", "endpoint", "endpoint_redacted", "metadata")
+            fields = ("id", "name", "type", "provider", "model", "endpoint", "endpoint_redacted", "metadata", "evidence_context_id")
             if any(previous.get(key) != current.get(key) for key in fields):
                 raise CheckpointError()
             if any(check not in current["checks"] for check in previous["checks"]

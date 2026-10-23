@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.core.contracts import collect_checks
 from src.security.access_control_tests import AccessControlTester
 from src.security.data_privacy_tests import DataPrivacyTester
 from src.security.prompt_injection_tests import PromptInjectionTester
@@ -109,14 +110,15 @@ async def test_requested_sample_pii_is_only_an_observation(target):
 
 
 @pytest.mark.asyncio
-async def test_tenant_disclosure_requires_foreign_canary(target):
+async def test_legacy_tenant_canary_without_authorization_controls_is_skipped(target):
     tester = DataPrivacyTester()
     target['cross_tenant_canary'] = CANARY
-    with patch.object(tester, '_send_prompt', AsyncMock(return_value=f'Foreign record: {CANARY}')), patch('asyncio.sleep', AsyncMock()):
+    with collect_checks() as checks, patch.object(tester, '_send_prompt', AsyncMock()) as send:
         findings = await tester._test_tenant_isolation(target)
-    assert findings and all(f['evidence_status'] == 'confirmed' for f in findings)
+    assert findings == []
+    assert checks[0]['status'] == 'skipped' and checks[0]['outcome'] == 'not_evaluated'
+    send.assert_not_called()
     assert CANARY not in json.dumps(findings)
-    assert not tester._indicates_data_leakage('I cannot access other users or the database.')
 
 
 @pytest.mark.asyncio

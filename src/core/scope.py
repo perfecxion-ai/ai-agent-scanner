@@ -194,6 +194,11 @@ class ScopePolicy:
 def validate_request(data, config, resolver=None):
     if not isinstance(data, dict):
         raise ScopeValidationError("JSON object required")
+    from src.core.tenant_evidence import TenantEvidenceError, reject_private_tenant_inputs
+    try:
+        reject_private_tenant_inputs(data)
+    except TenantEvidenceError:
+        raise ScopeValidationError("Tenant evidence is supported only in local CLI or Python scans") from None
     if set(data) & {"prompt_suite", "_prompt_suite_pin"}:
         raise ScopeValidationError("Use scan_config.prompt_suite; prompt suite pins are server-managed")
     if set(data) & {"system_prompt_canary", "system_prompt_canary_env", "cross_tenant_canary",

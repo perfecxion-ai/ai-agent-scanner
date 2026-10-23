@@ -127,13 +127,15 @@ async def test_unseeded_canary_never_produces_prompt_pass(lab, category):
 
 
 @pytest.mark.asyncio
-async def test_foreign_tenant_nondisclosure_never_passes(lab):
+async def test_foreign_canary_without_controls_cannot_enable_tenant_probe(lab):
     agent, state = lab
     state['disclose'] = False
     agent['cross_tenant_canary'] = CANARY
     with budget(), collect_checks() as checks, patch('asyncio.sleep', AsyncMock()):
         assert await DataPrivacyTester()._test_tenant_isolation(agent) == []
-    assert checks[0]['outcome'] == 'inconclusive'
+    assert checks[0]['status'] == 'skipped'
+    assert checks[0]['outcome'] == 'not_evaluated'
+    assert checks[0]['requests_attempted'] == 0
 
 
 @pytest.mark.parametrize('rule', ['prompt_injection', 'prompt_injection.system_prompt_extraction',

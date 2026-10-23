@@ -3,6 +3,7 @@ from copy import deepcopy
 from typing import List, Dict, Any, Optional, Callable
 import logging
 from src.core.transport import current_budget
+from src.core.tenant_evidence import get_tenant_evidence, tenant_evidence_context, tenant_secrets
 from src.utils.request_builder import construct_agent_request, missing_credential_reason
 from src.core.contracts import (
     CHECK_SCHEMA_VERSION, CHECK_EVIDENCE_SCHEMA_VERSION, CheckpointError,
@@ -29,17 +30,23 @@ class SecurityTestEngine:
         self.logger = logging.getLogger(__name__)
 
     def checkpoint_secrets(self, agents):
-        """Pin predictable probe credentials before protected-access checkpoints."""
+        """Collect pinned tenant and predictable protected-access credentials."""
+        secrets = set(tenant_secrets())
         if not any(agent.get('authentication_required') is True
                    and agent.get('protected_response_marker') for agent in agents):
-            return set()
-        secrets = {password for _, password in self.access_tester.weak_credentials[:5] if password}
+            return secrets
+        secrets.update(password for _, password in self.access_tester.weak_credentials[:5] if password)
         secrets.update(key for key in self.access_tester.test_api_keys[:5] if key)
         return secrets
     
     async def test_agents(self, agents: List[Dict[str, Any]], 
                          progress_callback: Optional[Callable] = None) -> List[Dict[str, Any]]:
         """Test all discovered agents for security vulnerabilities"""
+        with tenant_evidence_context(agents):
+            return await self._test_prepared_agents(agents, progress_callback)
+
+    async def _test_prepared_agents(self, agents, progress_callback):
+        """Run only after every configured tenant asset has passed preparation."""
         
         results = []
         total_agents = len(agents)
@@ -61,7 +68,7 @@ class SecurityTestEngine:
     
     async def _test_single_agent(self, agent: Dict[str, Any]) -> Dict[str, Any]:
         """Test a single agent for security vulnerabilities"""
-        with collect_evidence(agent) as evidence:
+        with tenant_evidence_context([agent]), collect_evidence(agent) as evidence:
             result = await self._test_agent_result(agent, evidence)
             self._attach_evidence(result, evidence)
             return result
@@ -99,10 +106,14 @@ class SecurityTestEngine:
             'observations': [],
             'limitations': ['Data retention requires verified expiry/deletion and session boundaries.',
                             'Prompt and tenant disclosure require operator-seeded protected canaries; nondisclosure is inconclusive.',
+                            'Tenant findings require configured owner/tested controls and an operator-attested authorization boundary.',
                             'Anonymous inference is an exposure observation, not proof of authorization bypass.',
                             'Authentication checks require explicit issued credentials, a protected response marker, and successful authorized/denied controls.'],
             'overall_risk_score': None
         }
+        if get_tenant_evidence(agent) is not None:
+            test_results['endpoint'] = agent['endpoint']
+            test_results['evidence_context_id'] = agent['evidence_context_id']
         test_results['check_schema_version'] = CHECK_SCHEMA_VERSION
         test_results['checks'] = []
         marker = agent.get('system_prompt_canary')

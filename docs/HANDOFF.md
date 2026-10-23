@@ -73,12 +73,32 @@ reports and unresolved findings remain intact; supported independent assets rema
 assessed. Local acceptance passes 3,281 coverage tests, 1,170 overlapping independent
 cases, 145 dashboard cases, real Chromium, both backup modes, and installed-wheel
 smoke. See [historical prompt acceptance](VALIDATION.md#historical-prompt-eligibility-follow-up).
-Nullable-score migration and tenant provenance remain separate prerequisites.
+PR #68 merged as `a8ea520` with all eight PR and post-merge jobs passing.
+Nullable-score migration remains a separate prerequisite.
 The next read-only review also reproduces an existing tenant false-confirmation
 path: a fixture echoing a model or credential equal to the foreign-tenant canary
 produces eligible confirmed findings without tenant data. Close this request
 reflection/provenance gap before making tenant observations durable. See
 [tenant prerequisite evidence](VALIDATION.md#tenant-evidence-prerequisite-for-the-next-increment).
+The tenant-control slice now requires explicit CLI/Python principal references,
+two independently seeded records, an operator-attested authorization boundary,
+and three successful controls before five attack prompts. Both keys and markers
+are pinned before checkpoints. Shared transport checks prevent known request
+contamination, including observations from earlier probes. Public findings bind
+the original endpoint/provider/model/context; unsupported historical tenant claims
+remain archived with unknown current risk. The server rejects private tenant
+inputs before environment resolution. See
+[configuration](detection-evidence.md#controlled-tenant-assessment) and
+[local validation](VALIDATION.md#controlled-tenant-evidence-local-acceptance).
+Final local acceptance passes 3,515 coverage tests, 247 overlapping independent
+review cases, 145 dashboard cases, both backup modes, and installed-wheel smoke.
+The delivery PR records required cross-platform checks for the corrected slice.
+After the reviewed runtime merge and required CI, the next external gate is the
+[scoped tenant retest](tenant-retest.md) on the exact merged SHA from the handoff.
+The lab needs two genuine principal bindings and trusted TLS; bare model servers
+cannot supply those controls. Tenant/access within-check receipts, CLI crash
+files, nullable-score migration, exhaustive inventory, and later roadmap slices
+remain open. Local fixture correctness does not establish model sensitivity.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned

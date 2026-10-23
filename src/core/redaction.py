@@ -11,7 +11,7 @@ _URL = re.compile(r'https?://[^\s<>"\']+')
 
 def sensitive_key(key):
     normalized = re.sub(r'[^a-z0-9]', '', str(key).lower())
-    return normalized in ('cookie', 'setcookie') or any(word in normalized for word in _SENSITIVE)
+    return normalized in ('cookie', 'setcookie', 'tenantevidence') or any(word in normalized for word in _SENSITIVE)
 
 
 def contains_literal(value, protected):
@@ -30,6 +30,15 @@ def collect_secrets(value):
     secrets = set()
     if isinstance(value, dict):
         for key, item in value.items():
+            if re.sub(r'[^a-z0-9]', '', str(key).lower()) == 'tenantevidence':
+                # The whole envelope is omitted; only its secret references join
+                # the literal redaction basis, never schema versions or labels.
+                if isinstance(item, dict):
+                    for actor in ('owner', 'tested'):
+                        if isinstance(item.get(actor), dict):
+                            secrets.update(item[actor][name] for name in ('api_key_env', 'canary_env')
+                                           if isinstance(item[actor].get(name), str) and item[actor][name])
+                continue
             if sensitive_key(key) and isinstance(item, str) and item:
                 secrets.add(item)
                 if item.lower().startswith(('bearer ', 'basic ')):
