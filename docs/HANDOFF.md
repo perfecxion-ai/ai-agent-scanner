@@ -18,19 +18,27 @@ filtering, unknown-score storage placeholders, stale release identity, difficult
 operator configuration, and narrow live application/agent coverage. See
 [review evidence](VALIDATION.md#strategic-review-and-revised-roadmap).
 
-The R1.1 working slice now has explicit authorized positive controls, denied
+The R1.1 slice now has explicit authorized positive controls, denied
 controls, versioned evidence semantics, and false-pass/resolution regressions.
 Explicit cancelled-check accounting is included: a cancelled check cannot pass
 merely because its controls succeeded. Local acceptance passes 2,220 cases with
 warnings treated as errors, independent review, lint/security checks, build,
-metadata, and installed-wheel smoke. PR/post-merge CI remains pending; see
+metadata, and installed-wheel smoke. PR #64 and merged revision `9a696d1` pass
+all eight CI jobs; see
 [local acceptance and limits](VALIDATION.md#protected-access-positive-control-local-acceptance).
-R1.2 first defines
-sanitized incremental persistence and transactional termination/recovery; do not
-equate the benchmark's observation checkpoint with durable normal-scan results.
-The completed design separates finalized-check checkpoints from a later real
-in-progress evidence contract. Persistence is not implemented by R1.1. Both
-slices require exact-revision CI before delivery acceptance.
+R1.2a now retains finalized-check evidence through later failures, orderly CLI
+interruption, and server-process recovery. The combined tree passes 2,307 tests
+with warnings treated as errors, independent review, and installed-wheel smoke.
+The process-kill fixture waits for an acknowledged SQLite checkpoint, kills the
+actual dispatcher process, and verifies exact evidence/snapshot retention without
+probe replay. PR/post-merge CI remains pending. See
+[checkpoint acceptance and limits](VALIDATION.md#finalized-check-checkpoint-local-acceptance).
+
+R1.2 remains open: observations inside unfinished checks need a separate
+versioned progress/evidence contract, and CLI process-crash recovery needs a
+private checkpoint-file contract. Neither is implemented by R1.2a. Do not equate
+the benchmark's observation checkpoint with genuine normal-scan finding evidence.
+Next work defines within-check confirmation retention before expanding coverage.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned

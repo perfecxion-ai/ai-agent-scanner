@@ -197,7 +197,8 @@ gate and keeps production/deployment gaps separate from supported beta testing.
 A refusal is not a successful injection. Generated example PII is not proven
 data leakage. HTTP 200 or an administrative keyword alone is not authorization
 bypass. Confirmed disclosure checks need a seeded protected canary; authentication
-checks need protected response evidence and a denied control.
+checks need protected response evidence plus successful authorized and denied
+controls.
 
 Failed, skipped, and partial tests remain distinguishable from completed checks.
 [Versioned check records](docs/result-contracts.md) separate execution from

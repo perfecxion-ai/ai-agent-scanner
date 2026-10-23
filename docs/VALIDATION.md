@@ -103,13 +103,66 @@ configured Bandit, whitespace checks, distribution build, Twine, and an
 installed-wheel smoke outside the checkout pass. The built access-control module
 matches the reviewed working source.
 
-This is local acceptance, not exact-revision CI or real-service compatibility.
-All required PR/post-merge jobs remain delivery prerequisites. No GCP service,
+PR #64 and merged revision `9a696d18542c18bf36f357729fd622408cb88257` pass all
+eight CI jobs: Python 3.10 through 3.13, macOS, lint, security, and container.
+The roadmap-only PR #63 and its merge also pass all eight jobs. Independent
+review is recorded in each PR. These checks do not establish real-service
+compatibility. No GCP service,
 real model, operator database, or registry was accessed; no package was published
 or service deployed. Supported controls are exact GET resources, not arbitrary
 credential schemes or POST-only model authorization. Server authorization-evidence
 configuration is unchanged. Durable findings through an unfinished category or
 outer deadline remain R1.2 work; the cancellation-status fix does not close them.
+
+## Finalized-check checkpoint local acceptance
+
+R1.2a adds scan-local finalized-check observation, immutable public checkpoints,
+and claim-bound transactional storage. The same shared risk projection serves
+final and intermediate reports. Evidence is saved before scoring; a stalled
+scorer cannot erase a new finalized finding, but its new score stays null until
+successfully assessed. Quiet later checks retain unchanged valid assessments.
+Duplicate-identical finding occurrences survive without being counted again when
+the final result returns. An incomplete asset cannot become assessed zero from
+an earlier sampled pass.
+
+SQLite writes bind the active owner and increasing sequence, atomically preserve
+report/snapshots/counts, retain cancellation, and reject stale or regressing final
+results. Snapshot identity and first discovery time remain stable. Explicit short
+read transactions prevent mixed report/inventory revisions during checkpoint
+commits. Bounds cover report size, emission count, cumulative serialization, and
+write-lock waiting. Sink errors stop further probes and use static diagnostics.
+
+Combined Linux/Python 3.10 acceptance passes 2,307 tests with warnings treated as
+errors and an inherited nonexistent evidence-registry sentinel. Independent review
+passes 215 overlapping focused cases. Cases include finalized confirmation followed
+by failure/timeout/cancellation, scorer stalls, privacy across successive snapshots,
+post-validator secret collection, occurrence preservation, duplicate/redacted-ID
+rejection, sink failure, rollback, stale claims, cancellation races, cumulative
+limits, and real file-backed interleaved API reads. Fixture drivers now pass the
+actual dispatcher claim rather than bypassing ownership checks.
+
+A spawned dispatcher fixture runs the actual pipeline and a synthetic decorated
+check, waits for an acknowledged 70/high SQLite checkpoint, then kills that
+dispatcher process. A fresh dispatcher acquires the released lock and preserves the exact
+report evidence, snapshots, and partial coverage, with one interrupted terminal
+event and no replay. Repeated recovery is idempotent. Canonical risk and SARIF
+remain consistent; the synthetic canary is absent from the database bytes.
+This tests process recovery after an acknowledged commit, not power loss.
+
+CLI JSON/SARIF retain the latest valid partial report on orderly timeout/failure;
+cancellation remains cancellation even if export fails. Pre-checkpoint failure
+does not overwrite an existing report, symlink destinations are refused, and
+new report files are owner-only. Ruff, configured Bandit, whitespace/privacy checks,
+distribution build, Twine, and an installed-wheel checkpoint smoke outside the
+checkout pass. Installed pipeline and CLI hashes match the reviewed source.
+Ordinary and optimized disposable backup acceptance pass all eight cases each.
+
+PR/post-merge CI remains a delivery prerequisite. This slice does not retain
+observations still inside unfinished checks or implement CLI process-crash
+recovery. Duplicate or redaction-colliding source IDs fail closed rather than
+silently rebinding findings. Unknown database score placeholders and newest-100
+inventory filtering remain R1.3/R1.4 work. No external model, GCP service, deployed
+database, package publication, or deployment was used for this acceptance.
 
 ## Exact-revision external retest
 
