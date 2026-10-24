@@ -432,9 +432,16 @@ def test_actual_candidate_query_uses_ownership_and_observation_indexes(api, type
     with module.db.engine.connect() as connection:
         details = [row[3] for sql, parameters in statements for row in connection.exec_driver_sql(
             'EXPLAIN QUERY PLAN ' + sql, parameters)]
-    assert any('ix_inventory_scan_session_org_id' in item for item in details), details
-    observation_index = 'ix_inventory_observation_scan_type_order' if typed else 'ix_inventory_observation_scan_order'
-    assert any(observation_index in item for item in details), details
+    assert any(item.startswith('SEARCH scan_session ')
+               and 'INDEX ix_inventory_scan_session_org_id (' in item
+               and '(organization_id=?' in item for item in details), details
+    # Both candidate indexes start with scan_id; either can serve the unfiltered join.
+    allowed = ('ix_inventory_observation_scan_type_order',) if typed else (
+        'ix_inventory_observation_scan_order', 'ix_inventory_observation_scan_type_order')
+    prefix = '(scan_id=? AND agent_type=?' if typed else '(scan_id=?'
+    assert any(item.startswith('SEARCH discovered_agent ')
+               and f'INDEX {index} (' in item and prefix in item
+               for item in details for index in allowed), details
 
 
 @pytest.fixture

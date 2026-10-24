@@ -807,6 +807,14 @@ row. Fixtures now initialize the real schema; assertions join by asset ID and
 check complete cardinality/ID sets plus the skipped null. The targeted 156-case
 covered gate and final full run pass without relaxing verdict assertions.
 
+Initial Linux CI exposed two overly specific query-plan assertions. SQLite
+3.45.1 selected the type index's valid `scan_id` prefix for an unfiltered join,
+while SQLite 3.53.1 selected the other candidate index. The tests now accept
+either approved indexed search for an unfiltered query and still require both
+scan and type bindings for filtered queries. All 80 generation and independent
+inventory cases pass on both SQLite versions with warnings treated as errors.
+Runtime code is unchanged by this correction.
+
 The delivery PR records required cross-platform checks. The next external gate
 is the [clean pinned native inventory retest](inventory-retest.md), including
 both operator-command modes and the eleven-case backup modes. Local synthetic

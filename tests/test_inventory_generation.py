@@ -368,10 +368,19 @@ def test_ten_thousand_observation_plan_uses_owner_and_candidate_indexes(database
     statement = statement.order_by(assets.c.discovered_at.desc(), assets.c.id).limit(501)
     sql = str(statement.compile(engine, compile_kwargs={'literal_binds': True}))
     with engine.connect() as connection:
-        plan = ' '.join(row[3] for row in connection.exec_driver_sql('EXPLAIN QUERY PLAN ' + sql))
+        steps = [row[3] for row in connection.exec_driver_sql('EXPLAIN QUERY PLAN ' + sql)]
+        plan = ' '.join(steps)
         assert 'ix_inventory_scan_session_org_id' in plan
-        assert ('ix_inventory_observation_scan_type_order' if filtered else
-                'ix_inventory_observation_scan_order') in plan
+        candidate_searches = [step for step in steps
+                              if step.startswith('SEARCH discovered_agent ') and 'scan_id=?' in step]
+        if filtered:
+            assert any('ix_inventory_observation_scan_type_order' in step and 'agent_type=?' in step
+                       for step in candidate_searches)
+        else:
+            # Both indexes begin with scan_id. SQLite may choose either for an
+            # unfiltered join, which still requires the global ordering below.
+            assert any(name in step for step in candidate_searches for name in
+                       ('ix_inventory_observation_scan_order', 'ix_inventory_observation_scan_type_order'))
         # The join still sorts observations across scans; LIMIT bounds fetched rows,
         # not all SQLite work for this global ordering.
         assert 'USE TEMP B-TREE FOR ORDER BY' in plan
