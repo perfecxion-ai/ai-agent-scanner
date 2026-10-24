@@ -129,13 +129,22 @@ warnings treated as errors and coverage; final independent review passes 99
 cases on Python 3.13, including real normal/optimized Gunicorn traversal and
 restart over 10,000 observations. See
 [pagination acceptance](VALIDATION.md#exhaustive-observation-pagination-local-acceptance).
-Required delivery CI is recorded on the delivery PR. The next external gate is
-the [public native inventory retest](inventory-retest.md) at its exact merged
-revision. It creates owned fixtures and compares actual inventory values without
-operator data or model services. Distinct-asset identity and authoritative
-indexed risk caches remain separate work.
+PR #74 merged as `c6e4600` with all eight PR and post-merge checks passing. One
+unchanged macOS contention test required an isolated post-merge rerun after a
+2.65-second wall-clock result exceeded its 2.5-second assertion; no assertion or
+production timeout changed.
+The supplied native inventory retest now passes scoped acceptance on Python
+3.11.2 and SQLite 3.40.1: both inventory modes retain all 13 required assertions,
+10,000 observations, matching canonical filter counts, and clean server exits.
+Both eleven-case backup modes pass. Runtime hashes match the pinned source.
+Raw databases and HTTP bodies were removed by the owned gate, and outer-wrapper
+setup/cleanup and privacy claims have recorded limits. See
+[native acceptance](VALIDATION.md#supplied-native-inventory-traversal-acceptance).
+No broad repeat is needed. The next local slice is R1.5a producer/build identity,
+followed by tenant/access within-check retention. Distinct-asset identity and
+authoritative indexed risk caches remain separate work.
 Tenant/access within-check receipts, server tenant profiles, CLI crash files,
-exhaustive inventory, and later roadmap slices remain open.
+distinct-asset inventory, and later roadmap slices remain open.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned

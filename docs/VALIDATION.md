@@ -821,6 +821,62 @@ both operator-command modes and the eleven-case backup modes. Local synthetic
 acceptance does not establish deployed workload scale, current asset identity,
 indexed risk materialization, model sensitivity, or team/enterprise readiness.
 
+### Supplied native inventory traversal acceptance
+
+Two independent read-only reviews accept the supplied owned-fixture gate at
+`c6e460046994c01aa40ff00f1660534413388f96`. These review operator-supplied
+captures, not an independent cloud rerun. Primary outputs record Python 3.11.2,
+SQLite 3.40.1, Gunicorn 26.2.0 and SQLAlchemy 2.1.6; the setup attests Debian 12.
+Raw artifacts, private drivers and infrastructure identifiers stay outside Git.
+
+Normal and optimized inventory outputs are byte-identical. Each records accepted
+true, all 13 required assertion identities, 656 checked HTTP responses, an
+observed schema-4 to schema-5 upgrade, and two zero server-process exits. The
+source revision and clean tracked-source flag match the pin. App, public driver,
+Gunicorn hook and independently recomputed projection-policy hashes match source.
+The four acceptance exit files contain zero, their stderr logs are empty, the
+pinned validation succeeds, and the captured outer job exits zero.
+
+The 24 profile counts agree across modes: 10,000 observations in total, 2,500
+high, 2,500 minimal, 5,000 unknown, and no critical matches despite deliberately
+stale critical scalar caches. The type filter returns 5,000 observations; its
+high subset returns 2,500. The incompatible type/high combination returns none
+through advancing empty pages. The hash-bound public command compares complete
+ordered dictionaries on first start and restart, checks cursor/source/ownership
+isolation and rollback, and asserts archive, row and operator-index preservation.
+Both backup modes accept the same eleven cases with 64 assertion labels per mode.
+These include recognized old layouts, genuinely initialized schema 5, rollback,
+exclusive ownership, incomplete-restore rejection and unchanged backup sources.
+
+Acceptance remains scoped:
+
+- The databases, raw HTTP responses and private internal server logs were removed
+  by the public gate. Their detailed comparisons, process-group cleanup and
+  filesystem modes are script assertions, not independently recoverable raw
+  evidence in this bundle. Counts and result identities are directly available.
+- This is 10,000 repeated observations of 12 synthetic assets across three
+  organizations, using controlled non-network producers. It does not measure
+  detection sensitivity, deployed scale, target provenance, current-asset
+  identity, crash durability, or enterprise readiness.
+- The inventory command checks seven ephemeral values, encoded variants and its
+  HTTP/file/output surfaces before success. Those values are unavailable for a
+  later independent sweep. The backup command has no equivalent seven-value
+  privacy sweep. The wrapper's 19-file address-pattern sweep and local review of
+  all 24 supplied files do not establish general secret absence. Sanitized outer
+  logs and exact wrapper execution remain operator attestations.
+- The private shell wrapper propagates acceptance/validation failures but leaves
+  some setup, capture and checkout/venv cleanup failures unchecked; its address
+  reader skips unreadable files. Its universal failure-propagation claim is
+  unsupported. The public inventory command's own checked cleanup is separate.
+- Backup captures have no embedded source/runtime fingerprints; their pin comes
+  from wrapper context. Progress-token stability is covered by backup cases,
+  not a dedicated progress-only cursor request in the inventory command.
+
+No runtime blocker was found. These reporting qualifications need no broad
+repeat. R1.4a observation traversal is accepted within this fixture scope;
+distinct-asset identity and indexed risk materialization remain open. R1.5a
+build/producer identity proceeds locally before tenant/access receipt retention.
+
 ## Exact-revision external retest
 
 The operator supplied a private live-lab retest for
