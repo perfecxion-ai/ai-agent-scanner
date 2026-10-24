@@ -27,7 +27,10 @@ import uuid
 from datetime import datetime, timezone
 
 from src.utils.request_builder import construct_agent_request, extract_response_text
-from src.core.contracts import checked, record_interaction, usable_model_response
+from src.core.contracts import (
+    CheckpointError, TenantObservation, checked, ensure_evidence_active,
+    observe_tenant_response, record_interaction, usable_model_response,
+)
 from src.core.request_provenance import (
     MAX_HEADER_COUNT, MAX_REQUEST_HEADERS, known_request_excludes_canary, request_excludes_canary,
 )
@@ -232,17 +235,22 @@ class DataPrivacyTester:
         evidence = get_tenant_evidence(agent)
         if evidence is None:
             return vulnerabilities
-        owner = await self._send_tenant_prompt(agent, TENANT_CONTROL_PROMPT, evidence.owner_api_key)
+        owner = await self._send_tenant_prompt(agent, TENANT_CONTROL_PROMPT, evidence.owner_api_key,
+                                              phase='owner_control')
+        if isinstance(owner, TenantObservation):
+            return await self._test_observed_tenant_isolation(agent, evidence, owner)
         owner_valid = bool(owner and 200 <= owner.status < 300 and owner.usable
                            and evidence.owner_canary in owner.generated and owner.excludes(evidence.tested_canary))
         if not self._evaluate_tenant_response(owner, owner_valid):
             return vulnerabilities
-        tested = await self._send_tenant_prompt(agent, TENANT_CONTROL_PROMPT, evidence.tested_api_key)
+        tested = await self._send_tenant_prompt(agent, TENANT_CONTROL_PROMPT, evidence.tested_api_key,
+                                               phase='subject_control')
         tested_valid = bool(tested and 200 <= tested.status < 300 and tested.usable
                             and evidence.tested_canary in tested.generated)
         if not self._evaluate_tenant_response(tested, tested_valid):
             return vulnerabilities
-        denied = await self._send_tenant_prompt(agent, TENANT_CONTROL_PROMPT, evidence.invalid_api_key)
+        denied = await self._send_tenant_prompt(agent, TENANT_CONTROL_PROMPT, evidence.invalid_api_key,
+                                               phase='denied_control')
         denied_valid = bool(denied and denied.status in (401, 403)
                             and denied.excludes(evidence.owner_canary) and denied.excludes(evidence.tested_canary))
         if not self._evaluate_tenant_response(denied, denied_valid, denied_control=True):
@@ -250,10 +258,33 @@ class DataPrivacyTester:
         if evidence.owner_canary in tested.generated:
             vulnerabilities.append(self._tenant_finding(agent, evidence, tested.status, 'subject_control'))
         for index, prompt in enumerate(self.tenant_isolation_prompts[:5]):
-            response = await self._send_tenant_prompt(agent, prompt, evidence.tested_api_key)
+            response = await self._send_tenant_prompt(agent, prompt, evidence.tested_api_key,
+                                                     phase='attack', attack_index=index)
             valid = bool(response and 200 <= response.status < 300 and response.usable)
             if self._evaluate_tenant_response(response, valid) and evidence.owner_canary in response.generated:
                 vulnerabilities.append(self._tenant_finding(agent, evidence, response.status, 'attack', index))
+            if not tenant_evidence_usable(agent):
+                break
+            await asyncio.sleep(1)
+        return vulnerabilities
+
+    async def _test_observed_tenant_isolation(self, agent, evidence, owner):
+        """Use only the live registry's controls and newly published findings."""
+        vulnerabilities = []
+        if not owner.valid:
+            return vulnerabilities
+        vulnerabilities.extend(owner.findings)
+        for phase, key in (('subject_control', evidence.tested_api_key),
+                           ('denied_control', evidence.invalid_api_key)):
+            observed = await self._send_tenant_prompt(agent, TENANT_CONTROL_PROMPT, key, phase=phase)
+            if not isinstance(observed, TenantObservation) or not observed.valid:
+                return vulnerabilities
+            vulnerabilities.extend(observed.findings)
+        for index, prompt in enumerate(self.tenant_isolation_prompts[:5]):
+            observed = await self._send_tenant_prompt(agent, prompt, evidence.tested_api_key,
+                                                     phase='attack', attack_index=index)
+            if isinstance(observed, TenantObservation) and observed.valid:
+                vulnerabilities.extend(observed.findings)
             if not tenant_evidence_usable(agent):
                 break
             await asyncio.sleep(1)
@@ -270,6 +301,7 @@ class DataPrivacyTester:
 
     @staticmethod
     def _tenant_finding(agent, evidence, status, source, index=None):
+        """Legacy standalone finalized checks have no within-check receipts."""
         finding = {
             'id': str(uuid.uuid4()), 'agent_id': agent.get('id'),
             'vulnerability_type': 'tenant_isolation_violation', 'severity': 'critical',
@@ -284,9 +316,10 @@ class DataPrivacyTester:
             finding['tenant_attack_index'] = index
         return finding
 
-    async def _send_tenant_prompt(self, agent, prompt, api_key):
-        """Retain actual request provenance until private response interpretation."""
+    async def _send_tenant_prompt(self, agent, prompt, api_key, *, phase=None, attack_index=None):
+        """Verify active observations; scalar responses are legacy-only fallback."""
         evidence = get_tenant_evidence(agent)
+        observed, fatal = None, None
         try:
             request = construct_agent_request(agent, prompt, api_key=api_key)
             markers = (evidence.owner_canary, evidence.tested_canary) if evidence is not None else ()
@@ -295,32 +328,57 @@ class DataPrivacyTester:
                 record_interaction(False)
                 return None
             async with SafeSession(timeout=model_request_timeout()) as session:
-                async with session.request(method=request['method'], url=request['url'],
-                                           headers=request.get('headers', {}), json=request.get('json'),
-                                           data=request.get('data')) as response:
-                    raw = await response.text()
-                    if (not tenant_evidence_usable(agent)
-                            or not all(request_excludes_canary(response._request_evidence, marker) for marker in markers)):
-                        record_interaction(False)
-                        return None
-                    headers = tuple(response.headers.items())
-                    if (len(headers) > MAX_HEADER_COUNT
-                            or sum(len(key.encode('utf-8')) + len(value.encode('utf-8'))
-                                   for key, value in headers) > MAX_REQUEST_HEADERS):
-                        record_interaction(False)
-                        return None
-                    material = [raw, *(item for pair in headers for item in pair)]
-                    try:
-                        material.append(json.dumps(json.loads(raw), ensure_ascii=False))
-                    except ValueError:
-                        pass  # Plain denial bodies remain valid negative-control material.
-                    result = _TenantResponse(response.status, extract_response_text(raw),
-                                             usable_model_response(raw), tuple(material))
+                try:
+                    async with session.request(method=request['method'], url=request['url'],
+                                               headers=request.get('headers', {}), json=request.get('json'),
+                                               data=request.get('data')) as response:
+                        try:
+                            raw = await response.text()
+                            if phase is not None:
+                                try:
+                                    observed = await observe_tenant_response(
+                                        response, agent=agent, phase=phase, attack_index=attack_index)
+                                except asyncio.CancelledError:
+                                    raise
+                                except Exception:
+                                    raise CheckpointError() from None
+                                if observed is not None:
+                                    return observed
+                            if (not tenant_evidence_usable(agent)
+                                    or not all(request_excludes_canary(response._request_evidence, marker) for marker in markers)):
+                                record_interaction(False)
+                                return None
+                            headers = tuple(response.headers.items())
+                            if (len(headers) > MAX_HEADER_COUNT
+                                    or sum(len(key.encode('utf-8')) + len(value.encode('utf-8'))
+                                           for key, value in headers) > MAX_REQUEST_HEADERS):
+                                record_interaction(False)
+                                return None
+                            material = [raw, *(item for pair in headers for item in pair)]
+                            try:
+                                material.append(json.dumps(json.loads(raw), ensure_ascii=False))
+                            except ValueError:
+                                pass  # Plain denial bodies remain valid negative-control material.
+                            result = _TenantResponse(response.status, extract_response_text(raw),
+                                                     usable_model_response(raw), tuple(material))
+                        except (asyncio.CancelledError, CheckpointError) as error:
+                            fatal = error
+                            raise
+                except (asyncio.CancelledError, CheckpointError) as error:
+                    fatal = error
+                    raise
+            if fatal is not None:
+                raise fatal
             return result
+        except (asyncio.CancelledError, CheckpointError):
+            raise
         except Exception:
+            if fatal is not None:
+                raise fatal
+            ensure_evidence_active()
             record_interaction(False)
             self.logger.debug('Tenant model request failed')
-            return None
+            return observed if phase == 'attack' else None
     
     @checked("data_retention", "expiry-deletion-adapter-unavailable-v1",
              prerequisite=lambda agent: "No verified expiry/deletion and session-boundary adapter")

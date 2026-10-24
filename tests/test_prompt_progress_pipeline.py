@@ -141,7 +141,7 @@ async def test_first_confirmation_is_durable_before_next_await(monkeypatch, stag
     with pytest.raises(asyncio.CancelledError):
         await task
     report = saved[-1]
-    assert report['checkpoint']['version'] == '2.0'
+    assert report['checkpoint']['version'] == '3.0'
     assert report['checkpoint']['coverage'] == 'confirmed_observations_and_finalized_checks'
     assert report['status'] == 'partial'
     assert report['summary']['overall_risk_score'] == 70
@@ -352,7 +352,7 @@ async def test_adapter_missing_receipt_contract_is_not_repaired(provided):
     evidence.update(provided)
     adapter = SimpleNamespace(test_agents=AsyncMock(return_value=[evidence]))
     target = asset(provider=evidence['provider'], model=evidence['model'])
-    with pytest.raises(ValueError, match='^Invalid prompt observation evidence$'):
+    with pytest.raises(ValueError, match='^Invalid observation evidence$'):
         await run(adapter, target=target)
 
 
@@ -363,7 +363,7 @@ async def test_adapter_valid_receipt_cannot_supply_missing_required_metadata(mon
     evidence = deepcopy((await run(security))['security_results'][0])
     evidence.pop(missing)
     adapter = SimpleNamespace(test_agents=AsyncMock(return_value=[evidence]))
-    with pytest.raises(ValueError, match='^Invalid prompt observation evidence$'):
+    with pytest.raises(ValueError, match='^Invalid observation evidence$'):
         await run(adapter)
 
 
@@ -381,7 +381,7 @@ async def test_adapter_raw_receipts_require_supported_provenance(monkeypatch, mu
     else:
         evidence['check_evidence_schema_version'] = 'future'
     adapter = SimpleNamespace(test_agents=AsyncMock(return_value=[evidence]))
-    with pytest.raises(ValueError, match='^Invalid prompt observation evidence$'):
+    with pytest.raises(ValueError, match='^Invalid observation evidence$'):
         await run(adapter)
 
 

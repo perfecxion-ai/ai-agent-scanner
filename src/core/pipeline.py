@@ -6,6 +6,7 @@ from collections import Counter
 from contextlib import ExitStack, nullcontext
 from datetime import datetime, timezone
 from copy import deepcopy
+from inspect import getattr_static
 import json
 from urllib.parse import urlsplit, urlunsplit
 from src.core.build_identity import current_identity, public_identity, validate_identity_fields
@@ -23,6 +24,7 @@ from src.core.contracts import (
     MAX_CHECKPOINT_TOTAL_BYTES, confirmed_findings, missing_checks, observe_checks,
     validate_checks, validate_scan_result, validate_checkpoint_report, risk_assessment_eligible,
     observe_evidence, validate_check_evidence, unfinished_evidence_checks,
+    is_supported_evidence_version, preserves_observation_eligibility,
 )
 from src.security.prompt_suites import PROTECTED_DISCLOSURE_SUITE, validate_prompt_suite_agents
 from src.security.security_engine import SecurityTestEngine
@@ -105,7 +107,19 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
         if prompt_suite is not None:
             validate_prompt_suite_agents(observations)
     checkpoint = None
-    evidence_enabled = scan_type != 'discovery_only' and isinstance(security, SecurityTestEngine)
+    normal_engine = isinstance(security, SecurityTestEngine)
+    undeclared = object()
+    declared = (getattr_static(security, 'check_evidence_schema_version', undeclared)
+                if scan_type != 'discovery_only' else undeclared)
+    if declared is not undeclared and not is_supported_evidence_version(declared):
+        raise ValueError('Unsupported adapter evidence declaration')
+    if normal_engine and declared is not undeclared and declared != CHECK_EVIDENCE_SCHEMA_VERSION:
+        raise ValueError('Scanner engine requires the current evidence schema')
+    evidence_version = (CHECK_EVIDENCE_SCHEMA_VERSION if normal_engine else
+                        declared if declared is not undeclared else None)
+    if scan_type == 'discovery_only':
+        evidence_version = None
+    evidence_enabled = evidence_version is not None
     adapter_evidence_mode = None
     if scan_type != "discovery_only" and isinstance(security, SecurityTestEngine):
         # Ordinary and checkpointed reports use the same privacy/evidence basis.
@@ -115,10 +129,12 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
         _validate_access_field_privacy(secrets)
     if checkpoint_callback is not None:
         checkpoint = _CheckpointState(observations, risk, scan_type, prompt_suite, secrets,
-                                      checkpoint_callback, evidence_enabled=evidence_enabled, producer_identity=producer)
+                                      checkpoint_callback, evidence_enabled=evidence_enabled,
+                                      evidence_schema_version=evidence_version, producer_identity=producer)
         await checkpoint.publish()
     if scan_type != "discovery_only":
         for index, agent in enumerate(observations):
+            adapter_supplied = False
             if not agent.get("endpoint"):
                 result = {"agent_id": agent["id"], "agent_name": agent["name"],
                           "status": "skipped", "reason": "No accessible endpoint", "vulnerabilities": []}
@@ -136,6 +152,7 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
                     result = results[0] if results else {}
                     if result.get("status") not in {"completed", "partial", "failed", "skipped"}:
                         raise ValueError("Missing security result status")
+                    adapter_supplied = True
                 except CheckpointError:
                     raise
                 except Exception:
@@ -151,7 +168,18 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
             supplied_evidence = has_evidence_contract(result)
             if supplied_evidence:
                 validate_check_evidence(result, strict=not isinstance(security, SecurityTestEngine))
-            if not isinstance(security, SecurityTestEngine):
+                supplied_version = result.get('check_evidence_schema_version')
+                if not is_supported_evidence_version(supplied_version):
+                    raise ValueError('Unsupported adapter evidence version')
+                if evidence_version is not None and supplied_version != evidence_version:
+                    raise ValueError('Mixed evidence versions are not supported')
+                if (checkpoint is not None and not normal_engine and declared is undeclared
+                        and supplied_version == CHECK_EVIDENCE_SCHEMA_VERSION):
+                    raise ValueError('Checkpointed current-evidence adapters require an explicit declaration')
+                evidence_version = supplied_version
+            elif adapter_supplied and not normal_engine and declared is not undeclared:
+                raise ValueError('Declared adapter evidence was not supplied')
+            if not normal_engine and adapter_supplied:
                 if adapter_evidence_mode is not None and adapter_evidence_mode != supplied_evidence:
                     raise ValueError('Mixed evidence contracts are not supported by this adapter')
                 adapter_evidence_mode = supplied_evidence
@@ -159,8 +187,9 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
                 evidence_enabled = True
                 if checkpoint:
                     checkpoint.evidence_enabled = True
+                    checkpoint.evidence_schema_version = evidence_version
             if evidence_enabled:
-                result.setdefault('check_evidence_schema_version', CHECK_EVIDENCE_SCHEMA_VERSION)
+                result.setdefault('check_evidence_schema_version', evidence_version)
                 result.setdefault('check_evidence', [])
             if "checks" in result:
                 try:
@@ -187,7 +216,8 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
         return checkpoint.final_report()
     risks, risk_status = await _assess_results(risk, security_results)
     return _project_report(observations, security_results, risks, risk_status, scan_type, prompt_suite, secrets,
-                           evidence_enabled=evidence_enabled, producer_identity=producer)
+                           evidence_enabled=evidence_enabled, evidence_schema_version=evidence_version,
+                           producer_identity=producer)
 
 
 async def _assess_results(risk, security_results):
@@ -205,9 +235,15 @@ async def _assess_results(risk, security_results):
 
 
 def _project_report(observations, security_results, risks, risk_status, scan_type, prompt_suite, secrets,
-                    *, incomplete=False, evidence_enabled=False, producer_identity=None):
+                    *, incomplete=False, evidence_enabled=False, evidence_schema_version=None,
+                    producer_identity=None):
     """One canonical projection for ordinary reports and durable evidence snapshots."""
     validate_identity_fields(secrets)
+    if evidence_enabled:
+        if evidence_schema_version is None:
+            evidence_schema_version = CHECK_EVIDENCE_SCHEMA_VERSION
+        if not is_supported_evidence_version(evidence_schema_version):
+            raise ValueError('Unsupported projection evidence version')
     if scan_type != "discovery_only":
         _validate_access_field_privacy(secrets)
     security_results, risks = deepcopy(security_results), deepcopy(risks)
@@ -265,7 +301,7 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
         agent["checks"] = test.get("checks", missing_checks([], "Security testing was not requested"))
         if evidence_enabled:
             agent['check_evidence_schema_version'] = test.get(
-                'check_evidence_schema_version', CHECK_EVIDENCE_SCHEMA_VERSION)
+                'check_evidence_schema_version', evidence_schema_version)
             agent['check_evidence'] = test.get('check_evidence', [])
             if 'check_evidence_run_id' in test:
                 agent['check_evidence_run_id'] = test['check_evidence_run_id']
@@ -287,7 +323,7 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
         "schema_version": SCHEMA_VERSION,
         'producer_identity': public_identity(producer_identity, secrets),
         "check_schema_version": CHECK_SCHEMA_VERSION,
-        **({'check_evidence_schema_version': CHECK_EVIDENCE_SCHEMA_VERSION} if evidence_enabled else {}),
+        **({'check_evidence_schema_version': evidence_schema_version} if evidence_enabled else {}),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": scan_type,
         **({"prompt_suite": prompt_suite} if prompt_suite is not None and scan_type != "discovery_only" else {}),
@@ -321,7 +357,7 @@ class _CheckpointState:
     """Scan-local evidence ledger; only acknowledged independent copies escape."""
 
     def __init__(self, observations, risk, scan_type, prompt_suite, secrets, callback, *, evidence_enabled=False,
-                 producer_identity=None):
+                 evidence_schema_version=None, producer_identity=None):
         self.observations = deepcopy(observations)
         identifiers = [agent.get("id") for agent in observations]
         if any(not isinstance(value, str) or not value for value in identifiers) or len(set(identifiers)) != len(identifiers):
@@ -329,6 +365,10 @@ class _CheckpointState:
         self.risk, self.scan_type, self.prompt_suite = risk, scan_type, prompt_suite
         self.secrets, self.callback = secrets, callback
         self.evidence_enabled = evidence_enabled
+        self.evidence_schema_version = ((CHECK_EVIDENCE_SCHEMA_VERSION if evidence_schema_version is None
+                                         else evidence_schema_version) if evidence_enabled else None)
+        if evidence_enabled and not is_supported_evidence_version(self.evidence_schema_version):
+            raise CheckpointError()
         self.producer_identity = public_identity(producer_identity, secrets)
         self.results, self.assessed = {}, {}
         self.sequence = self.total_bytes = 0
@@ -344,7 +384,7 @@ class _CheckpointState:
             "metadata": public_metadata(agent.get("metadata", {})),
             "check_schema_version": CHECK_SCHEMA_VERSION, "status": "partial",
             "vulnerabilities": [], "observations": [], "checks": [],
-            **({'check_evidence_schema_version': CHECK_EVIDENCE_SCHEMA_VERSION, 'check_evidence': []}
+            **({'check_evidence_schema_version': self.evidence_schema_version, 'check_evidence': []}
                if self.evidence_enabled else {}),
         }
         await self.publish()
@@ -402,7 +442,10 @@ class _CheckpointState:
             unchanged &= merged == result[key]
             result[key] = merged
         if self.evidence_enabled:
-            validate_check_evidence(result, strict=False)
+            validate_check_evidence(result, strict=(self.evidence_schema_version == '2.0'
+                                                   and bool(result.get('check_evidence'))))
+            if not preserves_observation_eligibility(self.results[index], result):
+                raise CheckpointError()
         self.results[index] = result
         self.secrets.update(collect_secrets(findings))
         if not unchanged and (check["status"] != "skipped" or findings):
@@ -451,7 +494,7 @@ class _CheckpointState:
         if self.evidence_enabled:
             merged.setdefault('check_schema_version', CHECK_SCHEMA_VERSION)
             merged['check_evidence_schema_version'] = result.get(
-                'check_evidence_schema_version', CHECK_EVIDENCE_SCHEMA_VERSION)
+                'check_evidence_schema_version', self.evidence_schema_version)
             old_run, new_run = previous.get('check_evidence_run_id'), result.get('check_evidence_run_id')
             if old_run is not None and new_run is not None and old_run != new_run:
                 raise CheckpointError()
@@ -459,7 +502,10 @@ class _CheckpointState:
                 merged['check_evidence_run_id'] = old_run or new_run
             merged['check_evidence'] = self._merge_receipts(
                 previous.get('check_evidence', []), result.get('check_evidence', []))
-            validate_check_evidence(merged, strict=False)
+            validate_check_evidence(merged, strict=(self.evidence_schema_version == '2.0'
+                                                   and bool(merged.get('check_evidence'))))
+            if not preserves_observation_eligibility(previous, merged):
+                raise CheckpointError()
         self.results[index] = merged
         self.secrets.update(collect_secrets(merged))
         await self.refresh()
@@ -524,7 +570,9 @@ class _CheckpointState:
             risk_status = "not_assessed" if any(item["status"] == "completed" for item in results) else "not_run"
         return _project_report(self.observations, results, risks, risk_status, self.scan_type,
                                self.prompt_suite, self.secrets, incomplete=incomplete,
-                               evidence_enabled=self.evidence_enabled, producer_identity=self.producer_identity)
+                               evidence_enabled=self.evidence_enabled,
+                               evidence_schema_version=self.evidence_schema_version,
+                               producer_identity=self.producer_identity)
 
     def _preserves_previous(self, report):
         if self.last is None:
@@ -534,6 +582,8 @@ class _CheckpointState:
         if len(self.last['agents']) != len(report['agents']):
             raise CheckpointError()
         for previous, current in zip(self.last["agents"], report["agents"]):
+            if not preserves_observation_eligibility(previous, current):
+                raise CheckpointError()
             fields = ("id", "name", "type", "provider", "model", "endpoint", "endpoint_redacted", "metadata", "evidence_context_id")
             if any(previous.get(key) != current.get(key) for key in fields):
                 raise CheckpointError()
@@ -561,7 +611,8 @@ class _CheckpointState:
                 raise CheckpointError()
             report = self._report(incomplete=True)
             report["checkpoint"] = {
-                "version": "2.0" if self.evidence_enabled else "1.0", "sequence": self.sequence + 1,
+                "version": ({'1.0': '2.0', '2.0': '3.0'}[self.evidence_schema_version]
+                            if self.evidence_enabled else "1.0"), "sequence": self.sequence + 1,
                 "coverage": "confirmed_observations_and_finalized_checks" if self.evidence_enabled
                 else "finalized_checks_only"}
             validate_checkpoint_report(report)

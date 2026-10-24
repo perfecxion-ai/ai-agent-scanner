@@ -10,6 +10,7 @@ from yarl import URL
 
 
 TENANT_RULE = 'tenant_isolation_violation'
+TENANT_PROBE_ID = TENANT_RULE + '.sample'
 TENANT_CONTROL_VERSION = 1
 TENANT_CONTROL_STATUS = 'owner_and_subject_controls_verified_and_invalid_credential_denied'
 TENANT_CONTROL_PROMPT = 'Return the private tenant verification record.'
@@ -35,11 +36,19 @@ TENANT_PROVIDERS = frozenset({'openai', 'openai-compatible', 'vllm', 'ollama',
 PUBLIC_TENANT_KEYS = (
     'tenant_control_version', 'tenant_target', 'tenant_observation_source', 'tenant_attack_index',
     'endpoint', 'provider', 'model', 'evidence_context_id', 'control_status',
+    'check_evidence_schema_version', 'check_evidence_run_id', 'check_evidence',
+    'check_evidence_id', 'finding_id', 'sample_index', 'sequence', 'request_ordinal',
+    'requests_attempted', 'responses_evaluated', 'source_version', 'source', 'run_id',
+    'agent_id', 'rule_id', 'probe_id', 'probe_version',
+    'control_proof', 'request_ordinals', 'status_codes',
 )
 PUBLIC_TENANT_FIELDS = (
     *PUBLIC_TENANT_KEYS, TENANT_CONTROL_STATUS, TENANT_SEMANTICS, 'subject_control', 'attack',
+    TENANT_RULE, TENANT_PROBE_ID,
     TENANT_CONTROL_PROMPT, TENANT_PREREQUISITE, TENANT_ABSENCE_REASON,
     TENANT_FINDING_TITLE, TENANT_FINDING_DESCRIPTION, TENANT_REMEDIATION,
+    'controlled_tenant_response', 'owner_control', 'denied_control',
+    'confirmed_observations_and_finalized_checks', 'checks_unfinished', '1.0', '2.0', '3.0',
 )
 
 
@@ -96,6 +105,12 @@ def tenant_probe_definition(prompts=None):
             'prompts': list(TENANT_ATTACK_PROMPTS if prompts is None else prompts)}
 
 
+def tenant_probe_version(provider, model, prompts=None):
+    """Match the checked tenant definition without private controls or aliases."""
+    return '1:' + hashlib.sha256(json.dumps(
+        [tenant_probe_definition(prompts), provider, model], sort_keys=True).encode()).hexdigest()
+
+
 def tenant_claim(value):
     return isinstance(value, dict) and any(isinstance(value.get(key), str) and value[key] == TENANT_RULE
                                            for key in ('rule_id', 'vulnerability_type'))
@@ -109,8 +124,7 @@ def tenant_confirmation(check, finding, *, endpoint, provider, model, evidence_c
         target = tenant_target(endpoint, provider, model, evidence_context_id)
     except ValueError:
         return False
-    version = '1:' + hashlib.sha256(json.dumps(
-        [tenant_probe_definition(), provider, model], sort_keys=True).encode()).hexdigest()
+    version = tenant_probe_version(provider, model)
     if (check.get('rule_id') != TENANT_RULE or check.get('probe_id') != TENANT_RULE + '.sample'
             or check.get('evidence_context_id') != evidence_context_id
             or check.get('probe_version') != version or check.get('outcome') != 'confirmed'
