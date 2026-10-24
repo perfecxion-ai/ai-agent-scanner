@@ -13,11 +13,13 @@ from urllib.parse import urlsplit
 import aiohttp
 from jsonschema import Draft202012Validator, SchemaError
 
+from src._version import __version__
+from src.core.build_identity import current_identity, public_identity, validate_identity_fields
 from src.core.contracts import CHECK_SCHEMA_VERSION, CheckRecord
 from src.core.redaction import redact_secrets
 from src.core.scope import ScopePolicy, ScopeResolutionError, ScopeValidationError
 from src.core.transport import SafeSession, ScanBudget, TransportPolicyError, scan_transport
-from src.mcp.assessment import _unique_object, assess
+from src.mcp.assessment import _unique_object, _assessment_report
 
 
 PROTOCOL_VERSION = "2026-07-28"
@@ -184,7 +186,7 @@ async def _body(response, state, request_id):
 def _message(request_id, method, cursor=None):
     params = {"_meta": {
         "io.modelcontextprotocol/protocolVersion": PROTOCOL_VERSION,
-        "io.modelcontextprotocol/clientInfo": {"name": "ai-agent-scanner", "version": "1.1.0"},
+        "io.modelcontextprotocol/clientInfo": {"name": "ai-agent-scanner", "version": __version__},
         "io.modelcontextprotocol/clientCapabilities": {},
     }}
     if cursor is not None:
@@ -342,8 +344,10 @@ def _policy(endpoint, allowed_networks, allow_loopback):
 
 async def inventory(endpoint, allowed_networks, allow_loopback=False, api_key_env=None):
     """Return bounded inventory and heuristic schema observations, never call tools."""
+    producer = current_identity()
     policy, url = _policy(endpoint, allowed_networks, allow_loopback)
     headers, secrets = _headers(api_key_env)
+    validate_identity_fields(secrets)
     budget = _Budget(allowed_networks=tuple(str(value) for value in policy.allowed_networks),
                      allow_loopback=allow_loopback, max_requests=MAX_REQUESTS,
                      max_response_bytes=MAX_RESPONSE_BYTES, plaintext_loopback_only=url.scheme == "http")
@@ -414,7 +418,8 @@ async def inventory(endpoint, allowed_networks, allow_loopback=False, api_key_en
         reason = "Invalid MCP inventory response"
     status = "partial" if reason and state.evaluated else "failed" if reason else "completed"
     check_status = "failed" if reason else "skipped" if unsupported else "completed"
-    report = assess(tools={"tools": state.tools})
+    report = _assessment_report(tools={"tools": state.tools})
+    report['producer_identity'] = public_identity(producer, secrets)
     report.update(mode="live_inventory", protocol_version=PROTOCOL_VERSION, endpoint=endpoint,
                   status=status, tools_assessed=len(state.tools), pages_assessed=state.pages,
                   servers_assessed=1 if state.evaluated else 0,
@@ -439,6 +444,7 @@ async def inventory(endpoint, allowed_networks, allow_loopback=False, api_key_en
         "Authorization, Origin enforcement, sandboxing and tool behavior are not tested.",
     ]
     public = redact_secrets(report, secrets)
+    public['producer_identity'] = public_identity(public['producer_identity'], secrets)
     for finding in public["findings"] + public["observations"]:
         # Do not retain a digest of a credential echoed into a schema field name.
         identity = f'{finding["rule_id"]}:{finding["source"]}:{finding["json_pointer"]}'

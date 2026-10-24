@@ -42,7 +42,7 @@ proposed calls and observed actions are distinct outcomes.
 | R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence merged in PR #65 with all gates passed. Prompt-only within-check receipts in PR #67 pass local acceptance and focused review; required CI results are recorded on the PR. Tenant/access receipts and CLI crash recovery remain separate gates |
 | R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Merged in PR #72 with all local, independent, and eight PR/post-merge CI gates passed; scoped native reconstructed-fixture upgrade/restart accepted with recorded qualifications |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a merged in PR #74 with local/independent/CI acceptance and a qualified native Python 3.11.2/SQLite 3.40.1 traversal/upgrade retest. Distinct-asset identity and source-bound risk indexes remain open |
-| R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | Planned |
+| R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | R1.5a development/content identity passes local and independent gates; required delivery CI is recorded on its PR. Release checksums, SBOM, dependency/build attestation and deployed upgrade acceptance remain open |
 | R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
 | R2.2 | Advanced model/evidence/suite setup depends on manual identifiers and JSON | Guided discovery-to-assessment flow and CLI setup/diagnostics/preview expose ready, unsupported, missing, and inapplicable prerequisites; secret references never become ordinary saved values | Planned |
 | R2.3 | Findings and exits need clearer remediation and policy meaning | Logical findings preserve occurrences, explain boundary/evidence/control/verification, and avoid uncalibrated numeric confidence; offline CI evaluation distinguishes policy violations, missing required coverage, and invalid reports | Planned |
@@ -167,6 +167,14 @@ indexed risk cache.
 Proceed locally with bounded R1.5a producer/build identity, then tenant/access
 within-check receipts. Metadata correctness does not require another cloud run.
 Keep release publication, artifact attestations, and the rest of R1.5 separate.
+R1.5a uses canonical `1.2.0.dev0`, scoped deterministic source/catalog hashes,
+immutable new-run producer stamps and distinct exporter identity. Historical raw
+archives are not relabeled. Full local validation passes 4,142 cases, and
+independent review passes 65 overlapping cases on Python 3.13. See
+[contract and limits](build-identity.md) and
+[acceptance](VALIDATION.md#development-producer-identity-local-acceptance).
+Tenant-only receipt retention is next; protected-access receipts, private server
+tenant profiles and CLI crash files remain separate increments.
 The prompt audit also reproduces false confirmations from case-changed outbound
 values and transport-added headers. PR #67 now requires a complete private
 request snapshot to exclude these marker sources before confirmation and receipt

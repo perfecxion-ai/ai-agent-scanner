@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-agent-scanner"
-version = "1.1.0"
+dynamic = ["version"]
 description = "Discover, assess, and secure AI agents across your infrastructure"
 readme = "README.md"
 license = "GPL-3.0-only"
@@ -82,6 +82,9 @@ include = ["src*"]
 
 [tool.setuptools]
 py-modules = ["scanner_cli"]
+
+[tool.setuptools.dynamic]
+version = {attr = "src._version.__version__"}
 
 [tool.ruff]
 target-version = "py310"

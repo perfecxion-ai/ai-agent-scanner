@@ -19,6 +19,7 @@ import time
 
 from yarl import URL
 
+from src.core.build_identity import current_identity, public_identity, validate_identity_fields
 from src.core.contracts import collect_checks, validate_checks
 from src.core.evidence_profiles import canonical_endpoint
 from src.core.redaction import contains_literal
@@ -96,6 +97,7 @@ def _manifest(catalog, provider, model):
 
 
 def _prepare(config):
+    producer = current_identity()
     try:
         if (type(config.pairs) is not int or not 1 <= config.pairs <= 10
                 or type(config.seed) is not int or not 0 <= config.seed <= 2**32 - 1
@@ -130,6 +132,7 @@ def _prepare(config):
         for network in config.allowed_networks:
             policy.network(network)
         secrets = [marker] + ([key] if key else [])
+        validate_identity_fields(secrets)
         catalogs = _catalogs()
         agent = {'id': 'benchmark', 'name': 'Benchmark fixture', 'provider': config.provider,
                  'model': config.model, 'endpoint': endpoint, 'system_prompt_canary': marker,
@@ -141,7 +144,8 @@ def _prepare(config):
             scanner_version = version('ai-agent-scanner')
         except PackageNotFoundError:
             scanner_version = 'not_installed'
-        public = {'schema_version': '1.0', 'benchmark': 'prompt-leak-paired-v1',
+        public = {'producer_identity': public_identity(producer, secrets),
+                  'schema_version': '1.0', 'benchmark': 'prompt-leak-paired-v1',
                   'candidate_hypothesis': 'protected-disclosure-v1, composite suite, not individual technique attribution',
                   'interpretation': 'Exploratory only; nondisclosure is inconclusive, not safety or enterprise acceptance',
                   'operator_asserted_revision': config.revision,

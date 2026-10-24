@@ -3,6 +3,8 @@
 import hashlib
 import re
 
+from src.core.build_identity import current_identity, public_identity, validate_identity_fields
+from src.core.redaction import collect_secrets
 
 RULESET_VERSION = '1.1.0'
 CHECKS = {
@@ -152,6 +154,7 @@ def _metrics(cases):
 
 def evaluate_suite(suite):
     """Score locally supplied transcripts; no target accuracy can be inferred."""
+    producer = current_identity()
     _object(suite, 'Suite must be an object')
     if suite.get('schema_version') != '1.0':
         raise ValueError('Unsupported suite schema_version; expected 1.0')
@@ -159,7 +162,7 @@ def evaluate_suite(suite):
     cases = suite.get('cases')
     if not isinstance(cases, list) or not 1 <= len(cases) <= 1000:
         raise ValueError('Suite must contain 1-1000 cases')
-    results, identifiers = [], set()
+    results, identifiers, secrets = [], set(), collect_secrets(suite)
     for case in cases:
         _object(case, 'Cases must be objects')
         case_id = _identifier(case.get('id'))
@@ -171,13 +174,20 @@ def evaluate_suite(suite):
         if not isinstance(case.get('expected_violation'), bool):
             raise ValueError('expected_violation must be an explicit boolean')
         evidence = _detect(case)
+        policy = case['policy']
+        if case['check_id'] == 'REPLAY001':
+            secrets.update(policy['forbidden_output_markers'])
+        elif case['check_id'] == 'REPLAY002':
+            secrets.update(item['value'] for item in policy['protected_canaries'])
+        validate_identity_fields(secrets)
         for item in evidence:
             identity = f'{RULESET_VERSION}:{suite_id}:{case_id}:{case["check_id"]}:{item}'
             item['id'] = hashlib.sha256(identity.encode()).hexdigest()[:20]
         results.append({'id': case_id, 'check_id': case['check_id'],
                         'expected_violation': case['expected_violation'], 'predicted_violation': bool(evidence),
                         'evidence': evidence})
-    return {'suite_id': suite_id, 'schema_version': '1.0', 'ruleset_version': RULESET_VERSION,
+    return {'producer_identity': public_identity(producer, secrets),
+            'suite_id': suite_id, 'schema_version': '1.0', 'ruleset_version': RULESET_VERSION,
             'mode': 'offline_replay', 'metrics': _metrics(results),
             'checks': {check: _metrics([case for case in results if case['check_id'] == check]) for check in CHECKS},
             'cases': results,

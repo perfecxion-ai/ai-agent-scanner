@@ -44,6 +44,18 @@ def snapshot_id(scan_id, ordinal):
 
 def _evidence_extension(previous, output):
     """A later projection cannot erase acknowledged checks, receipts, or findings."""
+    if ('producer_identity' in previous) != ('producer_identity' in output):
+        return False
+    if 'producer_identity' in previous:
+        try:
+            old_producer = json.dumps(previous['producer_identity'], sort_keys=True, allow_nan=False,
+                                      separators=(',', ':'))
+            new_producer = json.dumps(output['producer_identity'], sort_keys=True, allow_nan=False,
+                                      separators=(',', ':'))
+        except (TypeError, ValueError, OverflowError, RecursionError):
+            return False
+        if old_producer != new_producer:
+            return False
     versions = {'1.0': 1, '2.0': 2}
     if versions.get(output.get('checkpoint', {}).get('version'), 0) < versions.get(
             previous.get('checkpoint', {}).get('version'), 0):

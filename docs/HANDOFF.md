@@ -146,6 +146,20 @@ authoritative indexed risk caches remain separate work.
 Tenant/access within-check receipts, server tenant profiles, CLI crash files,
 distinct-asset inventory, and later roadmap slices remain open.
 
+R1.5a now has local development identity: canonical `1.2.0.dev0`, deterministic
+packaged-source and bundled-catalog fingerprints, read-only CLI/API diagnostics,
+and a producer stamp retained across actual pipeline checkpoints. Derived exports
+keep historical producer identity separate from the current exporter; raw saved
+JSON is unchanged. Unknown or privacy-withheld provenance stays unknown.
+The local coverage gate passes 4,142 tests with warnings as errors; independent
+review passes 65 cases on Python 3.13. A public import-compatibility alias receives
+its focused final checks separately, and required delivery CI is recorded on the
+implementation PR. See [identity contract](build-identity.md) and
+[local acceptance](VALIDATION.md#development-producer-identity-local-acceptance).
+This metadata slice needs no GCP retest and does not close release/SBOM work.
+The next local correctness slice is tenant-only within-check observation
+retention, keeping private server tenant admission and CLI crash files separate.
+
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
 operator retest only when a merged runtime change needs real-service validation,

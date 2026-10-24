@@ -11,6 +11,8 @@ from urllib.parse import unquote
 import aiohttp
 from yarl import URL
 
+from src._version import __version__
+from src.core.build_identity import current_identity, public_identity, validate_identity_fields
 from src.core.contracts import CHECK_SCHEMA_VERSION, CheckRecord, validate_checks
 from src.core.redaction import redact_secrets
 from src.core.scope import ScopeResolutionError, ScopeValidationError
@@ -118,7 +120,7 @@ def _validate(policy, endpoint, headers, api_key_env):
     endpoints = _endpoint_forms(endpoint)
     fields = [*endpoints, name, api_key_env, policy["evidence_context_id"],
               "policy-baseline", "policy-control", "server/discover", "tools/list",
-              "ai-agent-scanner", "1.1.0", live.PROTOCOL_VERSION,
+              "ai-agent-scanner", __version__, live.PROTOCOL_VERSION,
               "io.modelcontextprotocol/protocolVersion", "io.modelcontextprotocol/clientInfo",
               "io.modelcontextprotocol/clientCapabilities", *headers.keys(), *headers.values()]
     if origins:
@@ -278,10 +280,12 @@ def _version(policy):
 
 async def check(endpoint, allowed_networks, policy, allow_loopback=False, api_key_env=None):
     """Check declared protected inventory controls, never tool execution or browsers."""
+    producer = current_identity()
     scope, url = live._policy(endpoint, allowed_networks, allow_loopback)
     headers, secrets = live._headers(api_key_env)
     marker, origins = _validate(policy, endpoint, headers, api_key_env)
     secrets.update((marker, marker.replace("~", "~0").replace("/", "~1")))
+    validate_identity_fields(secrets)
     context = policy["evidence_context_id"]
     version = _version(policy)
     identities = [version, *(_finding(rule, context, endpoint)["id"] for rule in ("MCP.authorization", "MCP.origin"))]
@@ -375,7 +379,8 @@ async def check(endpoint, allowed_networks, policy, allow_loopback=False, api_ke
     for item in records + findings:
         item["probe_version"] = version
     failed = reason or any(record["status"] == "failed" for record in records)
-    report = {"ruleset_version": "1.0.0", "mode": "live_policy_checks", "endpoint": endpoint,
+    report = {'producer_identity': public_identity(producer, secrets),
+              "ruleset_version": "1.0.0", "mode": "live_policy_checks", "endpoint": endpoint,
               "protocol_version": live.PROTOCOL_VERSION, "check_schema_version": CHECK_SCHEMA_VERSION,
               "status": "partial" if failed and state.evaluated else "failed" if failed else "completed",
               "risk_assessment_status": "not_assessed", "evidence_context_id": context,
@@ -384,5 +389,6 @@ async def check(endpoint, allowed_networks, policy, allow_loopback=False, api_ke
               "findings": findings, "observations": [],
               "limitations": list(_LIMITATIONS)}
     public = redact_secrets(report, secrets)
+    public['producer_identity'] = public_identity(public['producer_identity'], secrets)
     validate_checks(public["checks"])
     return public

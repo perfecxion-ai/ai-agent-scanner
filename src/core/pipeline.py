@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from copy import deepcopy
 import json
 from urllib.parse import urlsplit, urlunsplit
+from src.core.build_identity import current_identity, public_identity, validate_identity_fields
 from src.core.transport import current_budget, scan_transport, ScanBudget
 from src.core.redaction import collect_secrets, redact_secrets
 from src.core.risk_projection import project_agent_risk
@@ -56,15 +57,18 @@ def public_metadata(metadata):
 
 
 async def run_pipeline(discovery, security, risk, scope, scan_type="full", agents=None,
-                       agent_validator=None, checkpoint_callback=None, *, early_agent_validator=None):
+                       agent_validator=None, checkpoint_callback=None, *, early_agent_validator=None,
+                       producer_component='library'):
     """Run requested phases, preserving unsuccessful security outcomes."""
     if current_budget() is None:
         with scan_transport(ScanBudget()):
             return await run_pipeline(discovery, security, risk, scope, scan_type,
                                       agents, agent_validator, checkpoint_callback,
-                                      early_agent_validator=early_agent_validator)
+                                      early_agent_validator=early_agent_validator,
+                                      producer_component=producer_component)
     if scan_type not in {"full", "discovery_only", "security_only"}:
         raise ValueError("Unsupported scan type")
+    producer = current_identity(component=producer_component)
     if scan_type == "security_only":
         if agents is None:
             raise ValueError("Security-only scans require source agents")
@@ -76,11 +80,11 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
     with ExitStack() as preparation:
         preparation.enter_context(tenant_evidence_context(observations))
         return await _run_observations(security, risk, scan_type, observations, agent_validator,
-                                       checkpoint_callback, early_agent_validator, preparation)
+                                       checkpoint_callback, early_agent_validator, preparation, producer)
 
 
 async def _run_observations(security, risk, scan_type, observations, agent_validator,
-                            checkpoint_callback, early_agent_validator, preparation):
+                            checkpoint_callback, early_agent_validator, preparation, producer):
     """Keep prepared tenant credentials private and stable through every checkpoint."""
     prompt_suite = (PROTECTED_DISCLOSURE_SUITE
                     if getattr(security, "prompt_suite", None) == PROTECTED_DISCLOSURE_SUITE else None)
@@ -106,11 +110,12 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
     if scan_type != "discovery_only" and isinstance(security, SecurityTestEngine):
         # Ordinary and checkpointed reports use the same privacy/evidence basis.
         secrets.update(security.checkpoint_secrets(observations))
+    validate_identity_fields(secrets)
     if scan_type != "discovery_only":
         _validate_access_field_privacy(secrets)
     if checkpoint_callback is not None:
         checkpoint = _CheckpointState(observations, risk, scan_type, prompt_suite, secrets,
-                                      checkpoint_callback, evidence_enabled=evidence_enabled)
+                                      checkpoint_callback, evidence_enabled=evidence_enabled, producer_identity=producer)
         await checkpoint.publish()
     if scan_type != "discovery_only":
         for index, agent in enumerate(observations):
@@ -182,7 +187,7 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
         return checkpoint.final_report()
     risks, risk_status = await _assess_results(risk, security_results)
     return _project_report(observations, security_results, risks, risk_status, scan_type, prompt_suite, secrets,
-                           evidence_enabled=evidence_enabled)
+                           evidence_enabled=evidence_enabled, producer_identity=producer)
 
 
 async def _assess_results(risk, security_results):
@@ -200,8 +205,9 @@ async def _assess_results(risk, security_results):
 
 
 def _project_report(observations, security_results, risks, risk_status, scan_type, prompt_suite, secrets,
-                    *, incomplete=False, evidence_enabled=False):
+                    *, incomplete=False, evidence_enabled=False, producer_identity=None):
     """One canonical projection for ordinary reports and durable evidence snapshots."""
+    validate_identity_fields(secrets)
     if scan_type != "discovery_only":
         _validate_access_field_privacy(secrets)
     security_results, risks = deepcopy(security_results), deepcopy(risks)
@@ -279,6 +285,7 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
     transport_incomplete = bool(budget and (budget.failures or budget.rejections))
     report = redact_secrets({
         "schema_version": SCHEMA_VERSION,
+        'producer_identity': public_identity(producer_identity, secrets),
         "check_schema_version": CHECK_SCHEMA_VERSION,
         **({'check_evidence_schema_version': CHECK_EVIDENCE_SCHEMA_VERSION} if evidence_enabled else {}),
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -306,13 +313,15 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
                if evidence_enabled else {}),
         },
     }, secrets)
+    report['producer_identity'] = public_identity(report['producer_identity'], secrets)
     return validate_scan_result(report)
 
 
 class _CheckpointState:
     """Scan-local evidence ledger; only acknowledged independent copies escape."""
 
-    def __init__(self, observations, risk, scan_type, prompt_suite, secrets, callback, *, evidence_enabled=False):
+    def __init__(self, observations, risk, scan_type, prompt_suite, secrets, callback, *, evidence_enabled=False,
+                 producer_identity=None):
         self.observations = deepcopy(observations)
         identifiers = [agent.get("id") for agent in observations]
         if any(not isinstance(value, str) or not value for value in identifiers) or len(set(identifiers)) != len(identifiers):
@@ -320,6 +329,7 @@ class _CheckpointState:
         self.risk, self.scan_type, self.prompt_suite = risk, scan_type, prompt_suite
         self.secrets, self.callback = secrets, callback
         self.evidence_enabled = evidence_enabled
+        self.producer_identity = public_identity(producer_identity, secrets)
         self.results, self.assessed = {}, {}
         self.sequence = self.total_bytes = 0
         self.last = None
@@ -514,11 +524,13 @@ class _CheckpointState:
             risk_status = "not_assessed" if any(item["status"] == "completed" for item in results) else "not_run"
         return _project_report(self.observations, results, risks, risk_status, self.scan_type,
                                self.prompt_suite, self.secrets, incomplete=incomplete,
-                               evidence_enabled=self.evidence_enabled)
+                               evidence_enabled=self.evidence_enabled, producer_identity=self.producer_identity)
 
     def _preserves_previous(self, report):
         if self.last is None:
             return
+        if self.last['producer_identity'] != report['producer_identity']:
+            raise CheckpointError()
         if len(self.last['agents']) != len(report['agents']):
             raise CheckpointError()
         for previous, current in zip(self.last["agents"], report["agents"]):
@@ -583,7 +595,10 @@ def to_sarif(result):
     for agent in result.get("agents", []):
         for finding in agent.get("vulnerabilities", []):
             findings.append({**finding, "agent_id": agent["id"]})
-    report = generate_sarif(findings, {"started_at": result.get("generated_at")})
+    metadata = {"started_at": result.get("generated_at")}
+    if 'producer_identity' in result:
+        metadata['producer_identity'] = deepcopy(result['producer_identity'])
+    report = generate_sarif(findings, metadata, identity_secrets=collect_secrets(result))
     summary = result.get("summary", {})
     complete = result.get("status") == "completed" and not any(
         summary.get(key, 0) for key in ("agents_failed", "agents_partial", "agents_skipped", "agents_not_tested")
@@ -591,12 +606,12 @@ def to_sarif(result):
     if result.get("source_inventory", {}).get("coverage_complete") is False:
         complete = False
     report["runs"][0]["invocations"][0]["executionSuccessful"] = complete
-    report["runs"][0]["properties"] = {
+    report["runs"][0]["properties"].update({
         "scan_status": result.get("status"), "summary": summary,
         "check_schema_version": result.get("check_schema_version"),
         "checks": [{"agent_id": agent["id"], **check}
                    for agent in result.get("agents", []) for check in agent.get("checks", [])],
-    }
+    })
     if "source_inventory" in result:
         report["runs"][0]["properties"]["source_inventory"] = deepcopy(result["source_inventory"])
     if "checkpoint" in result:

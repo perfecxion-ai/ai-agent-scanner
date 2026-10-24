@@ -382,16 +382,24 @@ def test_unsafe_report_is_nonblocking_invalid_case_not_lost(
         target.write_text("[" + ",".join("0" for _ in range(33000)) + "]")
     elif mutation == "changed":
         original = os.read
+        target_stat = target.stat()
+        mutated = False
 
         def changed(descriptor, count):
+            nonlocal mutated
             result = original(descriptor, count)
-            if result.startswith(b'{"schema_version": "1.0", "benchmark"'):
+            observed = os.fstat(descriptor)
+            if (result and not mutated
+                    and (observed.st_dev, observed.st_ino) == (target_stat.st_dev, target_stat.st_ino)):
                 with target.open("ab") as stream:
                     stream.write(b" ")
+                mutated = True
             return result
 
         monkeypatch.setattr(os, "read", changed)
     result = module.check_files(root / "plan.json", reports, root / "summary.json")
+    if mutation == "changed":
+        assert mutated
     assert result["status"] == "incomplete" and len(result["cases"]) == 4
     assert result["cases"][0]["status"] == "invalid"
     assert not list(root.glob(".cohort-*"))
