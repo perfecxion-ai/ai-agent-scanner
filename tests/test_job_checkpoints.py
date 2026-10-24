@@ -284,7 +284,7 @@ def file_api(api, monkeypatch, tmp_path):
     try:
         with engine.connect() as connection:
             connection.exec_driver_sql('PRAGMA journal_mode=WAL')
-        module.db.metadata.create_all(engine)
+        module.initialize_schema(engine, module.db.metadata)
         with monkeypatch.context() as scoped:
             scoped.setitem(module.db.engines, None, engine)
             try:

@@ -560,7 +560,12 @@ def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch,
     assert request("GET", f"/api/scans/{source_id}/report?format=json") == original
     results = request("GET", f"/api/scans/{scan_id}/results")["results"]
     assert results["summary"]["overall_risk_score"] == expected
-    assert results["agents"][0]["risk_score"] == expected
+    result_by_asset = {item["asset_id"]: item for item in results["agents"]}
+    assert len(results["agents"]) == len(assessed["agents"])
+    assert set(result_by_asset) == {item["id"] for item in assessed["agents"]}
+    assert result_by_asset[agent["id"]]["risk_score"] == expected
+    if inventory_kind != "single":
+        assert result_by_asset["synthetic-skipped-asset"]["risk_score"] is None
     public = [source, assessed, results, request("GET", "/api/agents"),
               request("GET", f"/api/scans/{scan_id}/report?format=sarif"),
               request("GET", f"/api/scans/{scan_id}/audit"), template]

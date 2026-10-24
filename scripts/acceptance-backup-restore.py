@@ -10,6 +10,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import secrets
 import selectors
 import sqlite3
@@ -20,16 +21,19 @@ import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = ("v1", "v2", "v3", "v4", "rollback1", "rollback2", "rollback3", "future", "incomplete", "lock")
+CASES = ("v1", "v2", "v3", "v4", "v5", "rollback1", "rollback2", "rollback3", "future", "incomplete", "lock")
 FILENAMES = {"source.sqlite", "backup.sqlite", "restore.sqlite", "old-copy.sqlite"}
 
 
 def expected_assertions(case):
     assertions = ["stopped_readonly_backup_and_restore_integrity_schema_all_rows"]
     if case.startswith("v"):
+        if case == "v4":
+            assertions.append("schema_four_sources_preserved_without_nullable_rebuild")
         assertions.extend(["upgrade_and_terminal_recovery", "queued_executed_once_without_active_replay",
                            "completed_evidence_audit_templates_preserved", "schedule_recovery_without_admission",
                            "nullable_score_cache_preserves_unknown_zero_and_partial_confirmation",
+                           "inventory_generation_owners_shape_and_progress_stability",
                            "second_restart_idempotent"])
     else:
         assertions.append({"lock": "lock_rejected_before_initializer_without_database_changes",
@@ -146,13 +150,19 @@ def controlled_report(scan_id, *, disclose=False, partial=False):
 
 def seed(server, engine, version):
     from sqlalchemy import insert
+    from src.core.schema import initialize_schema
     from tests.historical_schema import historical_metadata
-    metadata = historical_metadata(version=version) if version < 4 else server.db.metadata
-    metadata.create_all(engine)
+    if version < 5:
+        metadata = historical_metadata(version=version)
+        metadata.create_all(engine)
+    else:
+        metadata = server.db.metadata
+        initialize_schema(engine, metadata)
     controlled = {'assessed-zero': controlled_report('assessed-zero'),
                   'retained-partial': controlled_report('retained-partial', disclose=True, partial=True)}
     with engine.begin() as connection:
-        connection.execute(insert(metadata.tables["schema_version"]).values(id=1, version=version))
+        if version < 5:
+            connection.execute(insert(metadata.tables["schema_version"]).values(id=1, version=version))
         for identifier, status in (("completed", "completed"), ("queued", "queued"),
                                    ("running", "running"), ("cancel", "cancel_requested")):
             connection.execute(insert(metadata.tables["scan_session"]).values(
@@ -212,6 +222,25 @@ def wait_until(predicate, deadline):
     raise RuntimeError("Recovery deadline exceeded")
 
 
+def inventory_generation_state(server, engine):
+    from sqlalchemy import inspect, select
+    with engine.connect() as connection:
+        columns = {column['name']: column for column in inspect(connection).get_columns('inventory_generation')}
+        require(set(columns) == {'organization_id', 'generation'}
+                and str(columns['organization_id']['type']) == 'VARCHAR(64)'
+                and str(columns['generation']['type']) == 'VARCHAR(32)'
+                and all(not column['nullable'] and column['default'] is None for column in columns.values())
+                and inspect(connection).get_pk_constraint('inventory_generation')['constrained_columns']
+                    == ['organization_id'], 'Inventory generation table shape changed')
+        owners = set(connection.scalars(select(server.ScanSession.organization_id).distinct()))
+        generations = dict(connection.exec_driver_sql(
+            'SELECT organization_id,generation FROM inventory_generation').all())
+    require(set(generations) == owners and all(isinstance(value, str) and re.fullmatch('[0-9a-f]{32}', value)
+                                              for value in generations.values()),
+            'Inventory generation ownership or token shape changed')
+    return generations
+
+
 def exercise(server, engine, directory, version, case, baseline, deadline, checks):
     from sqlalchemy import event, inspect, select
     from src.core.jobs import DispatcherLock, JobDispatcher, JobStore, current_claim_owner
@@ -228,7 +257,26 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
 
     def initialize():
         observed["initialized"] += 1
-        initialize_schema(engine, server.db.metadata)
+        preserve_four = version == 4 and observed['initialized'] == 1
+        statements = []
+        def observe(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement)
+        if preserve_four:
+            event.listen(engine, 'before_cursor_execute', observe)
+        try:
+            initialize_schema(engine, server.db.metadata)
+        finally:
+            if preserve_four:
+                event.remove(engine, 'before_cursor_execute', observe)
+        if preserve_four:
+            upgraded = snapshot(owned_path(directory, 'restore.sqlite'))
+            old_rows = dict(baseline['rows'], schema_version=[(1, 5)])
+            require({name: rows for name, rows in upgraded['rows'].items() if name != 'inventory_generation'}
+                    == old_rows and set(map(tuple, baseline['schema'])) <= set(map(tuple, upgraded['schema']))
+                    and not any('DROP TABLE' in statement.upper() or '_aiscan_v4_' in statement
+                                for statement in statements),
+                    'Schema four upgrade changed existing sources or rebuilt nullable tables')
+            checks.append('schema_four_sources_preserved_without_nullable_rebuild')
 
     def worker(identifier, cancelled):
         observed["executed"].append(identifier)
@@ -375,6 +423,14 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
     checks.extend(["upgrade_and_terminal_recovery", "queued_executed_once_without_active_replay",
                    "completed_evidence_audit_templates_preserved", "schedule_recovery_without_admission",
                    "nullable_score_cache_preserves_unknown_zero_and_partial_confirmation"])
+    generations = inventory_generation_state(server, engine)
+    with engine.begin() as connection:
+        original_progress = connection.scalar(select(server.ScanSession.progress).where(server.ScanSession.id == 'completed'))
+        connection.execute(server.ScanSession.__table__.update().where(server.ScanSession.id == 'completed').values(progress=25.0))
+        require(inventory_generation_state(server, engine) == generations, 'Progress update changed inventory generation')
+        connection.execute(server.ScanSession.__table__.update().where(server.ScanSession.id == 'completed').values(progress=original_progress))
+    require(inventory_generation_state(server, engine) == generations, 'Progress restoration changed inventory generation')
+    checks.append('inventory_generation_owners_shape_and_progress_stability')
     second = dispatcher()
     try:
         second.start()
@@ -386,6 +442,7 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
     require(not second._thread.is_alive() and second._ownership.handle is None, "Second dispatcher did not stop")
     require(snapshot(restored) == recovered and observed["executed"] == ["queued"]
             and observed["preflight"] == observed["admitted"] == 0, "Second restart changed evidence or replayed work")
+    require(inventory_generation_state(server, engine) == generations, 'Second restart changed inventory generation')
     checks.append("second_restart_idempotent")
 
 

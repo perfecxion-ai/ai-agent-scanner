@@ -16,8 +16,12 @@ from unittest.mock import Mock
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.pool import StaticPool
+
+from src.core import schema
+from src.core.inventory_generation import TRIGGER_DEFINITIONS, register_inventory_metadata
+from tests.historical_schema import historical_metadata
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "acceptance-backup-restore.py"
@@ -45,6 +49,53 @@ def test_snapshot_quotes_hostile_fixture_identifiers():
         rows = acceptance.snapshot(database)["rows"]
         assert rows['odd"; DROP TABLE audit_event; --'] == [('retained',)]
         assert rows['audit_event'] == [(1,)]
+
+
+@pytest.mark.parametrize('version', [1, 2, 3, 4])
+def test_historical_seed_never_reads_live_orm_metadata(version):
+    class UnavailableLiveMetadata:
+        @property
+        def metadata(self):
+            raise AssertionError('Historical backup fixtures must not read live ORM metadata')
+    server = SimpleNamespace(db=UnavailableLiveMetadata())
+    with owned_directory('v' + str(version)) as directory:
+        engine = create_engine('sqlite:///' + str(directory / 'source.sqlite'))
+        try:
+            acceptance.seed(server, engine, version)
+            with engine.connect() as connection:
+                assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == version
+                assert connection.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='trigger'").all() == []
+                assert 'inventory_generation' not in inspect(connection).get_table_names()
+                for table, name in [('scan_session', 'overall_risk_score'), ('discovered_agent', 'risk_score')]:
+                    column = next(value for value in inspect(connection).get_columns(table) if value['name'] == name)
+                    assert column['nullable'] is (version == 4) and column['default'] is None
+        finally:
+            engine.dispose()
+
+
+def test_current_seed_uses_initializer_and_installs_recognized_triggers(monkeypatch):
+    metadata = historical_metadata(version=4)
+    register_inventory_metadata(metadata)
+    server = SimpleNamespace(db=SimpleNamespace(metadata=metadata))
+    initialized = []
+    original = schema.initialize_schema
+    def initialize(engine, candidate):
+        initialized.append(candidate)
+        return original(engine, candidate)
+    monkeypatch.setattr(schema, 'initialize_schema', initialize)
+    with owned_directory('v5') as directory:
+        engine = create_engine('sqlite:///' + str(directory / 'source.sqlite'))
+        try:
+            acceptance.seed(server, engine, 5)
+            assert initialized == [metadata]
+            with engine.connect() as connection:
+                assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == 5
+                assert dict(connection.exec_driver_sql(
+                    "SELECT name,sql FROM sqlite_master WHERE type='trigger'").all()) == TRIGGER_DEFINITIONS
+                values = connection.exec_driver_sql('SELECT organization_id,generation FROM inventory_generation').all()
+                assert len(values) == 1 and values[0][0] == 'backup-fixture' and len(values[0][1]) == 32
+        finally:
+            engine.dispose()
 
 
 @pytest.mark.parametrize("optimized", [False, True])
@@ -109,6 +160,36 @@ schema.initialize_schema = corrupt
         output = json.loads(stdout)
         assert returncode == 1 and output['accepted'] is False
         assert 'score caches lost canonical values' in output['failure']
+        assert acceptance.snapshot(directory / 'source.sqlite') == acceptance.snapshot(directory / 'backup.sqlite')
+
+
+@pytest.mark.parametrize('statement', [
+    'DELETE FROM inventory_generation',
+    "UPDATE inventory_generation SET generation='invalid-token'",
+    "INSERT INTO inventory_generation (organization_id,generation) VALUES ('unowned','0123456789abcdef0123456789abcdef')",
+], ids=['missing-owner', 'malformed-token', 'extra-owner'])
+def test_acceptance_rejects_corrupted_inventory_generation(statement):
+    code = 'STATEMENT = ' + repr(statement) + '\n'
+    code += 'SCRIPT = ' + repr(str(SCRIPT)) + '\n'
+    code += '''
+import runpy
+module = runpy.run_path(SCRIPT)
+state = module['run_case'].__globals__
+original = state['inventory_generation_state']
+def corrupt(server, engine):
+    with engine.begin() as connection:
+        connection.exec_driver_sql(STATEMENT)
+    return original(server, engine)
+state['inventory_generation_state'] = corrupt
+raise SystemExit(module['child_main']())
+'''
+    environment = dict(os.environ, PYTHONPATH=str(SCRIPT.parents[1]))
+    with owned_directory('v5') as directory:
+        returncode, stdout = acceptance.child_output([sys.executable, '-c', code],
+            {'directory': str(directory), 'case': 'v5', 'timeout': 5}, environment, 10)
+        output = json.loads(stdout)
+        assert returncode == 1 and output['accepted'] is False
+        assert 'Inventory generation ownership or token shape changed' in output['failure']
         assert acceptance.snapshot(directory / 'source.sqlite') == acceptance.snapshot(directory / 'backup.sqlite')
 
 

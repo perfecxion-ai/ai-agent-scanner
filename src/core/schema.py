@@ -8,9 +8,13 @@ from sqlalchemy import DDL, LargeBinary, MetaData, case, cast, func, inspect, in
 from src.core.stored_risk import (
     MAX_STORED_RISK_BYTES, project_stored_risk, snapshot_stored_risk, stored_json_text,
 )
+from src.core.inventory_generation import (
+    TABLE_NAME as INVENTORY_GENERATION_TABLE, InventorySchemaError,
+    install_inventory_generation, validate_inventory_definitions,
+)
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 BASE_TABLES = frozenset({"scan_session", "discovered_agent"})
 LEGACY_LAYOUTS = (BASE_TABLES, BASE_TABLES | {"scan_result"},
                   BASE_TABLES | {"scan_result", "scan_job"})
@@ -18,6 +22,7 @@ VERSION_ONE_TABLES = BASE_TABLES | {"scan_result", "scan_job", "schema_version",
 VERSION_TWO_TABLES = VERSION_ONE_TABLES | {"scan_template"}
 VERSION_THREE_TABLES = VERSION_TWO_TABLES | {"scan_schedule", "scan_occurrence"}
 VERSION_FOUR_TABLES = VERSION_THREE_TABLES
+VERSION_FIVE_TABLES = VERSION_FOUR_TABLES | {INVENTORY_GENERATION_TABLE}
 _NULLABLE_SCORES = {("scan_session", "overall_risk_score"), ("discovered_agent", "risk_score")}
 _INVALID_JSON = object()
 _DDL_QUOTES = re.compile(r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^\]]*\]|--[^\r\n]*|/\*[\s\S]*?\*/")
@@ -30,6 +35,10 @@ class SchemaError(RuntimeError):
 # Frozen descriptors from the supported pre-nullable layouts. Do not derive
 # historical validation from the application models being upgraded.
 _HISTORICAL = {
+    'inventory_generation': (
+        ('organization_id', 'VARCHAR(64)', False),
+        ('generation', 'VARCHAR(32)', False),
+    ),
     'audit_event': (
         ('id', 'INTEGER', False),
         ('scan_id', 'VARCHAR(64)', False),
@@ -129,23 +138,23 @@ _HISTORICAL = {
         ('version', 'INTEGER', False),
     ),
 }
-_PRIMARY = {'audit_event':['id'],'discovered_agent':['id'],'scan_job':['scan_id'],'scan_occurrence':['id'],'scan_result':['scan_id'],'scan_schedule':['id'],'scan_session':['id'],'scan_template':['id'],'schema_version':['id']}
+_PRIMARY = {'audit_event':['id'],'discovered_agent':['id'],'scan_job':['scan_id'],'scan_occurrence':['id'],'scan_result':['scan_id'],'scan_schedule':['id'],'scan_session':['id'],'scan_template':['id'],'schema_version':['id'],'inventory_generation':['organization_id']}
 
 
 def _columns(name, version):
-    return {column: (kind, True if version == 4 and (name, column) in _NULLABLE_SCORES else nullable)
+    return {column: (kind, True if version >= 4 and (name, column) in _NULLABLE_SCORES else nullable)
             for column, kind, nullable in _HISTORICAL[name]}
 
 
 def _validate_metadata(metadata, dialect):
-    if set(metadata.tables) != VERSION_FOUR_TABLES:
+    if set(metadata.tables) != VERSION_FIVE_TABLES:
         raise SchemaError("Unsupported application metadata")
     for name, table in metadata.tables.items():
         options = table.dialect_options['sqlite']
         if (options.get('with_rowid', True) is not True or options.get('strict', False) is not False
                 or options.get('autoincrement', False) is not False):
             raise SchemaError("Unsupported application metadata")
-        expected = _columns(name, 4)
+        expected = _columns(name, 5)
         if set(table.columns.keys()) != set(expected):
             raise SchemaError("Unsupported application metadata")
         for column in table.columns:
@@ -284,27 +293,27 @@ def initialize_schema(engine, metadata):
     if engine.dialect.name != "sqlite":
         raise SchemaError("Schema initialization currently supports SQLite only")
     _validate_metadata(metadata, engine.dialect)
-    expected = VERSION_FOUR_TABLES
+    expected = VERSION_FIVE_TABLES
     with engine.connect() as connection:
         connection.exec_driver_sql("BEGIN IMMEDIATE")
         try:
             names = set(inspect(connection).get_table_names())
-            if (inspect(connection).get_view_names() or connection.exec_driver_sql(
-                    "SELECT name FROM sqlite_master WHERE type = 'trigger'").first()):
-                raise SchemaError("Unknown database views or triggers; no automatic changes were made")
+            if inspect(connection).get_view_names():
+                raise SchemaError("Unknown database views; no automatic changes were made")
             if names - expected:
                 raise SchemaError("Unknown database tables; no automatic changes were made")
             if "schema_version" in names:
                 _validate_tables(connection, {"schema_version"}, 3)
                 rows = connection.execute(select(metadata.tables["schema_version"])).all()
-                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, 2, 3, 4):
+                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, 2, 3, 4, 5):
                     raise SchemaError("Unsupported database schema version")
                 version = rows[0][1]
                 layouts = {1: VERSION_ONE_TABLES, 2: VERSION_TWO_TABLES,
-                           3: VERSION_THREE_TABLES, 4: VERSION_FOUR_TABLES}
+                           3: VERSION_THREE_TABLES, 4: VERSION_FOUR_TABLES, 5: VERSION_FIVE_TABLES}
                 if names != layouts[version]:
                     raise SchemaError("Versioned database has missing or unexpected tables")
                 _validate_tables(connection, names, version)
+                validate_inventory_definitions(connection, version)
                 if version < 4:
                     if version == 1:
                         metadata.tables["scan_template"].create(connection)
@@ -314,21 +323,29 @@ def initialize_schema(engine, metadata):
                     for name in sorted(BASE_TABLES):
                         _rebuild_score_table(connection, metadata, name)
                     _migrate_risk_values(connection, metadata)
+                if version < 5:
+                    install_inventory_generation(connection, metadata)
                     connection.execute(update(metadata.tables["schema_version"]).where(
                         metadata.tables["schema_version"].c.id == 1).values(version=SCHEMA_VERSION))
             else:
                 if names and names not in LEGACY_LAYOUTS:
                     raise SchemaError("Unrecognized legacy database layout")
                 _validate_tables(connection, names, 3)
+                validate_inventory_definitions(connection, 0)
                 metadata.create_all(connection)
                 if names:
                     for name in sorted(BASE_TABLES):
                         _rebuild_score_table(connection, metadata, name)
                     _migrate_risk_values(connection, metadata)
+                install_inventory_generation(connection, metadata)
                 connection.execute(insert(metadata.tables["schema_version"]).values(
                     id=1, version=SCHEMA_VERSION))
-            _validate_tables(connection, expected, 4)
+            _validate_tables(connection, expected, 5)
+            validate_inventory_definitions(connection, 5)
             connection.commit()
+        except InventorySchemaError as exc:
+            connection.rollback()
+            raise SchemaError(str(exc)) from None
         except Exception:
             connection.rollback()
             raise

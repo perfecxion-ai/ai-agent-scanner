@@ -172,10 +172,10 @@ Existing saved reports and exported copies are not retroactively sanitized.
 
 ## Scalar cache storage
 
-SQLite schema 4 stores unknown scan and snapshot scores as SQL NULL, with no zero
+SQLite schemas 4 and 5 store unknown scan and snapshot scores as SQL NULL, with no zero
 default. Supported assessed zero remains 0.0. New checkpoint and terminal writers
 derive these scalar caches from the same canonical report projection used by API
-reads. Recognized older databases migrate the caches transactionally while
+reads. Recognized layouts predating schema 4 migrate the caches transactionally while
 preserving archived report bytes, findings, IDs and other non-cache fields.
 Unsupported historical positives remain current unknowns; reading or upgrading
 the database does not rewrite their archived report scores or resolve findings.
@@ -183,6 +183,21 @@ Cache interpretation also applies byte, UTF-8, and depth limits. Rejected
 material leaves unknown scalar values while API reads continue to project the
 saved report. Scalar caches alone cannot establish a finding or exhaustive filter.
 See [schema and rollback boundaries](jobs.md#schema-upgrades).
+
+## Inventory observations
+
+The global inventory endpoint lists saved observations. Snapshot IDs and
+scan-local asset aliases retain their meanings; repeated observations are not
+collapsed into a current asset verdict. Canonical saved-report evidence supplies
+risk, including supported zero and unknown historical claims. Scalar caches can
+be stale and never serve as a risk prefilter.
+
+Cursor pages bind organization, filters, ordering, policy, and transactionally
+invalidated source generations. An empty page can have more candidates. A final
+`search_complete` applies after its boundary; retain every preceding page before
+claiming a complete result set. Uninterpretable sources fail the operation with
+503 rather than disappearing from a risk search. See the
+[inventory contract](inventory.md) and [operator gate](inventory-retest.md).
 
 ## Incremental report envelope
 

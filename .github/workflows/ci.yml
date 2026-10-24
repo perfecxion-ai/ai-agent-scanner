@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: python -m pip install ".[dev]"
+        run: python -m pip install ".[dev,server]"
       - name: Run tests
         run: python -m pytest tests/ -v --cov=src --cov=app --cov=scanner_cli --cov-report=xml
       - name: Build and check distributions
@@ -61,7 +61,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install dependencies
-        run: python -m pip install ".[dev]"
+        run: python -m pip install ".[dev,server]"
       - name: Run native macOS tests
         run: python -m pytest tests/ -q
       - name: Backup acceptance with default temporary directory

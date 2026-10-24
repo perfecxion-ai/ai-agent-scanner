@@ -1,4 +1,4 @@
-"""Frozen pre-nullable SQLite fixtures, independent of current ORM metadata."""
+"""Frozen historical SQLite fixtures, independent of current ORM metadata."""
 
 from datetime import datetime
 
@@ -9,7 +9,9 @@ BASE_TABLES = frozenset({'scan_session', 'discovered_agent'})
 VERSION_ONE_TABLES = BASE_TABLES | {'scan_result', 'scan_job', 'schema_version', 'audit_event'}
 VERSION_TWO_TABLES = VERSION_ONE_TABLES | {'scan_template'}
 VERSION_THREE_TABLES = VERSION_TWO_TABLES | {'scan_schedule', 'scan_occurrence'}
-LAYOUTS = {1: VERSION_ONE_TABLES, 2: VERSION_TWO_TABLES, 3: VERSION_THREE_TABLES}
+VERSION_FOUR_TABLES = VERSION_THREE_TABLES
+LAYOUTS = {1: VERSION_ONE_TABLES, 2: VERSION_TWO_TABLES, 3: VERSION_THREE_TABLES,
+           4: VERSION_FOUR_TABLES}
 
 
 def _time():
@@ -18,6 +20,8 @@ def _time():
 
 def historical_metadata(names=None, *, version=3):
     """Build fixed old definitions; Python defaults only simplify fixture inserts."""
+    if version not in LAYOUTS:
+        raise ValueError('Unsupported historical fixture version')
     selected = LAYOUTS[version] if names is None else frozenset(names)
     if not selected <= VERSION_THREE_TABLES:
         raise ValueError('Unsupported historical fixture tables')
@@ -34,7 +38,8 @@ def historical_metadata(names=None, *, version=3):
           Column('agents_discovered', Integer, nullable=False, default=0),
           Column('vulnerabilities_found', Integer, nullable=False, default=0),
           Column('critical_risks', Integer, nullable=False, default=0),
-          Column('overall_risk_score', Float, nullable=False, default=0.0),
+          Column('overall_risk_score', Float, nullable=version == 4,
+                 default=None if version == 4 else 0.0),
           Column('created_at', DateTime, nullable=False, default=_time),
           Column('started_at', DateTime, nullable=True),
           Column('completed_at', DateTime, nullable=True),
@@ -52,7 +57,8 @@ def historical_metadata(names=None, *, version=3):
           Column('discovery_method', String(100), nullable=False),
           Column('security_tested', Boolean, nullable=False, default=False),
           Column('vulnerabilities', JSON, nullable=False, default=dict),
-          Column('risk_score', Float, nullable=False, default=0.0),
+          Column('risk_score', Float, nullable=version == 4,
+                 default=None if version == 4 else 0.0),
           Column('risk_level', String(20), nullable=False, default='unknown'),
           Column('metadata', JSON, nullable=False, default=dict),
           Column('discovered_at', DateTime, nullable=False, default=_time))

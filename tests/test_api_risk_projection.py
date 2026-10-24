@@ -184,7 +184,7 @@ def test_malformed_or_inconsistent_scores_are_not_promoted(api, score, level):
     assert listed['risk_score'] is None
 
 
-def test_filtered_inventory_reports_bounded_window_not_exhaustive_absence(api):
+def test_filtered_inventory_finds_canonical_risk_beyond_newest_100(api):
     module, client = api
     seed(module, report(70, partial=True))
     oldest = datetime(2020, 1, 1)
@@ -198,14 +198,21 @@ def test_filtered_inventory_reports_bounded_window_not_exhaustive_absence(api):
     module.db.session.commit()
     response = client.get('/api/agents?risk_level=high', headers=headers(module))
     assert response.status_code == 200
-    assert response.json['agents'] == []
-    assert response.json['coverage'] == {
-        'window_limit': 100, 'window_truncated': True,
-        'risk_level_filter_scope': 'newest_100_tenant_type_assets',
-        'warning': 'Only the newest 100 matching tenant/type assets were considered; risk-level filtering is not exhaustive.'}
+    assert [item['id'] for item in response.json['agents']] == ['fixture-snapshot']
+    assert response.json['agents'][0]['risk_score'] == 70
+    assert response.json['agents'][0]['risk_level'] == 'high'
+    assert response.json['next_cursor'] is None
+    coverage = response.json['coverage']
+    assert coverage['search_complete'] is True
+    assert coverage['evaluated_candidates'] == 101
+    assert coverage['window_limit'] == 100
+    assert coverage['window_truncated'] is False
+    assert coverage['risk_level_filter_scope'] == 'tenant_type_assets_cursor_pages'
+    assert coverage['warning'] is None
     complete = client.get('/api/agents?agent_type=other', headers=headers(module)).json
     assert complete['coverage']['window_truncated'] is False
     assert complete['coverage']['warning'] is None
+    assert complete['coverage']['search_complete'] is True
 
 
 @pytest.mark.asyncio

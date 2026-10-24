@@ -124,7 +124,7 @@ database URLs, or queue contents.
 ## Schema upgrades
 
 Stop the server and back up the SQLite database with a consistent SQLite backup
-operation before upgrading. Startup validates schema version 4 while holding the
+operation before upgrading. Startup validates schema version 5 while holding the
 dispatcher lock. An empty database is initialized automatically. Recognized
 unversioned layouts are the original `scan_session` and `discovered_agent` tables,
 those tables plus `scan_result`, or those tables plus `scan_result` and `scan_job`.
@@ -138,9 +138,11 @@ The exact version 1 layout contains `scan_session`, `discovered_agent`,
 `scan_result`, `scan_job`, `audit_event`, and `schema_version`. Exact version 1
 upgrades add `scan_template`, `scan_schedule`, and `scan_occurrence`. Exact version
 2 already contains `scan_template` and adds only the two schedule tables. Version
-3 already has all nine tables. Every recognized old layout then upgrades the two
-score columns; it does not recreate existing schedule tables. Fresh and recognized
-unversioned layouts initialize to version 4. An unstamped extra template/schedule table or a partial versioned
+3 already has all nine tables. Versions 1 through 3 then upgrade the two score
+columns without recreating existing schedule tables. Schema 4 already has those
+nullable columns. All recognized older layouts then install schema-5 inventory
+generation metadata. Fresh and recognized unversioned layouts initialize to
+version 5. An unstamped extra template/schedule table or a partial versioned
 layout is not a recognized upgrade path. See [saved template boundaries](scan-templates.md)
 and [finite schedule boundaries](scan-schedules.md).
 
@@ -158,8 +160,8 @@ row fields are preserved. Accepted indexes are recreated from their original SQL
 A failure during copying, index recreation, cache projection, or version stamping
 rolls the upgrade back. New writes use the canonical projection for scalar caches
 and preserve null through checkpoint, terminal, cancellation, and recovery paths.
-API reads and exports continue to use the saved report; inventory pagination is
-a separate roadmap item.
+API reads and exports continue to use the saved report. Global inventory uses
+[bounded canonical cursor traversal](inventory.md).
 
 Migration bounds each report and snapshot-metadata interpretation to 8 MiB before
 fetching its raw bytes and processes records incrementally. An explicit limit of
@@ -170,7 +172,17 @@ evidence leaves the cache unknown while its stored bytes remain intact. This doe
 not repair a malformed archive. Startup performs this
 upgrade before recovering jobs, under the existing exclusive dispatcher lock.
 
-Unknown tables, views, triggers, expression indexes, additional constraints or unique indexes,
+Schema 5 adds `inventory_generation`, three candidate indexes, and nine exact
+recognized triggers. The schema-4 to 5 upgrade preserves existing rows, score
+caches, archives, and accepted operator indexes without rebuilding the score
+tables. Generation changes share report/observation/ownership transactions,
+including direct ORM/Core writes. Progress-only scan-session updates do not
+invalidate cursors; report and observation writes always invalidate them.
+Startup validates the full trigger and reserved-index definitions; repeated
+startup does not regenerate unchanged tokens. Candidate indexes can still require
+cross-scan sorting, so the inventory reader also enforces work limits.
+
+Unknown tables, views, additional or altered triggers, expression indexes, additional constraints or unique indexes,
 `WITHOUT ROWID`/`STRICT` table options, explicit column collations or conflict policies,
 database column defaults, changed columns,
 missing versioned tables, or an unsupported
@@ -199,7 +211,8 @@ parent bounds child output, kills/reaps timed-out children, and removes the
 temporary databases after success or failure. JSON includes `accepted`, each
 case's assertions, and bounded failure details; failure returns nonzero.
 
-Exact schema 1/2/3/4 fixtures contain completed evidence, agent snapshots, audit
+All eleven cases include frozen schema 1/2/3/4 fixtures and a schema-5 fixture
+created through the real initializer. They contain completed evidence, agent snapshots, audit
 history, queued work, and previously active work. Templates and schedules are
 seeded where supported. After stopping and disposing seed connections, a read-only
 SQLite backup is restored into absent files. Integrity, schema, and every logical
@@ -213,6 +226,8 @@ Successful upgrades assert null for unsupported cached scores, preserve a genuin
 assessed zero and a retained confirmed partial score, and allow only the documented
 score/level fields to change in existing completed rows. Archived report JSON and
 all other completed fields stay exact.
+The schema-4 case also proves no nullable-table rebuild occurs. Generation owners,
+token shape, progress stability, and unchanged restart generations are asserted.
 
 Negative cases verify exclusive ownership precedes initialization, schema 1/2/3
 version-stamp failures roll back, future versions remain unchanged, and a restored
