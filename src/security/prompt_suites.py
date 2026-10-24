@@ -42,6 +42,7 @@ _PUBLIC_DESCRIPTOR = (
     'coverage_complete', 'credential_leakage', 'critical_vulnerabilities', 'cross_tenant_canary',
     'customer_data_access', 'detected_patterns', 'detected_pii_types', 'development_tools',
     'discovery_method', 'embedding_inversion', 'embedding_poisoning', 'endpoint_redacted',
+    'producer_identity', 'exporter_identity',
     'estimated_effort', 'evidence_context_id', 'excessive_tool_permissions', 'executionSuccessful',
     'expiry-deletion-adapter-unavailable-v1', 'fabricated_citations', 'financial_data_access',
     'finalized_check_observer', 'finalized_checks_only',

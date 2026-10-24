@@ -9,6 +9,9 @@ Reference: https://sarifweb.azurewebsites.net/
 
 import json
 
+from src._version import __version__
+from src.core.build_identity import current_identity, public_identity, validate_identity_fields
+from src.core.redaction import collect_secrets
 from src.core.files import write_private_text
 from typing import Dict, List, Any
 from datetime import datetime, timezone
@@ -17,8 +20,18 @@ SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json"
 
 TOOL_NAME = "ai-agent-scanner"
-TOOL_VERSION = "1.1.0"
+TOOL_VERSION = __version__
 TOOL_URI = "https://github.com/perfecxion-ai/ai-agent-scanner"
+
+
+def report_identities(metadata=None, *, secrets=()):
+    """Historical absence is unknown; explicit withheld metadata stays withheld."""
+    validate_identity_fields(secrets)
+    metadata = metadata if isinstance(metadata, dict) else {}
+    producer = public_identity(metadata.get('producer_identity'), secrets)
+    exporter = (public_identity(current_identity(), secrets)
+                if 'producer_identity' not in metadata or producer is not None else None)
+    return producer, exporter
 
 
 def _severity_to_sarif_level(severity: str) -> str:
@@ -53,6 +66,7 @@ def _build_rule(vuln_type: str, category: str = '') -> Dict[str, Any]:
 def generate_sarif(
     vulnerabilities: List[Dict[str, Any]],
     scan_metadata: Dict[str, Any] = None,
+    *, identity_secrets=(),
 ) -> Dict[str, Any]:
     """
     Generate a SARIF v2.1.0 document from vulnerability findings.
@@ -65,6 +79,9 @@ def generate_sarif(
         SARIF document as a dict (serialize with json.dumps).
     """
     # Collect unique rules
+    secrets = collect_secrets([vulnerabilities, scan_metadata])
+    secrets.update(identity_secrets)
+    producer, exporter = report_identities(scan_metadata, secrets=secrets)
     rules_map = {}
     results = []
 
@@ -108,12 +125,13 @@ def generate_sarif(
             'tool': {
                 'driver': {
                     'name': TOOL_NAME,
-                    'version': TOOL_VERSION,
+                    **({'version': producer['package_version']} if producer is not None else {}),
                     'informationUri': TOOL_URI,
                     'rules': list(rules_map.values()),
                 }
             },
             'results': results,
+            'properties': {'producer_identity': producer, 'exporter_identity': exporter},
             'invocations': [{
                 'executionSuccessful': True,
                 'startTimeUtc': (

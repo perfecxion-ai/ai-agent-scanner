@@ -5,6 +5,7 @@ import re
 
 from src.core.contracts import CHECK_INTERRUPTED_REASON, validate_checks
 from src.evaluation import prompt_benchmark as producer
+from src.core.build_identity import saved_identity
 from src.utils.request_builder import SUPPORTED_PROVIDERS
 
 
@@ -81,7 +82,10 @@ def _expected(expected):
 
 
 def _public(document, expected):
-    _object(document, _TOP_KEYS)
+    optional = {'producer_identity'} if type(document) is dict and 'producer_identity' in document else set()
+    _object(document, _TOP_KEYS | optional)
+    if optional and document['producer_identity'] is not None:
+        _require(saved_identity(document['producer_identity']) is not None)
     fixed = {
         'schema_version': '1.0', 'benchmark': 'prompt-leak-paired-v1',
         'candidate_hypothesis': 'protected-disclosure-v1, composite suite, not individual technique attribution',

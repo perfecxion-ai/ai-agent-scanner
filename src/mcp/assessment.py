@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
+from src.core.build_identity import current_identity, public_identity, validate_identity_fields
+from src.core.redaction import collect_secrets
 from src.reporting.sarif_output import generate_sarif
 
 
@@ -201,7 +203,7 @@ def _tool_findings(inventory):
     return findings, len(body['tools'])
 
 
-def assess(config=None, tools=None):
+def _assessment_report(config=None, tools=None):
     """Return configuration findings and separate tool/launch observations."""
     if config is None and tools is None:
         raise ValueError('Provide a configuration or tool inventory')
@@ -218,14 +220,26 @@ def assess(config=None, tools=None):
                             'Configuration formats vary by client; only documented fields are assessed.']}
 
 
+def assess(config=None, tools=None):
+    """Assess supplied inventory with the identity of this execution."""
+    producer = current_identity()
+    secrets = collect_secrets([config, tools])
+    validate_identity_fields(secrets)
+    report = _assessment_report(config, tools)
+    report['producer_identity'] = public_identity(producer, secrets)
+    return report
+
+
 def to_sarif(report):
     """Use the shared SARIF envelope, retaining passive evidence and rule versions."""
     findings = report['findings'] + report['observations']
-    document = generate_sarif(findings)
+    metadata = {'producer_identity': report['producer_identity']} if 'producer_identity' in report else None
+    document = generate_sarif(findings, metadata, identity_secrets=collect_secrets(report))
     run = document['runs'][0]
     if report.get('mode') in {'live_inventory', 'live_policy_checks'}:
         run['invocations'][0]['executionSuccessful'] = report.get('status') == 'completed'
-    run['properties'] = {'mode': report.get('mode', 'passive'), 'ruleset_version': RULESET_VERSION, 'limitations': report['limitations']}
+    run['properties'].update({'mode': report.get('mode', 'passive'), 'ruleset_version': RULESET_VERSION,
+                             'limitations': report['limitations']})
     for key in ('protocol_version', 'status', 'check_schema_version', 'checks', 'risk_assessment_status', 'evidence_context_id', 'endpoint'):
         if key in report:
             run['properties'][key] = report[key]

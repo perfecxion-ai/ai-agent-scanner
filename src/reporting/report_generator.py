@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.core.files import write_private_text
+from src.core.redaction import collect_secrets
+from src.reporting.sarif_output import report_identities
 
 
 class ReportGenerator:
@@ -36,6 +38,8 @@ class ReportGenerator:
         to other formats.
         """
         agents = agents or []
+        producer, exporter = report_identities(scan_metadata, secrets=collect_secrets(
+            [agents, security_results, risk_assessments, compliance_report, scan_metadata]))
         security_results = security_results or []
         risk_assessments = risk_assessments or []
 
@@ -74,9 +78,12 @@ class ReportGenerator:
             highest_risk = max(risk_assessments, key=lambda r: r.get('overall_risk_score', 0))
 
         report = {
+            'producer_identity': producer,
+            'exporter_identity': exporter,
             'report_metadata': {
                 'generated_at': datetime.now(timezone.utc).isoformat(),
-                'scanner_version': '1.1.0',
+                'scanner_version': producer['package_version'] if producer is not None else None,
+                'exporter_version': exporter['package_version'] if exporter is not None else None,
                 'report_format': 'comprehensive',
             },
             'scan_metadata': scan_metadata or {},
@@ -143,6 +150,11 @@ class ReportGenerator:
         comp = report.get('compliance', {})
         score = es.get('highest_risk_score')
         score_text = f'{score:.1f}/100' if score is not None else 'Not assessed'
+        metadata = report.get('report_metadata', {})
+        producer_version = metadata.get('scanner_version')
+        exporter_version = metadata.get('exporter_version')
+        producer_text = f'AI Agent Scanner v{producer_version}' if producer_version else 'Unknown version'
+        exporter_text = f'AI Agent Scanner v{exporter_version}' if exporter_version else 'Unknown version'
 
         lines = [
             "=" * 60,
@@ -150,7 +162,8 @@ class ReportGenerator:
             "=" * 60,
             "",
             f"  Date:       {report.get('report_metadata', {}).get('generated_at', 'N/A')}",
-            f"  Scanner:    AI Agent Scanner v{report.get('report_metadata', {}).get('scanner_version', '?')}",
+            f"  Producer:   {producer_text}",
+            f"  Exporter:   {exporter_text}",
             "",
             "  FINDINGS",
             "  " + "-" * 55,

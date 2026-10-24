@@ -39,6 +39,8 @@ from src.reporting.report_generator import ReportGenerator
 from src.utils.auth import require_auth, create_jwt_token
 from src.utils.helpers import generate_scan_id
 from src.core.pipeline import run_pipeline, to_sarif
+from src._version import __version__
+from src.core.build_identity import current_identity
 from src.core.tenant_evidence import TenantEvidenceError, reject_private_tenant_inputs
 from src.core.risk_projection import project_agent_risk, project_report_risk
 from src.core.stored_risk import project_stored_risk, snapshot_stored_risk
@@ -122,7 +124,7 @@ _admission_lock = threading.Lock()
 _dispatcher_lock = threading.Lock()
 _job_dispatcher = None
 
-VERSION = "1.1.0"
+VERSION = __version__
 
 
 class SourceReplayError(ValueError):
@@ -1132,6 +1134,13 @@ def list_agents():
                         'code': 'inventory_projection_unavailable'}), 503
 
 
+@app.route('/api/build')
+@require_auth
+def build_info():
+    """Public build metadata for the authenticated operator, without database reads."""
+    return jsonify({'success': True, 'build': current_identity(component='server')})
+
+
 @app.route("/health")
 @app.route("/health/live")
 def health_check():
@@ -1397,7 +1406,7 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                                     scope, scan_type, agents=source_agents,
                                     agent_validator=lambda agents: validate_agent_endpoints(agents, app.config),
                                     early_agent_validator=_reject_server_tenant_inputs,
-                                    checkpoint_callback=checkpoint)
+                                    checkpoint_callback=checkpoint, producer_component='server')
         result = _enrich_report(scan_id, result, source_coverage)
         _update_progress(scan_id, 95, "Saving results")
 

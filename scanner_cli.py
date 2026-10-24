@@ -10,6 +10,8 @@ from urllib.parse import urlsplit
 
 import click
 
+from src._version import __version__
+from src.core.build_identity import current_identity
 from src.discovery.discovery_engine import DiscoveryEngine, DiscoveryScope
 from src.security.security_engine import SecurityTestEngine
 from src.security.prompt_suites import (
@@ -26,7 +28,7 @@ from src.core.transport import ScanBudget, scan_transport
 from src.core.files import write_private_text
 from src.utils.helpers import validate_cli_target_classes, validate_scan_scope
 
-VERSION = "1.1.0"
+VERSION = __version__
 BANNER = "AI Agent Scanner"
 
 
@@ -34,6 +36,15 @@ BANNER = "AI Agent Scanner"
 @click.version_option(version=VERSION, prog_name="ai-agent-scanner")
 def cli():
     """Discover and assess AI agents."""
+
+
+@cli.command('build-info')
+@click.option('--json', 'as_json', is_flag=True, help='Print structured public build identity')
+def build_info(as_json):
+    """Show the running CLI build and bundled catalog identity."""
+    identity = current_identity(component='cli')
+    click.echo(json.dumps(identity, indent=2, allow_nan=False) if as_json
+               else f'AI Agent Scanner {identity["package_version"]}\n' + json.dumps(identity, indent=2))
 
 
 def target_options(function):
@@ -241,7 +252,7 @@ async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
                              scope, mode, agents=agents,
                              agent_validator=(lambda values: apply_model_overrides(values, selections))
                              if selections else None,
-                             checkpoint_callback=retain_checkpoint), timeout=timeout_seconds)
+                             checkpoint_callback=retain_checkpoint, producer_component='cli'), timeout=timeout_seconds)
     except asyncio.CancelledError:
         if latest_checkpoint is None:
             raise
