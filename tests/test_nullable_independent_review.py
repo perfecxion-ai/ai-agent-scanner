@@ -6,7 +6,7 @@ import json
 import pytest
 from sqlalchemy import String, create_engine, event, insert
 
-from src.core.schema import SchemaError, initialize_schema
+from src.core.schema import SCHEMA_VERSION, SchemaError, initialize_schema
 from tests.historical_schema import historical_metadata
 from tests.controlled_access import result as access_result
 from tests.test_control_evidence_projections import report as access_report
@@ -64,7 +64,7 @@ def test_invalid_or_oversized_archives_become_unknown_without_rewriting_bytes(ol
     assert cache(engine) == (None, (None, 'unknown'))
     with engine.connect() as connection:
         assert connection.exec_driver_sql('SELECT CAST(result AS BLOB) FROM scan_result').scalar_one() == raw
-        assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == 4
+        assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == SCHEMA_VERSION
 
 
 @pytest.mark.asyncio
@@ -142,7 +142,12 @@ def test_partial_index_and_quoted_operator_index_survive_table_rebuild(old_datab
         before = connection.exec_driver_sql('SELECT name,sql FROM sqlite_master WHERE type=\'index\' ORDER BY name').all()
     initialize_schema(engine, module.db.metadata)
     with engine.connect() as connection:
-        assert connection.exec_driver_sql('SELECT name,sql FROM sqlite_master WHERE type=\'index\' ORDER BY name').all() == before
+        after = dict(connection.exec_driver_sql(
+            'SELECT name,sql FROM sqlite_master WHERE type=\'index\' ORDER BY name').all())
+    assert {name: after[name] for name, _ in before} == dict(before)
+    assert set(after) - {name for name, _ in before} == {
+        'ix_inventory_scan_session_org_id', 'ix_inventory_observation_scan_order',
+        'ix_inventory_observation_scan_type_order', 'sqlite_autoindex_inventory_generation_1'}
 
 
 @pytest.mark.parametrize('unique', [False, True])

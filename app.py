@@ -42,6 +42,7 @@ from src.core.pipeline import run_pipeline, to_sarif
 from src.core.tenant_evidence import TenantEvidenceError, reject_private_tenant_inputs
 from src.core.risk_projection import project_agent_risk, project_report_risk
 from src.core.stored_risk import project_stored_risk, snapshot_stored_risk
+from src.core.inventory_generation import register_inventory_metadata
 from src.core.model_selection import apply_model_overrides, canonical_model_overrides
 from src.core.contracts import validate_scan_result, MAX_CHECKPOINT_TOTAL_BYTES, CheckpointError
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
@@ -258,6 +259,9 @@ class ScanOccurrence(db.Model):
     scan_id: Mapped[str] = mapped_column(String(64), nullable=False)
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+
+
+_inventory_generation = register_inventory_metadata(db.metadata)
 
 
 # ---------------------------------------------------------------------------

@@ -92,7 +92,7 @@ async def test_historical_cache_uses_actual_supported_evidence(migration, versio
     with engine.connect() as connection:
         assert connection.exec_driver_sql('SELECT result FROM scan_result').scalar_one() == prior_report
         assert connection.exec_driver_sql('SELECT id,metadata,vulnerabilities FROM discovered_agent').all() == prior_agents
-        assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == 4
+        assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == schema.SCHEMA_VERSION
     accepted = raw_state(engine)
     schema.initialize_schema(engine, module.db.metadata)
     assert raw_state(engine) == accepted
