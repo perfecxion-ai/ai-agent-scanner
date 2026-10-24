@@ -877,6 +877,96 @@ repeat. R1.4a observation traversal is accepted within this fixture scope;
 distinct-asset identity and indexed risk materialization remain open. R1.5a
 build/producer identity proceeds locally before tenant/access receipt retention.
 
+### Tenant observation retention local acceptance
+
+R1.2c extends normal CLI/Python tenant checks with mixed observation ledger `2.0`
+and checkpoint `3.0`. It does not expand server admission, alter SQLite schema 5,
+change prompt catalogs or tenant control semantics, or add CLI crash files.
+The old prompt ledger `1.0` and checkpoint `2.0` retain their original meanings.
+
+Actual bounded transport witnesses verify the prepared tenant context, exact
+request role, model/body/Host and credential location while each response is live.
+The subject response at ordinal 2 is held until the genuine denied third control
+succeeds. Receipts publish before cleanup or another request. Only bounded public
+control statuses, ordinals, target/probe identity and finding links persist;
+private envelopes, principal labels, environment references, keys, markers,
+request capabilities and generated text do not.
+
+The complete ledger validates sources, versions, IDs, links, typed counters and
+the separate 35-prompt/six-tenant caps before partitioning evidence. Current
+tenant positives require receipts even after check completion. Draft prompt
+source `1.0` cannot enter the mixed ledger; its legacy structural-read behavior
+remains unchanged. An ineligible append cannot replace acknowledged supported
+evidence, including a receipt committed before scoring returns a number. Raw
+candidates validate before state mutation, and public/SQL guards preserve prior
+eligibility without requiring an initial privacy-redacted unknown to become
+assessed. New invalid groups cannot erase a valid finding or expose an access zero.
+
+Root and independent review also corrected source-view gaps: known observation
+versions must agree across report, asset and matching security result; typed JSON
+comparison rejects Boolean/numeric counter aliases; confirmed tenant target
+bindings agree canonically across both views. Missing roots cannot promote
+observation-bearing assets. Independently supported nonledger legacy assets keep
+their original eligibility, and raw archives remain unchanged. Explicit adapter
+declarations are literal supported strings chosen before the first checkpoint;
+descriptor code is not executed to discover a version.
+
+Five frozen reports captured through real owned HTTP and the original producer
+at `0d60e09` retain exact bytes, IDs and original 70/high or 90/critical scores.
+Independent fixed hashes identify the archives and ten original source files.
+These are old producer outputs, not reports rebuilt through the new writer.
+
+Focused gates cover genuine controls, forged/reused provenance, task isolation,
+response-only/header/request reflection, full private-basis collisions, held
+candidate rejection, callback failure/cancellation, mixed-ledger corruption and
+atomic refused appends. Eight actual trusted-HTTPS library cases preserve receipt
+prefixes and 90/critical partial risk through timeout, cancellation, cleanup,
+later 503s and transmitted contamination. Eight real CLI execution cases export
+JSON/SARIF on orderly deadline/cancellation while the tenant check is unfinished;
+files are owner-only, receipt/finding links agree and no terminal check is invented.
+
+Two spawned real dispatcher cases wait for an acknowledged SQLite commit, reach
+a later owned HTTP stall and then receive SIGKILL. New ownership recovers the
+exact receipt, finding, producer stamp and snapshot with one interrupted terminal
+event and no probe replay. Authenticated Flask reads over that actual recovered
+database agree across results, status/list summaries, critical inventory, raw JSON,
+SARIF and audit. No private tenant input is admitted through the API. These are
+library-worker persistence fixtures, not a server tenant-profile workflow.
+Raw/encoded private-value sweeps cover retained JSON/SARIF, actual SQL/cache rows,
+database/lock/log bytes and API bodies/headers. Owned directories are 0700 and
+database/lock/log/output files are 0600. This is acknowledged-process recovery,
+not power-loss or CLI forced-termination durability.
+
+Combined local coverage passes 4,366 cases with warnings treated as errors on
+Linux/Python 3.10.20, covering source, server and CLI. The initial full run had
+4,312 passes and 20 failures: version/error expectations needed updating, while
+projection and dynamic mock-declaration failures prompted runtime corrections.
+Final descriptor hardening and the expanded recovered-API assertions receive
+their separate focused gates; required CI runs the final committed tree.
+
+Producer review passes 105 overlapping producer/legacy cases on Python 3.10 and
+3.13. The shared contract author gate passes 48 cases on both. Independent review
+passes 69 mixed-contract and dispatcher/API cases on both. The separate HTTPS
+library/CLI gate passes 16 cases on Python 3.13 with coverage and warnings as
+errors. Root final interface/persistence compatibility passes 95 cases after
+literal-declaration hardening. Counts are regression coverage, not model yield.
+
+Ruff, configured Bandit, whitespace/ASCII-dash checks, distribution build, Twine,
+and fresh installed-wheel smoke outside the checkout pass. All 70 wheel Python
+sources match the candidate; source/catalog identity and installed metadata agree.
+Both normal and optimized eleven-case disposable backup/restore modes pass.
+The first package-smoke attempt lacked `python` on PATH; selecting the existing
+test virtual environment fixes that invocation without a source change.
+
+Required cross-platform delivery checks are recorded on the implementation PR.
+The next external acceptance is the pinned
+[tenant interruption gate](tenant-progress-retest.md) against the existing HTTPS
+lab. It covers leak-then-stall, held-candidate rejection, defended nondisclosure
+and native recovery; no broad cohort repeat is needed. No cloud startup,
+operator database/registry access, package publication or deployment was used.
+Protected-access within-check receipts, private server tenant profiles and CLI
+crash recovery remain separate work.
+
 ### Development producer identity local acceptance
 
 R1.5a replaces stale scanner-package `1.1.0` literals with canonical development

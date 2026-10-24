@@ -140,11 +140,8 @@ Both eleven-case backup modes pass. Runtime hashes match the pinned source.
 Raw databases and HTTP bodies were removed by the owned gate, and outer-wrapper
 setup/cleanup and privacy claims have recorded limits. See
 [native acceptance](VALIDATION.md#supplied-native-inventory-traversal-acceptance).
-No broad repeat is needed. The next local slice is R1.5a producer/build identity,
-followed by tenant/access within-check retention. Distinct-asset identity and
-authoritative indexed risk caches remain separate work.
-Tenant/access within-check receipts, server tenant profiles, CLI crash files,
-distinct-asset inventory, and later roadmap slices remain open.
+No broad repeat is needed. Distinct-asset identity and authoritative indexed risk
+caches remain separate work.
 
 R1.5a now has local development identity: canonical `1.2.0.dev0`, deterministic
 packaged-source and bundled-catalog fingerprints, read-only CLI/API diagnostics,
@@ -156,9 +153,27 @@ review passes 65 cases on Python 3.13. A public import-compatibility alias recei
 its focused final checks separately, and required delivery CI is recorded on the
 implementation PR. See [identity contract](build-identity.md) and
 [local acceptance](VALIDATION.md#development-producer-identity-local-acceptance).
+PR #76 merged as `0d60e09` with all eight PR and post-merge checks passing.
 This metadata slice needs no GCP retest and does not close release/SBOM work.
-The next local correctness slice is tenant-only within-check observation
-retention, keeping private server tenant admission and CLI crash files separate.
+
+R1.2c now retains genuine tenant observations inside unfinished checks under
+mixed ledger `2.0` and checkpoint `3.0`. Subject leaks publish only after the
+third control succeeds; attack leaks publish before cleanup or the next request.
+Malformed extensions cannot erase acknowledged eligibility. Older ledger/checkpoint
+meanings and raw archive bytes remain intact. Actual HTTPS, orderly CLI export,
+SQLite dispatcher-kill recovery and authenticated recovered-result reads pass.
+The combined local coverage gate passes 4,366 cases with warnings as errors;
+95 focused cases cover the final literal adapter-declaration hardening. See
+[acceptance and limits](VALIDATION.md#tenant-observation-retention-local-acceptance).
+Required delivery CI is recorded on the implementation PR.
+
+The next external gate is the scoped
+[tenant interruption retest](tenant-progress-retest.md), pinned to the merged
+revision after delivery checks pass. Use the existing HTTPS lab for leak-then-stall,
+held-candidate rejection and defended nondisclosure; no broad model/cohort rerun
+is needed. Private server tenant admission, protected-access observation receipts,
+CLI process-crash files, distinct-asset inventory and later roadmap slices remain
+open. Do not treat this fixture acceptance as enterprise readiness.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned

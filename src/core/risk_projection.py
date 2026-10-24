@@ -1,11 +1,13 @@
 """Conservative public risk projections of persisted, versioned pipeline evidence."""
 
 from collections import Counter
+import json
 from math import isfinite
 
 from src.core.contracts import (
-    CHECK_SCHEMA_VERSION, CHECK_EVIDENCE_SCHEMA_VERSION, confirmed_findings,
-    risk_assessment_eligible, validate_scan_result,
+    CHECK_SCHEMA_VERSION, confirmed_findings,
+    risk_assessment_eligible, validate_scan_result, is_supported_evidence_version,
+    has_evidence_contract, tenant_evidence_views_match,
 )
 from src.risk.risk_assessor import SEVERITY_SCORES, risk_level_for_score
 
@@ -33,11 +35,11 @@ def project_agent_risk(agent=None, *, assessed=False, evidence_schema_version=_U
         'check_evidence_schema_version', 'check_evidence_run_id', 'check_evidence')) or (
             isinstance(findings, list) and any(isinstance(finding, dict) and 'check_evidence_id' in finding
                                               for finding in findings))
-    if evidence_schema_version == CHECK_EVIDENCE_SCHEMA_VERSION and (
+    if is_supported_evidence_version(evidence_schema_version) and (
             agent.get('check_evidence_schema_version') != evidence_schema_version):
         return result
     if has_evidence and evidence_schema_version is not _UNSPECIFIED and (
-            evidence_schema_version != CHECK_EVIDENCE_SCHEMA_VERSION
+            not is_supported_evidence_version(evidence_schema_version)
             or agent.get('check_evidence_schema_version') != evidence_schema_version):
         return result
     if not assessed or agent.get('risk_scoring_policy') != 'severity-floor-v2':
@@ -82,9 +84,36 @@ def project_report_risk(report):
     assessed = status in {'completed', 'partial'}
     if status in {'not_run', 'not_assessed', 'failed'}:
         summary['risk_assessment_status'] = status
+    security = report.get('security_results', [])
+    security = security if isinstance(security, list) else []
+    source_counts = Counter(item.get('agent_id') for item in security
+                            if isinstance(item, dict) and isinstance(item.get('agent_id'), str))
+    sources = {item['agent_id']: item for item in security
+               if isinstance(item, dict) and isinstance(item.get('agent_id'), str)
+               and source_counts[item['agent_id']] == 1}
+    evidence_version = report.get('check_evidence_schema_version', _UNSPECIFIED)
+
+    def consistent(agent):
+        if not is_supported_evidence_version(evidence_version):
+            return evidence_version is not _UNSPECIFIED or not has_evidence_contract(agent)
+        source = sources.get(agent['id'])
+        if not source or source.get('status') != agent.get('security_status'):
+            return False
+        if not tenant_evidence_views_match(agent, source):
+            return False
+        shared = ('check_evidence_schema_version', 'check_evidence_run_id', 'provider', 'model')
+        arrays = ('check_evidence', 'checks', 'vulnerabilities', 'observations')
+        public = [agent.get(key) for key in shared] + [agent.get(key, []) for key in arrays]
+        original = [source.get(key) for key in shared] + [source.get(key, []) for key in arrays]
+        try:
+            return json.dumps(public, sort_keys=True, allow_nan=False) == json.dumps(
+                original, sort_keys=True, allow_nan=False)
+        except (TypeError, ValueError, OverflowError, RecursionError):
+            return False
+
     counts = Counter(agent['id'] for agent in report['agents'])
     agents = {agent['id']: project_agent_risk(
-        agent, assessed=assessed, evidence_schema_version=report.get('check_evidence_schema_version'))
+        agent, assessed=assessed and consistent(agent), evidence_schema_version=evidence_version)
               for agent in report['agents'] if counts[agent['id']] == 1}
     scores = [agent['risk_score'] for agent in agents.values() if agent['risk_score'] is not None]
     declared = report.get('summary')

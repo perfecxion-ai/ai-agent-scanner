@@ -9,7 +9,9 @@ import re
 import secrets
 from types import MappingProxyType
 
-from src.core.tenant_probe_policy import PUBLIC_TENANT_FIELDS, TENANT_PROVIDERS, tenant_target
+from src.core.tenant_probe_policy import (
+    PUBLIC_TENANT_FIELDS, TENANT_PROVIDERS, tenant_probe_version, tenant_target,
+)
 from src.core.request_provenance import known_request_excludes_canary, request_excludes_canary
 
 
@@ -123,7 +125,7 @@ def get_tenant_evidence(agent):
 
 
 def tenant_secrets():
-    """Return all pinned keys, markers and environment names for scan redaction."""
+    """Return pinned keys, markers, principal labels and environment names."""
     state = _STATE.get()
     return state[1] if state is not None else ()
 
@@ -201,10 +203,14 @@ def tenant_evidence_context(agents):
         raise TenantEvidenceError()
     prepared, private = {}, set()
     public = json.dumps(_public(agents), sort_keys=True, allow_nan=False).casefold()
+    public_fields = (*PUBLIC_TENANT_FIELDS,
+                     *(tenant_probe_version(agent['provider'], agent['model']) for agent, _ in configured))
     for agent, identity in configured:
         envelope = agent['tenant_evidence']
         references = [envelope[actor][key] for actor in ('owner', 'tested')
                       for key in ('api_key_env', 'canary_env')]
+        labels = [envelope[actor][key] for actor in ('owner', 'tested')
+                  for key in ('tenant_ref', 'principal_ref')]
         values = [os.environ.get(reference) for reference in references]
         if any(not isinstance(value, str) or not value or len(value) > 4096
                or any(ord(char) < 33 or ord(char) > 126 for char in value) for value in values):
@@ -220,9 +226,9 @@ def tenant_evidence_context(agents):
         if (invalid_key in values or any(_overlap(marker, invalid_key)
                                        for marker in (owner_marker, tested_marker))):
             raise TenantEvidenceError()
-        material = (*values, *references, invalid_key)
+        material = (*values, *references, *labels, invalid_key)
         if any(value.casefold() in public
-               or any(value.casefold() in field.casefold() for field in PUBLIC_TENANT_FIELDS)
+               or any(value.casefold() in field.casefold() for field in public_fields)
                for value in material):
             raise TenantEvidenceError()
         context = TenantEvidence(MappingProxyType(validate_tenant_input(agent)), owner_key,

@@ -82,7 +82,8 @@ had not reached a persistence boundary cannot be reconstructed after a crash.
 ## Finalized-check checkpoints
 
 The worker saves redacted inventory, finalized check/finding pairs, and supported
-prompt-disclosure receipts while the scan remains running. Each checkpoint atomically updates the versioned report,
+prompt-disclosure and configured tenant receipts while the scan remains running.
+Each checkpoint atomically updates the versioned report,
 agent snapshots, and summary counts. A write must match the current claim owner
 and advance the scan-local sequence; it cannot clear a cancellation request,
 create a terminal event, or overwrite a terminal scan. Snapshot IDs and original
@@ -104,12 +105,15 @@ and retains any earlier committed checkpoint. These are execution limits, not a
 guarantee that every inventory fits. Duplicate or redaction-colliding source IDs
 are rejected before evidence can be associated with an ambiguous asset.
 
-Prompt receipts preserve actual configured-canary confirmations before the prompt
+Prompt and tenant receipts preserve controlled confirmations before their
 category finishes, without inventing a completed check. Their acknowledged ledger
 prefix and execution identity cannot be removed or rewritten by a later checkpoint
 or final result. The new checkpoint version cannot downgrade to finalized-only
-coverage. See the [receipt contract](result-contracts.md#prompt-observation-receipts).
-Other unfinished checks still need separate observation contracts. Process
+coverage. See the [prompt](result-contracts.md#prompt-observation-receipts) and
+[tenant](result-contracts.md#tenant-observation-receipts) contracts. Tenant private
+input remains rejected by the server API; its persistence tests exercise a
+library worker with explicitly prepared fixture configuration. Other unfinished
+checks still need separate observation contracts. Process
 termination before an acknowledged commit can lose that observation. This is server-process recovery on the
 supported local SQLite deployment, not power-loss or storage-hardware validation.
 The CLI retains the same public reports in memory and exports on orderly timeout

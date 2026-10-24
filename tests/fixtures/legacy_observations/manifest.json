@@ -1,0 +1,111 @@
+{
+  "producer_revision": "0d60e09219212fd0f946367806e40661bbbe7ffc",
+  "source_sha256": {
+    "src/core/contracts.py": "952df8f002b1848dd830a950c63ad2d93c9fa90026a62682cad424534e552d5f",
+    "src/core/prompt_evidence_policy.py": "37dbfbe0e396f6b101df104d63812f13ee10b05b0d5fca9fa5d84a4b5ed46b19",
+    "src/core/tenant_probe_policy.py": "bf00f617e64879c7cc9cc4a1ddb4455be6d8e249861284617e77b947c1a7c32d",
+    "src/core/tenant_evidence.py": "c8dbc82cbacb16c66b59d36fb0c812535947e1d870eaaec5b14ff814216d63b4",
+    "src/core/request_evidence.py": "1c7df75eb036b2f71b5980695a115cac76bc876453e116836da3eb577585fa5a",
+    "src/core/request_provenance.py": "4616bb47866646ea28d2d5d8d772e9f6f8b3f051afa7a8dee565701f4dad04ad",
+    "src/core/pipeline.py": "015080e917ebdd839194858f74601567260ae35a7fc4b8785942b595709878eb",
+    "src/security/security_engine.py": "522cb2873bdb81c457b8cb84cfa4bd210d17f7cc85a0da62a29306e2611e7e06",
+    "src/security/prompt_injection_tests.py": "68c7109b21b0409652915e17260268781dcc692d89bb792a10189482af405f0b",
+    "src/security/data_privacy_tests.py": "22b33068f690a50f143ab87bbfecbd87a22fd20c849664db00a69cdc1306b24d"
+  },
+  "archives": {
+    "prompt-unfinished-checkpoint": {
+      "sha256": "5a2e5d6b65e2762a5145cefd2f02c4d6d667132b48099193f75fb4721c515911",
+      "expected_score": 70.0,
+      "expected_status": "partial",
+      "expected_coverage": "partial",
+      "run_id": "d4397d1a-dc96-57dc-9707-5d2f7f9034d9",
+      "finding_ids": [
+        "e5556875-6f2d-5ced-9bde-4402bacc336b"
+      ],
+      "receipt_ids": [
+        "ce3bc2a6-a482-5ddc-ae27-51d0779ac021"
+      ],
+      "probe_versions": [
+        "1:01e168308f7bb72f7031d44814cdc29e837acb2c632212f422791397bd32cdde"
+      ]
+    },
+    "prompt-final": {
+      "sha256": "f8a3b3b4bbda5206ca8d13d9745cff0d7ea00f52e8c14502961ad62ce422d3bc",
+      "expected_score": 70.0,
+      "expected_status": "completed",
+      "expected_coverage": "sampled",
+      "run_id": "d4397d1a-dc96-57dc-9707-5d2f7f9034d9",
+      "finding_ids": [
+        "e5556875-6f2d-5ced-9bde-4402bacc336b",
+        "ac46343c-94af-5c21-aef3-8c82e66f2914",
+        "433dba54-393f-5a22-8e5c-91b9a3df0390",
+        "855288a1-fcc0-5c8f-baff-6c7128d47078",
+        "c851e9e0-2f06-5dbd-a62f-d8e9d52cbb23"
+      ],
+      "receipt_ids": [
+        "ce3bc2a6-a482-5ddc-ae27-51d0779ac021",
+        "fbc0c08a-d1aa-51db-a9b2-d6814a807234",
+        "d062577c-af0f-534d-b3b3-585cd903c90f",
+        "d0871ffe-413b-55a5-86e5-614c592890a2",
+        "1d462207-643a-547a-a93f-4f0deef21a5c"
+      ],
+      "probe_versions": [
+        "1:01e168308f7bb72f7031d44814cdc29e837acb2c632212f422791397bd32cdde"
+      ],
+      "http_requests": 5,
+      "checkpoint_events": 14
+    },
+    "subject-final": {
+      "sha256": "cde8916984844168abe21bdb28725f4abd02b9867a6ae5f2f24bf6c7688a9466",
+      "expected_score": 90.0,
+      "expected_status": "completed",
+      "expected_coverage": "sampled",
+      "run_id": "5726aea4-4115-53b9-82dc-663a080bc017",
+      "finding_ids": [
+        "6cf3cc42-df65-5c55-a34f-dcf9b21c280e"
+      ],
+      "receipt_ids": [],
+      "probe_versions": [
+        "1:2708f0a4290e76c18ee4258cac13eaa98dd97bb8e56f4cd9ff378bd1163ab5dc"
+      ],
+      "http_requests": 8,
+      "checkpoint_events": 5
+    },
+    "attack-final": {
+      "sha256": "b86b836a1c56cfde0785be1e10c4465b9743b6028e5c3d8471f8947bcc7c3176",
+      "expected_score": 90.0,
+      "expected_status": "completed",
+      "expected_coverage": "sampled",
+      "run_id": "0d9f13e3-c01f-5641-8040-360c3527924f",
+      "finding_ids": [
+        "8aabf7c9-5e61-501e-b2de-b90bf5879a2e",
+        "411d0814-5f21-5d7e-ac7e-84eb6432bfdd",
+        "934c8247-dc0c-5ed7-bd25-cfcb979bb50b",
+        "611a9683-f7aa-5bef-9248-a7a55cfef2f6",
+        "f18193ad-2439-5d51-b8b2-ae4d17d1e03c"
+      ],
+      "receipt_ids": [],
+      "probe_versions": [
+        "1:2708f0a4290e76c18ee4258cac13eaa98dd97bb8e56f4cd9ff378bd1163ab5dc"
+      ],
+      "http_requests": 8,
+      "checkpoint_events": 5
+    },
+    "subject-partial-final": {
+      "sha256": "ca54df5a009d103e37cb71be7ef7b06004305def68b9819afeb4710014cff80c",
+      "expected_score": 90.0,
+      "expected_status": "partial",
+      "expected_coverage": "partial",
+      "run_id": "090c1cba-6fb5-5869-86fa-71ab6ffbedd8",
+      "finding_ids": [
+        "d0a18dd4-1a4f-5f75-a67a-114cd61ab3d8"
+      ],
+      "receipt_ids": [],
+      "probe_versions": [
+        "1:2708f0a4290e76c18ee4258cac13eaa98dd97bb8e56f4cd9ff378bd1163ab5dc"
+      ],
+      "http_requests": 3,
+      "checkpoint_events": 5
+    }
+  }
+}

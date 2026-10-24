@@ -151,8 +151,10 @@ asset's current numeric assessment unknown. Filtering out an unsupported tenant
 claim cannot expose a zero from a companion access pass. Independently supported
 findings remain selectable, and other assets keep their eligible scores. Original
 archives, findings, and stored numeric columns remain untouched. Quiet tenant
-samples cannot resolve a prior leak. Tenant observations inside unfinished checks
-still lack prompt-style observation receipts.
+samples cannot resolve a prior leak. New mixed-ledger reports require the
+[tenant observation receipts](#tenant-observation-receipts) below, including after
+the check finishes. Supported older finalized tenant evidence remains readable
+under its original contract; changing its header cannot manufacture receipts.
 
 The `severity-floor-v2` policy uses a single 0-100 scale. Confirmed severity floors
 are critical 90, high 70, medium 40, low 15, and informational 1. The base is the
@@ -202,10 +204,13 @@ claiming a complete result set. Uninterpretable sources fail the operation with
 ## Incremental report envelope
 
 Normal CLI/server security executions add a `checkpoint` object with
-`version: "2.0"`, a positive `sequence`, and
+`version: "3.0"`, a positive `sequence`, and
 `coverage: "confirmed_observations_and_finalized_checks"`. Older finalized-only
 and discovery-only checkpoints retain version `1.0` and
-`coverage: "finalized_checks_only"`. Intermediate reports
+`coverage: "finalized_checks_only"`. Checkpoint `2.0` continues to mean the older
+prompt-only ledger `1.0`; checkpoint `3.0` requires mixed ledger `2.0`. Writers
+select the supported ledger before their first checkpoint and cannot switch it
+within that execution. Intermediate reports
 are partial; the final report keeps the last acknowledged sequence and its actual
 execution status. JSON and SARIF retain the envelope. It identifies persistence
 coverage, not a passed security control or an accuracy measurement.
@@ -227,7 +232,8 @@ rewritten to introduce this envelope. See [storage and recovery limits](jobs.md#
 
 ### Prompt observation receipts
 
-New engine security reports advertise `check_evidence_schema_version: "1.0"`.
+New engine security reports advertise `check_evidence_schema_version: "2.0"`.
+Older prompt-only reports keep ledger `1.0` without rewriting their archives.
 Each asset and its matching security result carry an independent `check_evidence`
 array and, once assigned, an immutable `check_evidence_run_id`. Pending empty
 inventory may omit that run ID. A receipt does not mark a check completed, failed,
@@ -252,8 +258,9 @@ collisions are refused before HTTP. Missing, incomplete, oversized, compressed,
 or chunked request provenance cannot establish a confirmation. Capture is bounded
 to 128 KiB of body bytes, 64 KiB of header text, 256 headers, and 16,384 URL
 characters. None of this private request material is exported.
-Draft source version `1.0` remains structurally readable but cannot establish
-current receipt-backed risk. These guards do not exclude arbitrary transformations.
+Draft prompt source version `1.0` in legacy ledger `1.0` remains structurally
+readable but cannot establish current receipt-backed risk. These guards do not
+exclude arbitrary transformations.
 Receipts attest scanner observations, not independently verified target-side
 canary seeding or cryptographic report authenticity.
 
@@ -291,8 +298,38 @@ never exempts protected values; redacted or unsupported provenance cannot establ
 current numeric risk. Other independently eligible assets remain assessed. JSON
 retains the ledger on each asset; SARIF stores per-asset ledgers in run properties
 and links each receipt's `finding_id` to a result's `vulnerability_id`.
-Tenant/access observations inside unfinished checks and CLI process-crash files
-are not covered by this prompt-only increment.
+Protected-access observations inside unfinished checks and CLI process-crash
+files still require separate contracts.
+
+### Tenant observation receipts
+
+Mixed ledger `2.0` supports at most 35 prompt receipts and six tenant receipts
+per asset. Every receipt is validated before source-specific filtering. Unknown
+sources, malformed counters, duplicate IDs and missing finding links invalidate
+the asset's current assessment rather than exposing a companion zero score.
+
+Tenant source `controlled_tenant_response`, version `1.0`, binds a finding to the
+actual request role, fixed probe, target, run and asynchronous task. The private
+verifier checks the complete transmitted request, the expected credential
+location and generated text while the response token is live. It excludes both
+protected markers and credentials belonging to other roles from request material.
+Raw text, keys, markers, principal labels and private witnesses are omitted.
+
+A subject-control leak at request 2 is held privately until the genuine denied
+control at request 3 succeeds. Its public receipt then has `request_ordinal: 2`
+and attempted/evaluated counters of 3. Attack receipts use ordinals 4 through 8
+and their zero-based `tenant_attack_index`. All receipts carry
+`control_proof: {"request_ordinals": [1, 2, 3], "status_codes": [200, 200, 403]}`
+with the actual successful 2xx and denied 401/403 statuses. These are observed
+control facts, not signed proof of the operator's tenant-authorization claims.
+
+Findings publish before response cleanup, pacing or a later request. A stalled
+or interrupted unfinished check can retain confirmed 90/critical evidence with
+partial coverage after successful scoring. No completed check or pass is invented.
+Later cleanup or request failures cannot erase an acknowledged receipt prefix.
+Persistence failure and cancellation stop further probing. Private tenant inputs
+remain supported only through the explicit CLI/Python configuration workflow;
+the server API still rejects them.
 
 Report comparison resolves an absent finding only when the same unambiguous,
 unredacted endpoint has explicit completed, passed evidence for every earlier

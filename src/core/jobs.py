@@ -15,7 +15,7 @@ from pathlib import Path
 from sqlalchemy import select, update, insert, func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from src.core.contracts import validate_checkpoint_report
+from src.core.contracts import preserves_observation_eligibility, validate_checkpoint_report
 from src.core.stored_risk import project_stored_risk, snapshot_stored_risk
 
 
@@ -56,7 +56,7 @@ def _evidence_extension(previous, output):
             return False
         if old_producer != new_producer:
             return False
-    versions = {'1.0': 1, '2.0': 2}
+    versions = {'1.0': 1, '2.0': 2, '3.0': 3}
     if versions.get(output.get('checkpoint', {}).get('version'), 0) < versions.get(
             previous.get('checkpoint', {}).get('version'), 0):
         return False
@@ -65,6 +65,8 @@ def _evidence_extension(previous, output):
     if len(old_agents) != len(new_agents):
         return False
     for old, new in zip(old_agents, new_agents):
+        if not preserves_observation_eligibility(old, new):
+            return False
         if any(old.get(key) != new.get(key) for key in identity):
             return False
         if 'check_evidence_schema_version' in old:

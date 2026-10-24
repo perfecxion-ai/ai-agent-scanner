@@ -5,6 +5,7 @@ from copy import deepcopy
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from functools import wraps
 import hashlib
 import json
@@ -16,11 +17,21 @@ from src.utils.request_builder import extract_response_text
 from src.core.access_probe_policy import (
     PROTECTED_ACCESS_RULES, protected_access_pass, protected_access_confirmation,
 )
-from src.core.tenant_probe_policy import tenant_claim, tenant_confirmation
-from src.core.prompt_evidence_policy import (
-    CHECK_EVIDENCE_SCHEMA_VERSION, EVIDENCE_SOURCE, MAX_CHECK_EVIDENCE,
-    has_evidence_contract, prompt_claim, prompt_probe_payloads, validate_prompt_evidence,
+from src.core.tenant_probe_policy import (
+    TENANT_CONTROL_STATUS, TENANT_CONTROL_VERSION, TENANT_FINDING_DESCRIPTION, TENANT_FINDING_TITLE,
+    TENANT_REMEDIATION, TENANT_RULE, tenant_claim, tenant_confirmation, tenant_target,
 )
+from src.core.prompt_evidence_policy import (
+    EVIDENCE_SOURCE, has_evidence_contract, prompt_claim, prompt_probe_payloads,
+)
+from src.core.observation_evidence_policy import (
+    CHECK_EVIDENCE_SCHEMA_VERSION, MAX_CHECK_EVIDENCE, MAX_PROMPT_CHECK_EVIDENCE,
+    SUPPORTED_CHECK_EVIDENCE_SCHEMA_VERSIONS as SUPPORTED_CHECK_EVIDENCE_SCHEMA_VERSIONS,
+    checkpoint_evidence_version, is_supported_evidence_version,
+    validate_observation_evidence,
+)
+from src.core.tenant_observation_policy import TENANT_EVIDENCE_SOURCE, MAX_TENANT_CHECK_EVIDENCE
+from src.core.tenant_observations import TenantObservation, TenantWitnessState
 from src.core.request_evidence import (
     RequestTrace, current_trace, evaluate_response, fail_request, response_token, trace_requests,
 )
@@ -135,6 +146,7 @@ class _Execution:
     authorization_denied: bool = False
     trace: RequestTrace | None = None
     findings: list = field(default_factory=list)
+    tenant_state: object = None
 
 
 _records = ContextVar("security_check_records", default=None)
@@ -149,6 +161,7 @@ class _EvidenceState:
     agent: dict
     observer: object
     task: object
+    schema_version: str = CHECK_EVIDENCE_SCHEMA_VERSION
     run_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     receipts: list = field(default_factory=list)
     findings: list = field(default_factory=list)
@@ -167,10 +180,12 @@ def observe_evidence(observer):
 
 
 @contextmanager
-def collect_evidence(agent, observer=None):
-    """Collect genuine prompt observations in this asset's normal execution."""
+def collect_evidence(agent, observer=None, *, schema_version=CHECK_EVIDENCE_SCHEMA_VERSION):
+    """Collect observations under a schema chosen before execution begins."""
+    if not is_supported_evidence_version(schema_version):
+        raise CheckpointError()
     state = _EvidenceState(deepcopy(agent), observer if observer is not None else _evidence_observer.get(),
-                           asyncio.current_task())
+                           asyncio.current_task(), schema_version=schema_version)
     token = _evidence.set(state)
     try:
         yield state
@@ -247,7 +262,8 @@ async def _publish_prompt_evidence(response, finding, *, agent, category, payloa
             or type(token.status) is not int or not 200 <= token.status < 300
             or finding.get('status_code') != token.status):
         return
-    if len(state.receipts) >= MAX_CHECK_EVIDENCE:
+    if (len(state.receipts) >= MAX_CHECK_EVIDENCE or sum(
+            receipt['source'] == EVIDENCE_SOURCE for receipt in state.receipts) >= MAX_PROMPT_CHECK_EVIDENCE):
         raise CheckpointError()
     finding.update(rule_id=identity[0], probe_id=identity[1], probe_version=identity[2],
                    evidence_context_id=identity[3], check_evidence_id=str(uuid.uuid4()))
@@ -260,11 +276,11 @@ async def _publish_prompt_evidence(response, finding, *, agent, category, payloa
         'responses_evaluated': trace.evaluated, 'source': EVIDENCE_SOURCE, 'source_version': '2.0',
     }
     candidate = dict(state.agent, provider=state.agent.get('provider'), model=state.agent.get('model'),
-                     check_evidence_schema_version=CHECK_EVIDENCE_SCHEMA_VERSION,
+                     check_evidence_schema_version=state.schema_version,
                      check_evidence_run_id=state.run_id, check_evidence=[*state.receipts, receipt],
                      vulnerabilities=[*state.findings, finding], checks=[])
     try:
-        validate_prompt_evidence(candidate)
+        validate_check_evidence(candidate)
     except (TypeError, ValueError):
         raise CheckpointError() from None
     token.published = True
@@ -283,6 +299,83 @@ async def _publish_prompt_evidence(response, finding, *, agent, category, payloa
         finally:
             _evidence.reset(evidence_token)
             _execution.reset(execution_token)
+
+
+async def observe_tenant_response(response, *, agent, phase, attack_index=None):
+    """Publish only registered tenant facts from this active normal execution."""
+    state = _evidence.get()
+    if state is None:
+        return None
+    ensure_evidence_active()
+    execution, trace = _execution.get(), current_trace()
+    if (state.schema_version != CHECK_EVIDENCE_SCHEMA_VERSION or execution is None or trace is None
+            or state.task is not asyncio.current_task() or execution.trace is not trace
+            or type(trace.identity) is not tuple or len(trace.identity) != 4
+            or trace.identity[0] != TENANT_RULE or state.agent != agent):
+        if execution is not None:
+            execution.failed = True
+        if trace is not None:
+            trace.failed = True
+        return TenantObservation(False, ())
+    try:
+        if execution.tenant_state is None:
+            execution.tenant_state = TenantWitnessState(agent, state, trace)
+        valid, occurrences = execution.tenant_state.observe(response, agent, state, phase, attack_index)
+        findings = []
+        for occurrence in occurrences:
+            ensure_evidence_active()
+            facts = execution.tenant_state.consume(occurrence, agent, state)
+            if (len(state.receipts) >= MAX_CHECK_EVIDENCE or sum(
+                    receipt['source'] == TENANT_EVIDENCE_SOURCE for receipt in state.receipts) >= MAX_TENANT_CHECK_EVIDENCE):
+                raise CheckpointError()
+            identity = trace.identity
+            finding_id, receipt_id = str(uuid.uuid4()), str(uuid.uuid4())
+            finding = {
+                'id': finding_id, 'agent_id': agent['id'], 'vulnerability_type': TENANT_RULE,
+                'severity': 'critical', 'evidence_status': 'confirmed', 'title': TENANT_FINDING_TITLE,
+                'description': TENANT_FINDING_DESCRIPTION, 'response_excerpt': '[GENERATED_TEXT_OMITTED]',
+                'timestamp': datetime.now(timezone.utc).isoformat(), 'remediation': TENANT_REMEDIATION,
+                'status_code': facts['status_code'], 'tenant_control_version': TENANT_CONTROL_VERSION,
+                'control_status': TENANT_CONTROL_STATUS, 'tenant_target': facts['tenant_target'],
+                'tenant_observation_source': facts['tenant_observation_source'],
+                'rule_id': identity[0], 'probe_id': identity[1], 'probe_version': identity[2],
+                'evidence_context_id': identity[3], 'check_evidence_id': receipt_id,
+            }
+            receipt = {
+                'id': receipt_id, 'run_id': state.run_id, 'agent_id': agent['id'],
+                'rule_id': identity[0], 'probe_id': identity[1], 'probe_version': identity[2],
+                'evidence_context_id': identity[3], 'finding_id': finding_id,
+                'sequence': len(execution.findings) + 1, 'request_ordinal': facts['request_ordinal'],
+                'requests_attempted': trace.requests, 'responses_evaluated': trace.evaluated,
+                'source': TENANT_EVIDENCE_SOURCE, 'source_version': '1.0',
+                'tenant_target': facts['tenant_target'], 'tenant_observation_source': facts['tenant_observation_source'],
+                'control_proof': facts['control_proof'],
+            }
+            if facts['tenant_attack_index'] is not None:
+                finding['tenant_attack_index'] = receipt['tenant_attack_index'] = facts['tenant_attack_index']
+            candidate = dict(state.agent, check_evidence_schema_version=state.schema_version,
+                             check_evidence_run_id=state.run_id, check_evidence=[*state.receipts, receipt],
+                             vulnerabilities=[*state.findings, finding], checks=[])
+            validate_check_evidence(candidate)
+            state.receipts.append(deepcopy(receipt))
+            state.findings.append(deepcopy(finding))
+            execution.findings.append(deepcopy(finding))
+            findings.append(deepcopy(finding))
+            if state.observer is not None:
+                execution_token, evidence_token = _execution.set(None), _evidence.set(None)
+                try:
+                    with trace_requests(None):
+                        await state.observer(deepcopy(receipt), deepcopy(finding))
+                finally:
+                    _evidence.reset(evidence_token)
+                    _execution.reset(execution_token)
+        return TenantObservation(valid, tuple(findings))
+    except asyncio.CancelledError:
+        state.cancelled = True
+        raise
+    except Exception:
+        state.sink_failed = True
+        raise CheckpointError() from None
 
 
 class CheckpointError(RuntimeError):
@@ -354,7 +447,7 @@ def checked(rule, spec, prerequisite=None, oracle=None, coverage=None, absence_r
             reason = prerequisite(agent) if prerequisite else None
             execution = _Execution()
             evidence_state = _evidence.get()
-            if evidence_state is not None and rule_id.startswith('prompt_injection.'):
+            if evidence_state is not None and (rule_id.startswith('prompt_injection.') or rule_id == TENANT_RULE):
                 if evidence_state.task is not asyncio.current_task():
                     raise CheckpointError()
                 execution.trace = RequestTrace(asyncio.current_task(), (
@@ -471,6 +564,8 @@ def _supported_confirmation(check, finding, asset):
     if prompt_claim(check) or prompt_claim(finding):
         return False
     if tenant_claim(check) or tenant_claim(finding):
+        if asset.get('check_evidence_schema_version') == CHECK_EVIDENCE_SCHEMA_VERSION:
+            return False
         context = _access_context(asset)
         return context is not None and tenant_confirmation(
             check, finding, endpoint=asset.get('endpoint'),
@@ -501,6 +596,15 @@ def _unsupported_access_confirmation(result):
 def _unsupported_tenant_confirmation(result):
     """Old or unbound tenant positives cannot expose a companion assessed zero."""
     checks, findings = result.get('checks', []), result.get('vulnerabilities', [])
+    if result.get('check_evidence_schema_version') == CHECK_EVIDENCE_SCHEMA_VERSION:
+        observed = evidence_findings(result)
+        identifiers = {finding.get('id') for finding in observed}
+        keys = ('rule_id', 'probe_id', 'probe_version', 'evidence_context_id')
+        return (any(tenant_claim(finding) and finding.get('evidence_status') == 'confirmed'
+                    and finding.get('id') not in identifiers for finding in findings)
+                or any(tenant_claim(check) and check.get('outcome') == 'confirmed' and not any(
+                    tuple(finding.get(key) for key in keys) == tuple(check.get(key) for key in keys)
+                    for finding in observed) for check in checks))
     for finding in findings:
         if tenant_claim(finding) and finding.get('evidence_status') == 'confirmed':
             if not any(_supported_confirmation(check, finding, result) for check in checks):
@@ -514,7 +618,7 @@ def _unsupported_tenant_confirmation(result):
 
 def validate_check_evidence(asset, *, strict=True):
     """Validate the new ledger; strict=False preserves redacted public metadata."""
-    return validate_prompt_evidence(asset, strict=strict)
+    return validate_observation_evidence(asset, strict=strict)
 
 
 def evidence_findings(asset):
@@ -609,6 +713,28 @@ def risk_assessment_eligible(result):
         for check in result.get("checks", []))
 
 
+def preserves_observation_eligibility(previous, current):
+    """A mixed-ledger extension cannot invalidate acknowledged supported evidence.
+
+    Public asset rows and security results expose execution status differently.
+    This guard does not require a score: evidence is committed before scoring.
+    Existing identity, typed-prefix and schema checks remain separate guards.
+    """
+    if not isinstance(previous, dict) or not isinstance(current, dict):
+        return False
+    if previous.get('check_evidence_schema_version') != CHECK_EVIDENCE_SCHEMA_VERSION:
+        return True
+    if current.get('check_evidence_schema_version') != CHECK_EVIDENCE_SCHEMA_VERSION:
+        return False
+    def execution(value):
+        return dict(value, status=value.get('security_status', value.get('status')),
+                    check_schema_version=CHECK_SCHEMA_VERSION)
+    try:
+        return not risk_assessment_eligible(execution(previous)) or risk_assessment_eligible(execution(current))
+    except (TypeError, ValueError, KeyError, AttributeError, OverflowError, RecursionError):
+        return False
+
+
 def confirmed_findings(result):
     """Select findings with matching versioned confirmed check evidence."""
     if not isinstance(result, dict):
@@ -628,6 +754,23 @@ def confirmed_findings(result):
                 and _supported_confirmation(checks[identity], finding, result)))]
 
 
+def tenant_evidence_views_match(agent, security):
+    """Only tenant positives require matching canonical public target bindings."""
+    try:
+        values = [*agent.get('vulnerabilities', []), *agent.get('checks', []),
+                  *security.get('vulnerabilities', []), *security.get('checks', [])]
+        positive = any(tenant_claim(value) and (
+            value.get('evidence_status') == 'confirmed' or value.get('outcome') == 'confirmed') for value in values)
+        if not positive:
+            return True
+        def target(value):
+            return tenant_target(*(value.get(key) for key in (
+                'endpoint', 'provider', 'model', 'evidence_context_id')))
+        return target(agent) == target(security)
+    except (TypeError, ValueError, KeyError, AttributeError, OverflowError, RecursionError):
+        return False
+
+
 def _validate_evidence_views(result):
     """New writes preserve one canonical evidence ledger across both public views."""
     agents, security_results = result['agents'], result.get('security_results', [])
@@ -638,7 +781,7 @@ def _validate_evidence_views(result):
         identity = agent.get('id')
         if not isinstance(identity, str) or not identity or identity in snapshots:
             raise ValueError('Observation asset identity is ambiguous')
-        if agent.get('check_evidence_schema_version') != CHECK_EVIDENCE_SCHEMA_VERSION:
+        if agent.get('check_evidence_schema_version') != result.get('check_evidence_schema_version'):
             raise ValueError('Observation asset requires matching schema')
         snapshots[identity] = agent
     seen = set()
@@ -656,6 +799,8 @@ def _validate_evidence_views(result):
         if any(agent.get(key, []) != security.get(key, []) for key in (
                 'check_evidence', 'checks', 'vulnerabilities', 'observations')):
             raise ValueError('Observation evidence views disagree')
+        if not tenant_evidence_views_match(agent, security):
+            raise ValueError('Observation tenant target bindings disagree')
         if agent.get('security_status') != security.get('status'):
             raise ValueError('Observation execution views disagree')
     for identity, agent in snapshots.items():
@@ -675,7 +820,7 @@ def validate_scan_result(result, *, validate_evidence=True):
     if modern and result["check_schema_version"] != CHECK_SCHEMA_VERSION:
         raise ValueError("Unsupported check schema version")
     evidence_version = result.get('check_evidence_schema_version')
-    if validate_evidence and 'check_evidence_schema_version' in result and evidence_version != CHECK_EVIDENCE_SCHEMA_VERSION:
+    if validate_evidence and 'check_evidence_schema_version' in result and not is_supported_evidence_version(evidence_version):
         raise ValueError('Unsupported observation schema version')
     for agent in result["agents"]:
         if not isinstance(agent, dict) or not isinstance(agent.get("vulnerabilities", []), list):
@@ -703,7 +848,7 @@ def validate_scan_result(result, *, validate_evidence=True):
             if evidence_version != security.get('check_evidence_schema_version'):
                 raise ValueError('Conflicting observation schema versions')
             validate_check_evidence(security, strict=False)
-    if validate_evidence and evidence_version == CHECK_EVIDENCE_SCHEMA_VERSION:
+    if validate_evidence and is_supported_evidence_version(evidence_version):
         _validate_evidence_views(result)
     return result
 
@@ -731,9 +876,9 @@ def validate_checkpoint_report(report, *, final=False):
                     or any(has_evidence_contract(value) for value in (
                         *report['agents'], *report.get('security_results', [])))):
                 raise ValueError('Legacy checkpoint cannot carry observations')
-        elif version == '2.0':
+        elif checkpoint_evidence_version(version) is not None:
             if (checkpoint['coverage'] != 'confirmed_observations_and_finalized_checks'
-                    or report.get('check_evidence_schema_version') != CHECK_EVIDENCE_SCHEMA_VERSION):
+                    or report.get('check_evidence_schema_version') != checkpoint_evidence_version(version)):
                 raise ValueError('Observation checkpoint requires current evidence schema')
         else:
             raise ValueError('Unsupported checkpoint version')
