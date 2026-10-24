@@ -120,10 +120,20 @@ restart. This is not an upgrade of the original lab database. Inventory/SARIF
 checks prove availability only, and the private harness has preservation,
 privacy-sweep, and failure-propagation limits. See
 [qualified native acceptance](VALIDATION.md#supplied-native-storage-upgrade-acceptance).
-No broad repeat is needed for those qualifications. The next local slice is
-R1.4a: exhaustive observation pagination with canonical risk filters, bounded
-work, and tenant-bound cursors invalidated when their inventory changes. Keep
-distinct-asset identity and authoritative indexed risk caches as separate work.
+No broad repeat is needed for those qualifications. R1.4a now passes local
+acceptance: exhaustive observation traversal uses canonical risk filters,
+bounded source/output work, and signed cursors invalidated by source changes.
+Schema 5 installs recognized generation triggers and indexes while preserving
+schema-4 data and scalar caches. The full local gate passes 3,964 tests with
+warnings treated as errors and coverage; final independent review passes 99
+cases on Python 3.13, including real normal/optimized Gunicorn traversal and
+restart over 10,000 observations. See
+[pagination acceptance](VALIDATION.md#exhaustive-observation-pagination-local-acceptance).
+Required delivery CI is recorded on the delivery PR. The next external gate is
+the [public native inventory retest](inventory-retest.md) at its exact merged
+revision. It creates owned fixtures and compares actual inventory values without
+operator data or model services. Distinct-asset identity and authoritative
+indexed risk caches remain separate work.
 Tenant/access within-check receipts, server tenant profiles, CLI crash files,
 exhaustive inventory, and later roadmap slices remain open.
 
@@ -164,10 +174,10 @@ passed; this does not establish detection sensitivity. Restart per-scan result
 and high-filter bodies were not separately saved, so those assertions rely on
 driver checks; archived restart inventory independently contains all 31 entries.
 
-Inventory filters explicitly apply to a newest-100 tenant/type window. Keep the
-remaining observations, representative
-accuracy, and broader enterprise work visible. Documentation-only updates do not
-change the tested runtime or require another cloud run. See [targeted acceptance
+That tested revision filtered a newest-100 tenant/type window. Current local
+R1.4a acceptance uses [cursor traversal](inventory.md); its native operator gate
+is separate. Representative accuracy and broader enterprise work remain open.
+Documentation-only updates do not change the tested runtime or require another cloud run. See [targeted acceptance
 and qualifications](VALIDATION.md#targeted-live-api-acceptance).
 
 The operator-diagnostics follow-up addresses O1/O2/O4/O5/O6 and passes 1408 local

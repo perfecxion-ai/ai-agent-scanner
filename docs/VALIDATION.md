@@ -720,6 +720,99 @@ field, or every export's verdict semantics. R1.4a proceeds locally with exhausti
 observation pagination; its eventual operator gate must compare actual inventory
 values and fail on analysis, privacy, and cleanup errors.
 
+### Exhaustive observation pagination local acceptance
+
+R1.4a replaces the global inventory's newest-100 filter window with bounded
+cursor traversal. Existing observation fields, snapshot IDs and scan-local
+aliases remain intact. Risk filtering uses canonical saved-report projection,
+including supported zero and historical unknowns; stale scalar scores/levels
+never exclude candidates. Empty pages can carry continuation. Completion applies
+after the current cursor boundary and requires consumers to retain prior pages.
+
+Schema 5 adds one organization-generation table, three candidate indexes and
+nine exactly recognized triggers. Schema-4 rows, scalar caches, archive bytes and
+accepted operator indexes are preserved without a second nullable-table rebuild.
+Recognized older layouts retain their nullable upgrade before generation install.
+Source writes, ownership changes and orphan visibility invalidate affected
+organizations in the same transaction, including direct ORM/Core writes.
+Rollback, other organizations, progress-only scan-session updates and unchanged restart retain
+the generation. Unsupported trigger/index definitions fail before serving.
+
+Cursors use an uncompressed signed codec with a 4,096-byte cap, 15-minute expiry,
+and bindings to organization, filters, limit, order, source generation and
+projection policy. Packaged Python source contributes to the policy fingerprint.
+Request/scope validation precedes SQL. Stale data/policy returns 409; invalid
+cursors/filters return 400. The reader has 500-candidate, 32-report, combined
+16 MiB source and 1 MiB response allowances, plus individual 8 MiB/64-container
+limits and a five-second cooperative deadline. Unreadable or excessive sources
+return static 503 rather than becoming false unknowns or disappearing from a
+filtered search. Actual query plans use the ownership/type/order indexes but can
+still require a cross-scan sort; SQL LIMIT alone is not a complete work bound.
+
+Final local evidence:
+
+- Python 3.10.20: 3,964 tests pass with coverage and warnings treated as errors in
+  383.71 seconds; source/API/CLI line coverage is 94 percent.
+- All 145 dashboard tests pass. Ruff and configured Bandit pass, including the
+  public acceptance scripts. Distribution build, Twine metadata checks, and the
+  installed CLI smoke outside the checkout pass. The three changed packaged
+  inventory/schema modules match source bytes, and the direct signing dependency
+  is declared. Local wheel SHA-256:
+  `4f486be8cd3ee2861300c4d7068d7c6ed2ab219dcb9908ad4e2648efc48dce7f`.
+- Final independent review passes 99 overlapping committed cases on exact Python
+  3.13.15, SQLAlchemy 2.1.6 and Gunicorn 26.2.0 with coverage and warnings as errors
+  in 49.13 seconds. All 12 compared runtime/script/helper/test files match
+  integration bytes. No resource, unraisable, or shutdown warnings remain.
+- The independent inventory fixture traverses 10,000 observations across scans,
+  types and organizations, comparing full ordered descriptors. It covers older
+  findings, ties, duplicate aliases, malformed explicit aliases, genuine zero,
+  historical unknowns, contradictory SQL caches, cursor scope/tampering/expiry,
+  generation changes, actual WAL concurrent writes and source/output budgets.
+- The schema component passes 152 overlapping schema/generation/schedule cases,
+  including 29 new generation cases. The backup suite passes 62 cases, including
+  frozen schema-4 independence and genuine schema-5 initialization. Normal and
+  optimized native commands each accept all eleven cases. The v4 case proves
+  preservation without a nullable-table rebuild; generation owner/token shape,
+  progress stability and restart stability are checked.
+- The public operator command exercises real single-worker Gunicorn upgrades
+  from a private schema-4 fixture, 10,000 repeated observations of 12 synthetic
+  assets, eight filter profiles across three organizations, and restart. It
+  checks complete values rather than availability, existing rows/scalars/archive
+  and index preservation, source changes/rollback, actual process exits and no
+  admitted work. Real normal/optimized runs and failure injections form 30 author
+  cases; the final independent gate includes both real-server modes.
+- Mandatory privacy checks cover seven configured synthetic/runtime values,
+  encoded variants, HTTP bodies/headers, private files and final output. The
+  authentication response has a narrow expected token exchange. Missing values,
+  unreadable surfaces, mode changes, privacy findings and cleanup errors fail.
+  Source revision, tracked modification state, driver/app/hook hashes and policy
+  are captured. These owned fixtures never inspect operator databases/profiles.
+
+Pre-delivery regressions caught two cursor-key defects. Normalizing valid old
+timestamp text repeated or rejected continuation pages; cursors now preserve the
+actual stored sort key with an explicit string bind. Display parsing alone
+normalizes supported fractions/UTC syntax. Tests compare against SQLite's actual
+ordering, including mixed representations and offsets, without rewriting stored
+timestamps. Maximal legal UTF-8 scope/key values could also exceed the input cap;
+UTF-8 JSON encoding plus an emitted-length guard keeps usable tokens bounded.
+Valid signed compressed/marker-prefixed formats are rejected before SQL.
+
+The public gate originally accepted Boolean false as numeric zero under Python
+dictionary equality. Its numeric type guard now rejects Boolean scores while
+accepting integer and floating zero. Independent negative/positive controls
+reproduce and verify the correction. An initial combined run passed 3,951 cases
+and failed five old fixture/order assumptions: file-backed API fixtures bypassed
+schema initialization, and profile assertions selected an unspecified first SQL
+row. Fixtures now initialize the real schema; assertions join by asset ID and
+check complete cardinality/ID sets plus the skipped null. The targeted 156-case
+covered gate and final full run pass without relaxing verdict assertions.
+
+The delivery PR records required cross-platform checks. The next external gate
+is the [clean pinned native inventory retest](inventory-retest.md), including
+both operator-command modes and the eleven-case backup modes. Local synthetic
+acceptance does not establish deployed workload scale, current asset identity,
+indexed risk materialization, model sensitivity, or team/enterprise readiness.
+
 ## Exact-revision external retest
 
 The operator supplied a private live-lab retest for

@@ -168,6 +168,10 @@ dashboard supports scan history, cancellation, authenticated exports, and
 regions support keyboard scrolling and final-page focus
 recovery. Terminal feedback distinguishes scan completion from security evidence.
 For security-only runs, select a completed source scan and [models for its assets](docs/source-model-selection.md).
+The [global inventory API](docs/inventory.md) traverses saved observations with
+canonical risk filters and bounded cursors. Follow every continuation to complete
+a search. A [public owned-fixture gate](docs/inventory-retest.md) checks a native
+schema upgrade and 10,000 observations without a model server or operator data.
 The authenticated [template API](docs/scan-templates.md) saves existing scan
 definitions with revision checks and bounded tenant quotas. Manual runs share
 the scan queue and revalidate current scope and source prerequisites. Template

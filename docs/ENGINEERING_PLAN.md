@@ -41,7 +41,7 @@ proposed calls and observed actions are distinct outcomes.
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Merged in PR #64; local, independent, and all eight PR/post-merge CI gates passed |
 | R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence merged in PR #65 with all gates passed. Prompt-only within-check receipts in PR #67 pass local acceptance and focused review; required CI results are recorded on the PR. Tenant/access receipts and CLI crash recovery remain separate gates |
 | R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Merged in PR #72 with all local, independent, and eight PR/post-merge CI gates passed; scoped native reconstructed-fixture upgrade/restart accepted with recorded qualifications |
-| R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | Next: exhaustive observation pagination first; distinct-asset identity and source-bound risk indexes remain separate gates |
+| R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a observation pagination passes local full/independent/owned-server acceptance; delivery CI and native operator gate are separate. Distinct-asset identity and source-bound risk indexes remain open |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | Planned |
 | R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
 | R2.2 | Advanced model/evidence/suite setup depends on manual identifiers and JSON | Guided discovery-to-assessment flow and CLI setup/diagnostics/preview expose ready, unsupported, missing, and inapplicable prerequisites; secret references never become ordinary saved values | Planned |
@@ -154,6 +154,15 @@ and projection work; sparse filters may return an empty page with continuation.
 Uninterpretable or oversized source material must produce an explicit incomplete
 operation, not silently hide a potentially matching finding. Distinct-asset
 identity and indexed risk projections need their own semantics and acceptance.
+The R1.4a implementation now passes 3,964 local coverage tests with warnings as
+errors and a final independent 99-case Python 3.13 gate. Its schema-5 triggers
+cover direct ORM/Core source changes and ownership moves, and canonical pages
+never prefilter with scalar risk caches. Actual 10,000-observation query plans
+use ownership/candidate indexes but still sort across scans. The read deadline
+and source/output allowances bound the operation separately. See
+[local evidence](VALIDATION.md#exhaustive-observation-pagination-local-acceptance)
+and the [public native gate](inventory-retest.md). This does not provide a
+deduplicated current-asset view or an authoritative indexed risk cache.
 The prompt audit also reproduces false confirmations from case-changed outbound
 values and transport-added headers. PR #67 now requires a complete private
 request snapshot to exclude these marker sources before confirmation and receipt

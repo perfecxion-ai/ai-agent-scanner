@@ -89,9 +89,10 @@ operator key disables login and protected API routes.
 The container initializes missing database tables and starts Gunicorn as an
 unprivileged user. Keep one worker and one server instance per database. Queued
 jobs survive restarts; active jobs are marked interrupted and are not replayed.
-Startup accepts only the documented SQLite layouts. Schema-4 upgrades rebuild
-the two score-bearing tables transactionally, project unknown caches to SQL NULL,
-and preserve supported zero, archived reports, IDs and other row fields. Stop and
+Startup accepts only the documented SQLite layouts and reaches schema 5.
+Versions 1 through 3 first receive nullable risk caches; schema 4 already has them.
+Schema 5 adds inventory generations, recognized triggers, and candidate indexes
+while preserving existing rows, scalar caches, and archived reports. Stop and
 back up the database before upgrading; see [schema upgrades](jobs.md#schema-upgrades).
 The default SQLite database lives in
 `/app/instance`; use a volume to retain it between containers. TLS belongs at the
