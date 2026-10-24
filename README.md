@@ -39,7 +39,13 @@ python -m venv .venv
 . .venv/bin/activate
 python -m pip install .
 ai-agent-scanner --help
+ai-agent-scanner build-info --json
 ```
+
+Current source identifies itself as development version `1.2.0.dev0`. The
+[build identity guide](docs/build-identity.md) explains content fingerprints,
+saved producer versus current exporter, and historical unknowns. This does not
+publish a package or identify an exact Git revision.
 
 Run the built-in offline evaluation fixtures without a model or API key:
 

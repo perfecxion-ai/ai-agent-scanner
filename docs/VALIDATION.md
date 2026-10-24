@@ -877,6 +877,68 @@ repeat. R1.4a observation traversal is accepted within this fixture scope;
 distinct-asset identity and indexed risk materialization remain open. R1.5a
 build/producer identity proceeds locally before tenant/access receipt retention.
 
+### Development producer identity local acceptance
+
+R1.5a replaces stale scanner-package `1.1.0` literals with canonical development
+version `1.2.0.dev0`. It adds deterministic scoped source/catalog fingerprints,
+structured CLI and authenticated no-SQL API diagnostics, and an original producer
+stamp for new execution reports. Pipeline checkpoint streams retain exact stamp
+presence, scalar types and values. Recovery never invents a current stamp for
+historical or preparation-failure reports. Derived SARIF/comprehensive exports
+preserve an older producer or explicit unknown, separately from the current
+exporter. Raw archived JSON remains unchanged. See the
+[identity contract](build-identity.md).
+
+The shared digest covers packaged Python and CLI bytes, not all repository or
+loaded runtime content. Server-app identity is separately limited to the trusted
+checkout app; installed/container copies can explicitly be unavailable. Catalog
+hashes describe bundled definitions, not executed custom coverage. Read failures
+return unavailable/null provenance without changing evidence or readiness.
+No runtime Git, network, operator database or evidence-profile lookup is added.
+Protocol, ruleset, check, evidence and database versions remain unchanged.
+
+Local acceptance includes:
+
+- Python 3.10.20: 4,142 tests pass with warnings as errors and 94 percent source,
+  API and CLI line coverage in 355.26 seconds. A final canonical import alias is
+  checked separately with focused formatting/identity cases and delivery CI.
+- Independent review passes 65 overlapping adversarial cases on Python 3.10 and
+  exact Python 3.13.15 with SQLAlchemy 2.1.6, coverage and warnings as errors.
+  Cases cover trusted source boundaries, symlinks, limits/read failures,
+  old/null/malformed producers, typed persistence, private collisions,
+  authenticated no-SQL diagnostics and original JSON download preservation.
+- All 176 focused identity/persistence cases and a 448-case compatibility gate
+  pass. Ruff and configured Bandit pass with no medium/high findings. Package
+  build, metadata and installed-wheel identity parity have dedicated smoke
+  checks outside the source checkout. Required PR/post-merge CI is recorded on
+  the delivery PR.
+- After restoring the public canonical version alias, all 180 focused
+  formatting/identity cases pass. The final local wheel has 67 Python files,
+  each matching source bytes, and excludes private instruction files. Its
+  SHA-256 is `922845181c048d5429fd11cf879103784a3459a47bdd856e5b4ac28ab8746fcd`.
+  Fresh installed CLI/source/catalog/distribution identity agrees outside the
+  checkout. An owned environment also upgrades the prior local `1.1.0` wheel
+  to `1.2.0.dev0` with the same final identity and no broken requirements. This
+  is a local prior-build fixture, not a deployed or published-release upgrade.
+
+Review reproduced and corrected four specific boundaries. Ordinary Python
+dictionary equality admitted Boolean/float substitutions for integer provenance
+counts; checkpoint comparison now preserves JSON scalar types. Identity privacy
+originally scanned serialized JSON syntax, so a later public `null` API-key probe
+could withhold a valid stamp mid-run; matching now uses real string leaves and
+keys. SARIF adapters now carry the complete original report's known-private basis
+to identity formatting rather than dropping secrets from omitted fields. New
+outer identity field names also join existing static privacy guards. No verdict
+assertion or checkpoint immutability rule was relaxed. A changed-file fixture now
+binds to the file descriptor and verifies its injection instead of relying on
+JSON key order.
+
+This is content identification, not signed report authenticity, exact Git
+revision or dependency/build attestation. Fixed catalogs, sampling, risk scores
+and raw archives retain their existing semantics. Diff/triage provenance,
+release checksums, SBOM, dependency locking and deployed upgrade acceptance remain
+separate work. No GCP retest or operator data is needed for this metadata slice.
+
 ## Exact-revision external retest
 
 The operator supplied a private live-lab retest for

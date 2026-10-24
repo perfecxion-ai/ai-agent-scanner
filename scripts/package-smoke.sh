@@ -5,12 +5,43 @@ set -eu
 wheel_path=$(realpath "$1")
 smoke_dir=$(mktemp -d)
 trap 'rm -rf "$smoke_dir"' EXIT
+python - "$smoke_dir/source-build.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+from src.core.build_identity import current_identity
+
+identity = current_identity(component='cli')
+if identity['source']['status'] != 'available' or identity['catalogs']['status'] != 'available':
+    raise SystemExit('Source build identity is unavailable')
+Path(sys.argv[1]).write_text(json.dumps(identity), encoding='utf-8')
+PY
 python -m venv "$smoke_dir/venv"
 "$smoke_dir/venv/bin/python" -m pip install --quiet "$wheel_path"
 cd "$smoke_dir"
 unset PYTHONPATH
 "$smoke_dir/venv/bin/python" -m pip check
 "$smoke_dir/venv/bin/ai-agent-scanner" --version
+"$smoke_dir/venv/bin/ai-agent-scanner" build-info --json > "$smoke_dir/installed-build.json"
+"$smoke_dir/venv/bin/python" - "$smoke_dir/source-build.json" "$smoke_dir/installed-build.json" <<'PY'
+from importlib.metadata import version
+import json
+from pathlib import Path
+import sys
+
+from scanner_cli import VERSION
+from src._version import __version__
+from src.core.build_identity import current_identity
+
+expected = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+actual = json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
+if actual != expected or actual != current_identity(component='cli'):
+    raise SystemExit('Installed source/catalog identity differs from checkout')
+if not VERSION == __version__ == version('ai-agent-scanner') == actual['package_version']:
+    raise SystemExit('Installed package, CLI and build versions differ')
+print('Installed build identity matches checkout and distribution metadata')
+PY
 "$smoke_dir/venv/bin/ai-agent-scanner" --help
 "$smoke_dir/venv/bin/ai-agent-scanner" scan --help
 "$smoke_dir/venv/bin/python" -c 'from click.testing import CliRunner; from scanner_cli import cli; runner = CliRunner(); assert "--prompt-suite" in runner.invoke(cli, ["scan", "--help"]).output; assert "--prompt-suite" not in runner.invoke(cli, ["discover", "--help"]).output; result = runner.invoke(cli, ["scan", "--prompt-suite", "unsupported-private-input-71403"]); assert result.exit_code == 2 and "unsupported-private-input-71403" not in result.output'

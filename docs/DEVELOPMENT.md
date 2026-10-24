@@ -20,8 +20,14 @@ templates, and static files are delivered from the checkout or container.
 
 The smoke script installs a wheel into a temporary virtual environment, changes
 out of the checkout, and runs version, command help, static framework mapping,
-and offline evaluation checks.
+and offline evaluation checks. It also compares the installed CLI's structured
+source/catalog identity against the checkout and distribution metadata.
 It requires package index access to install dependencies.
+
+`src/_version.py` owns the development package version. Setuptools, CLI, server
+health and MCP client information share it; evidence, protocol, database and
+ruleset versions retain their own meanings. See [build identity](build-identity.md)
+before interpreting a saved report's producer or a current exporter's version.
 
 Synthetic API, local-lab, and queue fixtures must not load the operator's private
 evidence registry. They clear `SCAN_EVIDENCE_PROFILES_FILE` before importing the
