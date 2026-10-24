@@ -184,8 +184,12 @@ and generated text. Findings retain a versioned control status, a public target
 binding, and the observation's control or attack index. Rotate the public context
 when principals, credentials, protected records, tenant policy, or fixture setup
 change. Nondisclosure remains inconclusive and cannot resolve an earlier finding.
-Completed tenant checks use the existing finalized-check checkpoints; findings
-inside an unfinished tenant check do not yet have prompt-style durable receipts.
+New tenant findings use mixed-ledger observation receipts before the check
+finishes. A subject-control leak is held until the denied control succeeds;
+attack leaks publish before cleanup and the next request. An acknowledged
+finding survives later interruption with partial coverage. See the
+[receipt contract](result-contracts.md#tenant-observation-receipts) for counters
+and the limits of CLI process recovery.
 
 The server rejects this private input at admission and execution, including saved
 source inventory and newly discovered assets. Server tenant profiles are a
@@ -371,11 +375,10 @@ provenance; nondisclosure cannot resolve a previous leak in either suite.
 Exact protected-marker disclosure can retain 70/high even if later requests
 fail; nondisclosure or an unseeded marker stays inconclusive with null risk unless
 other conclusive evidence supports assessment. Generated response text remains
-omitted. A later deadline or cancellation retains the last finalized-check
-checkpoint, if one exists; observations inside an unfinished check can still be
-lost. The CLI exports retained evidence on orderly interruption, but has no
-process-crash recovery. No automatic retry is added. The benchmark's observation
-checkpoint is not a normal finding ledger.
+omitted. A later deadline or cancellation retains the last acknowledged receipt
+or finalized-check checkpoint, if one exists. The CLI exports retained evidence
+on orderly interruption, but has no process-crash recovery. No automatic retry
+is added. The benchmark's observation checkpoint is a separate contract.
 
 Default discovery-only configurations cannot confirm prompt disclosure or
 authentication bypass. They may produce observations requiring manual validation.

@@ -106,8 +106,9 @@ discloses the foreign marker after valid controls. Defended tenant nondisclosure
 should remain inconclusive. The example config supplies only tenant evidence,
 so its overall score should stay null; additional valid access controls or other
 findings can legitimately contribute a different overall score. A failed later request can preserve an earlier valid
-confirmation with partial coverage; interruption inside an unfinished tenant
-check is not yet covered by prompt-style observation receipts.
+confirmation with partial coverage. Current mixed-ledger releases also retain
+controlled observations inside unfinished tenant checks. Use the separate
+[interruption gate](tenant-progress-retest.md) to validate that behavior.
 
 Keep application-model yield separate from deterministic fixture correctness.
 Three repetitions do not establish sensitivity or a safety guarantee. Send the
