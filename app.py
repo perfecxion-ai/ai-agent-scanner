@@ -42,6 +42,7 @@ from src.core.pipeline import run_pipeline, to_sarif
 from src.core.tenant_evidence import TenantEvidenceError, reject_private_tenant_inputs
 from src.core.risk_projection import project_agent_risk, project_report_risk
 from src.core.stored_risk import project_stored_risk, snapshot_stored_risk
+from src.core.inventory import InventoryError, inventory_page, parse_inventory_request
 from src.core.inventory_generation import register_inventory_metadata
 from src.core.model_selection import apply_model_overrides, canonical_model_overrides
 from src.core.contracts import validate_scan_result, MAX_CHECKPOINT_TOTAL_BYTES, CheckpointError
@@ -1116,51 +1117,19 @@ def export_scan_report(scan_id):
 @app.route("/api/agents")
 @require_auth
 def list_agents():
-    """List all discovered agents across scans."""
+    """Page tenant observations using current canonical evidence."""
     try:
-        org_id = g.user["organization_id"]
-        risk_level = request.args.get("risk_level")
-        agent_type = request.args.get("agent_type")
-
+        parsed = parse_inventory_request(request.args, g.user['organization_id'], app.config['SECRET_KEY'])
         with _read_snapshot() as session:
-            query = session.query(DiscoveredAgentModel).join(
-                ScanSession, DiscoveredAgentModel.scan_id == ScanSession.id
-            ).filter(ScanSession.organization_id == org_id)
-            if agent_type:
-                query = query.filter(DiscoveredAgentModel.agent_type == agent_type)
-            window = query.order_by(DiscoveredAgentModel.discovered_at.desc(), DiscoveredAgentModel.id).limit(101).all()
-            agents = window[:100]
-            scan_ids = {agent.scan_id for agent in agents}
-            reports = session.query(ScanResult).join(ScanSession, ScanResult.scan_id == ScanSession.id).filter(
-                ScanSession.organization_id == org_id, ScanResult.scan_id.in_(scan_ids)).all() if scan_ids else []
-            risks = {row.scan_id: project_report_risk(row.result)[1] for row in reports}
-            projected = [{
-                "id": agent.id,
-                "asset_id": _snapshot_asset_id(agent),
-                "name": agent.agent_name,
-                "type": agent.agent_type,
-                "provider": agent.provider,
-                **risks.get(agent.scan_id, {}).get(_snapshot_asset_id(agent), project_agent_risk()),
-                "discovered_at": agent.discovered_at.isoformat(),
-            } for agent in agents]
-        if risk_level:
-            projected = [agent for agent in projected if agent["risk_level"] == risk_level]
-
-        return jsonify({
-            "success": True,
-            "agents": projected,
-            "coverage": {
-                "window_limit": 100,
-                "window_truncated": len(window) > 100,
-                "risk_level_filter_scope": "newest_100_tenant_type_assets",
-                "warning": "Only the newest 100 matching tenant/type assets were considered; risk-level filtering is not exhaustive."
-                    if len(window) > 100 else None,
-            },
-        })
-
+            page = inventory_page(session, parsed, app.config['SECRET_KEY'], DiscoveredAgentModel.__table__,
+                                  ScanSession.__table__, ScanResult.__table__, _inventory_generation)
+        return jsonify({'success': True, **page})
+    except InventoryError as error:
+        return jsonify({'success': False, 'error': error.message, 'code': error.code}), error.status
     except Exception:
         app.logger.error("Error listing agents")
-        return jsonify({"success": False, "error": "Internal server error"}), 500
+        return jsonify({'success': False, 'error': 'Inventory projection unavailable',
+                        'code': 'inventory_projection_unavailable'}), 503
 
 
 @app.route("/health")
