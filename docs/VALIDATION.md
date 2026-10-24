@@ -647,14 +647,78 @@ engine it initialized, including setup or teardown failure. A raw SQLite fixture
 uses an explicit closing context as well as a transaction context. These are
 test-only cleanup changes; connection lifecycle instrumentation verifies closure.
 
-Required cross-platform PR/post-merge results are recorded on the delivery PR.
-The next external check is the [native storage/server upgrade retest](storage-retest.md),
-using a stopped disposable lab copy and the exact merged revision. This local
+PR #72 merged as `3f32c6e6dd8a52832401df69bd92f263bfad11e8` with all eight
+PR and post-merge CI checks passing. The supplied
+[native storage/server upgrade retest](storage-retest.md) is accepted below for
+its stopped reconstructed fixture and exact merged revision. This local
 acceptance does not certify an operator deployment or downgrade compatibility.
 Restore an untouched pre-upgrade backup for rollback. The supported runtime remains
 one POSIX process, local filesystem and SQLite; package publication is separate.
 Tenant/access within-check receipts, CLI crash files, exhaustive inventory, release
 identity, real-model sensitivity and later enterprise gates remain open.
+
+### Supplied native storage upgrade acceptance
+
+Two independent read-only reviews accept the supplied run at
+`3f32c6e6dd8a52832401df69bd92f263bfad11e8` for its scoped storage upgrade and
+restart workflow. These are reviews of operator-supplied captures, not an
+independent cloud rerun. The environment records Debian 12, Python 3.11.2,
+SQLite 3.40.1, SQLAlchemy 2.1.6, and Gunicorn 26.2.0. Raw reports, driver sources,
+private infrastructure identifiers, databases, and credentials remain outside Git.
+
+Both normal and optimized native backup commands exit zero with all ten expected
+cases and 50 assertion labels per mode. All 60 real-server assertions reconcile
+with the captured PASS lines and the zero-failure summary. Both Gunicorn
+processes use one worker and exit zero. The driver constructs terminal records,
+no schedules, an empty allowlist, and no scan submissions.
+
+The reconstructed schema-3 fixture contains four reports and ten observation
+rows. Two parsed existing lab pipelines are unassessed; two current repository
+controlled-access producers supply genuine assessed zero and confirmed partial
+risk. All initial scalar caches are 0.0 placeholders. On first start and restart,
+the raw SQL scan/observation caches and results API score/level pairs match the
+expected null, 0.0, and 70/high outcomes. The two score columns are nullable with
+no SQL defaults. Logical JSON exports equal the seeded reports. Archive hashes
+are unchanged from the post-seeding baseline, and restart preserves the complete
+recorded database snapshot. Independent restore reproduces the schema-3 baseline;
+source and backup hashes remain unchanged. Captured database and lock modes are
+0600. The logged security-testing error is the intentional later-stage failure
+that creates the supported confirmed-partial fixture.
+
+Acceptance has these limits:
+
+- This upgrades a newly reconstructed fixture, not the original durable lab
+  database. Existing pipelines are parsed and reserialized before seeding;
+  byte preservation starts after that step. The lab's original durable records
+  provide no supported assessed-zero or positive case. Report provenance and
+  excluded database/response contents remain driver/operator attestations.
+- Inventory checks compare HTTP status and response shape only. SARIF checks
+  compare availability and version only. Neither verifies verdict values.
+  The eight logged summary statuses match the stated fixture expectations, but
+  the driver does not assert them. Per-asset coverage is not asserted. Results
+  score/level comparisons are substantive.
+- The first upgrade does not compare non-cache fields of the two rebuilt tables
+  against their old baseline, or explicitly verify operator-defined indexes.
+  Template, schedule, and occurrence tables are empty. Their equality checks
+  do not establish nonempty-data preservation.
+- Native backup rollback cases inject version-stamp failure for three historical
+  versions, not failures at every rebuild stage. These fixtures do not exercise
+  depth, encoding, or size rejection. The 64-container boundary and other rebuild
+  rollback stages retain their separate local regression evidence.
+- The recorded privacy sweep covers 17 paths at that moment; the final bundle
+  has 25 regular files. Later additions and the completed job log do not have
+  the same complete captured sweep. True-secret absence and original modes are
+  operator attestations. The private bundle contains infrastructure identifiers.
+- The shell wrapper does not propagate every setup, capture, sanitizer, privacy,
+  or cleanup failure, and raw-text/mode observations are informational. Its
+  unqualified fail-closed claim is unsupported. The separate captured command
+  exits and 60 actual comparisons still support this narrow successful run.
+
+No runtime defect was reproduced. These qualifications do not require a broad
+repeat or establish deployment, model sensitivity, complete preservation of every
+field, or every export's verdict semantics. R1.4a proceeds locally with exhaustive
+observation pagination; its eventual operator gate must compare actual inventory
+values and fail on analysis, privacy, and cleanup errors.
 
 ## Exact-revision external retest
 

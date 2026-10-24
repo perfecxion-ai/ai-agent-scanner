@@ -111,9 +111,19 @@ semantics fail before writes. The final local gate passes 3,763 coverage tests,
 installed-wheel smoke. Offline copies of all nine supplied tenant reports keep their exact bytes
 and canonical scores through upgrade and restart. See
 [storage acceptance](VALIDATION.md#nullable-score-storage-local-acceptance).
-Required delivery checks are recorded on the PR. After merge and CI, the next
-external gate is the [native storage and server upgrade retest](storage-retest.md)
-on its exact merged revision; repeating tenant probes is unnecessary.
+PR #72 merged as `3f32c6e` with all eight PR and post-merge checks passing.
+The supplied native storage retest is accepted for the reconstructed fixture's
+upgrade and restart workflow on Python 3.11.2/SQLite 3.40.1. Both ten-case backup
+modes exit zero, and all 60 server assertions match the captured log. SQL caches
+and results retain null, genuine zero, and confirmed 70/partial evidence through
+restart. This is not an upgrade of the original lab database. Inventory/SARIF
+checks prove availability only, and the private harness has preservation,
+privacy-sweep, and failure-propagation limits. See
+[qualified native acceptance](VALIDATION.md#supplied-native-storage-upgrade-acceptance).
+No broad repeat is needed for those qualifications. The next local slice is
+R1.4a: exhaustive observation pagination with canonical risk filters, bounded
+work, and tenant-bound cursors invalidated when their inventory changes. Keep
+distinct-asset identity and authoritative indexed risk caches as separate work.
 Tenant/access within-check receipts, server tenant profiles, CLI crash files,
 exhaustive inventory, and later roadmap slices remain open.
 
