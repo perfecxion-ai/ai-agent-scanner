@@ -1,0 +1,209 @@
+{
+  "producer_revision": "a9b27189296b55a114ccedb4638518d221be8b3c",
+  "source_sha256": {
+    "src/core/access_probe_policy.py": "e3f5c27e72d5d15dfb89b598c12c3f498a0336643ec934e4af26a4c6493dab8f",
+    "src/core/contracts.py": "3bdfa3144d39bcedc155e3df48d4e1bed5f70f6e738399334bc31f3061f0620f",
+    "src/core/pipeline.py": "097a16ccdc6d4a5f1bf04d9643f90ba4ac693205ca5df9ef860f5cbe109fdb56",
+    "src/core/risk_projection.py": "a8572e0c6f31cae76c117a8b83b632a8be6bfb877f2ee967ba2874363d66cb41",
+    "src/core/request_provenance.py": "4616bb47866646ea28d2d5d8d772e9f6f8b3f051afa7a8dee565701f4dad04ad",
+    "src/core/transport.py": "7516a85ff7d1b6644dfd6af1eb1a6c21c59190fbc5f37444c0f3a77bf31ff616",
+    "src/security/access_control_tests.py": "73a059e5176385aea6a3865465129f25d0c5b60d4fbcc0da05199bd968cd03e7",
+    "src/security/security_engine.py": "4030c1c364380f3fde0f186229f74e9e59853c248c853d8536a52618ee148afd",
+    "src/core/access_evidence.py": "2979997acbd6ea2ba1aca8347b2cc1eca304416242c48040a993376612aadc0d"
+  },
+  "archives": {
+    "zero": {
+      "sha256": "c505cd77917592740cb089a550a8df5f159f62621d2a0fa754f3c3bc2442df4a",
+      "original_score": 0.0,
+      "original_level": "minimal",
+      "original_status": "completed",
+      "original_coverage": "sampled",
+      "run_id": "68303c33-9cdf-57f6-b937-0bdceffc7c88",
+      "finding_ids": [],
+      "receipt_ids": [],
+      "checks": [
+        {
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bcbd0c701aae38e7c8222e9da8970553b873646aa3b636437673d5e20cb352c3",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 20,
+          "responses_evaluated": 20
+        },
+        {
+          "rule_id": "weak_credentials",
+          "probe_id": "weak_credentials.sample",
+          "probe_version": "1:a38dbef39eeac7249c569b6a6e390cd7a824b74083c3028b931c1d07a84e64e9",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 7,
+          "responses_evaluated": 7
+        },
+        {
+          "rule_id": "weak_api_key",
+          "probe_id": "weak_api_key.sample",
+          "probe_version": "1:0f20c365345a13f3dc44d59e70dd0e43a447bceabc5eae7cc3d0c4b723046c90",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 32,
+          "responses_evaluated": 32
+        },
+        {
+          "rule_id": "authorization_bypass",
+          "probe_id": "authorization_bypass.sample",
+          "probe_version": "1:a2f5b488eabd27014116e80f87b511c825c7104e2edd497eeddc46b1dbfc2450",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 3,
+          "responses_evaluated": 3
+        }
+      ],
+      "http_requests": 62,
+      "get_requests": 62,
+      "post_requests": 0,
+      "checkpoint_events": 8
+    },
+    "high": {
+      "sha256": "fe381071ae5bce4480436ece282f47d2b37a8b715dfd0b4dd0187544299a2a3c",
+      "original_score": 70.0,
+      "original_level": "high",
+      "original_status": "completed",
+      "original_coverage": "sampled",
+      "run_id": "823fa296-36ac-5f1f-b01d-0c950c1cfeb4",
+      "finding_ids": [
+        "fc041284-8dd3-578c-9ef9-58c7c41c894c"
+      ],
+      "receipt_ids": [],
+      "checks": [
+        {
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bcbd0c701aae38e7c8222e9da8970553b873646aa3b636437673d5e20cb352c3",
+          "status": "completed",
+          "outcome": "confirmed",
+          "requests_attempted": 20,
+          "responses_evaluated": 20
+        }
+      ],
+      "http_requests": 20,
+      "get_requests": 20,
+      "post_requests": 0,
+      "checkpoint_events": 5
+    },
+    "partial": {
+      "sha256": "5aec767d958785d91cfaadd5b99c3caa86711c279774e6d5501ba3a906a22d40",
+      "original_score": 70.0,
+      "original_level": "high",
+      "original_status": "partial",
+      "original_coverage": "partial",
+      "run_id": "c21a4a5e-9819-5446-821b-42a34bb22316",
+      "finding_ids": [
+        "4d2b3130-5640-5af4-9c6c-db1711dc11c1"
+      ],
+      "receipt_ids": [],
+      "checks": [
+        {
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bcbd0c701aae38e7c8222e9da8970553b873646aa3b636437673d5e20cb352c3",
+          "status": "failed",
+          "outcome": "confirmed",
+          "requests_attempted": 20,
+          "responses_evaluated": 3
+        }
+      ],
+      "http_requests": 20,
+      "get_requests": 20,
+      "post_requests": 0,
+      "checkpoint_events": 5
+    },
+    "mixed": {
+      "sha256": "990ef735649b1d25079e268e479b0decb91583acd6c1563eddbc39810e2b5337",
+      "original_score": 90.0,
+      "original_level": "critical",
+      "original_status": "completed",
+      "original_coverage": "sampled",
+      "run_id": "98cc3c78-ae3b-52f2-abe3-f0c798885091",
+      "finding_ids": [
+        "1d077501-0591-54e0-8c9f-08ba3323ef5a",
+        "defe2745-e37a-5b52-8d54-75df39d6db69",
+        "1e406117-5f55-589f-bf97-888231a9e246",
+        "2bdc0c6d-b7d5-5684-9c26-b5be9ee5e5fe",
+        "f36c799a-d557-5532-8b01-75860313e268",
+        "d7e05aff-830a-52e0-813d-103ede250e60"
+      ],
+      "receipt_ids": [
+        "59cb0520-7b07-529b-bd04-db708529b5ac",
+        "56ec89a6-8b97-5a08-841f-862c2bcd4ac9",
+        "9e73e222-5447-572d-aca0-4db40ffdb397",
+        "a96c74a3-408d-50ef-8f0c-f4edfa00db91",
+        "3a6580a0-6b77-5cd7-9ffe-ba95e670c654",
+        "9375624f-d940-552b-837a-d163c78fe737"
+      ],
+      "checks": [
+        {
+          "rule_id": "prompt_injection.system_prompt_extraction",
+          "probe_id": "prompt_injection.system_prompt_extraction.sample",
+          "probe_version": "1:af3ea7067adf74e3f47d77cff86101060e730e55b621328b8f44a6cc73873c10",
+          "status": "completed",
+          "outcome": "confirmed",
+          "requests_attempted": 5,
+          "responses_evaluated": 5
+        },
+        {
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bcbd0c701aae38e7c8222e9da8970553b873646aa3b636437673d5e20cb352c3",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 20,
+          "responses_evaluated": 20
+        },
+        {
+          "rule_id": "weak_credentials",
+          "probe_id": "weak_credentials.sample",
+          "probe_version": "1:a38dbef39eeac7249c569b6a6e390cd7a824b74083c3028b931c1d07a84e64e9",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 7,
+          "responses_evaluated": 7
+        },
+        {
+          "rule_id": "weak_api_key",
+          "probe_id": "weak_api_key.sample",
+          "probe_version": "1:0f20c365345a13f3dc44d59e70dd0e43a447bceabc5eae7cc3d0c4b723046c90",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 32,
+          "responses_evaluated": 32
+        },
+        {
+          "rule_id": "authorization_bypass",
+          "probe_id": "authorization_bypass.sample",
+          "probe_version": "1:a2f5b488eabd27014116e80f87b511c825c7104e2edd497eeddc46b1dbfc2450",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 3,
+          "responses_evaluated": 3
+        },
+        {
+          "rule_id": "tenant_isolation_violation",
+          "probe_id": "tenant_isolation_violation.sample",
+          "probe_version": "1:1a8f8a57f1c1c2a26e22fb782402b5befa30640747699afc1f056acc50d25f10",
+          "status": "completed",
+          "outcome": "confirmed",
+          "requests_attempted": 8,
+          "responses_evaluated": 8
+        }
+      ],
+      "http_requests": 75,
+      "get_requests": 62,
+      "post_requests": 13,
+      "checkpoint_events": 21
+    }
+  },
+  "capture_kind": "Owned loopback HTTP through original family wrappers, engine, pipeline and scorer",
+  "writer_evidence_version": "2.0",
+  "writer_checkpoint_version": "3.0"
+}
