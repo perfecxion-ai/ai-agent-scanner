@@ -71,9 +71,9 @@ without prerequisites remain skipped. An active assessment where every check
 was skipped is partial, not a clean completed scan. Completion is execution
 accounting, not a claim that every rule passed or that the asset is safe.
 
-Modern results require a confirmed finding matched to its confirmed check or a
-supported prompt-disclosure receipt, or a completed protected-access sampled pass,
-before risk assessment. An execution
+Modern results require a supported confirmed finding matched to its finalized
+check or prompt, tenant or protected-access observation receipt, or a completed
+protected-access sampled pass, before risk assessment. An execution
 containing only heuristic/inconclusive responses and skipped oracles has unknown
 risk and a null score; it must not infer minimal risk from missing evidence.
 `risk_assessment_status` is `not_assessed` or `not_run` when none qualifies,
@@ -88,12 +88,15 @@ Missing legacy check evidence cannot prove finding resolution.
 Current protected-access verdicts additionally require recognized positive-control
 probe definitions bound to the original provider/model context. Only the four
 supported protected-access groups can establish sampled zero or verified absence.
-Unknown/custom definitions, missing context, incomplete sample counts, and older
-control semantics cannot establish these claims. An explicitly recorded absent
-model is distinct from missing context. Current confirmations require matching
-control provenance, response status, and covered resource in addition to the
-matching check. Failed checks may retain genuine findings despite cleanup errors;
-their recorded interaction counters are not guaranteed wire-request totals.
+Unknown/custom definitions, missing binding metadata, incomplete sample counts,
+and older control semantics cannot establish these claims. Explicit model/context
+None is distinct from missing binding fields and remains valid for supported
+scoring; verified resolution still needs a nonempty stable public context.
+Frozen finalized-v3 confirmations require matching control provenance, response
+status, resource and confirmed check. Their cleanup-inflated legacy counters are
+not wire-request totals. Modern confirmations instead require the receipt below,
+with actual reserved/evaluated counts. Both can retain genuine findings despite
+later failures, without inventing successful coverage.
 New findings require integer `protected_control_version: 3` so the fixed control
 description remains verifiable when a known candidate credential redacts part of
 that description. The reference requires a recognized probe and compatible literal
@@ -212,11 +215,12 @@ claiming a complete result set. Uninterpretable sources fail the operation with
 ## Incremental report envelope
 
 Normal CLI/server security executions add a `checkpoint` object with
-`version: "3.0"`, a positive `sequence`, and
+`version: "4.0"`, a positive `sequence`, and
 `coverage: "confirmed_observations_and_finalized_checks"`. Older finalized-only
 and discovery-only checkpoints retain version `1.0` and
 `coverage: "finalized_checks_only"`. Checkpoint `2.0` continues to mean the older
-prompt-only ledger `1.0`; checkpoint `3.0` requires mixed ledger `2.0`. Writers
+prompt-only ledger `1.0`; checkpoint `3.0` requires mixed ledger `2.0`; checkpoint
+`4.0` requires mixed ledger `3.0`. Writers
 select the supported ledger before their first checkpoint and cannot switch it
 within that execution. Intermediate reports
 are partial; the final report keeps the last acknowledged sequence and its actual
@@ -240,8 +244,9 @@ rewritten to introduce this envelope. See [storage and recovery limits](jobs.md#
 
 ### Prompt observation receipts
 
-New engine security reports advertise `check_evidence_schema_version: "2.0"`.
-Older prompt-only reports keep ledger `1.0` without rewriting their archives.
+New engine security reports advertise `check_evidence_schema_version: "3.0"`.
+Older prompt-only and prompt/tenant reports keep ledger `1.0` and `2.0` without
+rewriting their archives. Their source rules and 35/41 receipt bounds stay frozen.
 Each asset and its matching security result carry an independent `check_evidence`
 array and, once assigned, an immutable `check_evidence_run_id`. Pending empty
 inventory may omit that run ID. A receipt does not mark a check completed, failed,
@@ -306,13 +311,14 @@ never exempts protected values; redacted or unsupported provenance cannot establ
 current numeric risk. Other independently eligible assets remain assessed. JSON
 retains the ledger on each asset; SARIF stores per-asset ledgers in run properties
 and links each receipt's `finding_id` to a result's `vulnerability_id`.
-Protected-access observations inside unfinished checks and CLI process-crash
-files still require separate contracts.
+Protected-access observations use the separate contract below. CLI process-crash
+files remain unimplemented.
 
 ### Tenant observation receipts
 
 Mixed ledger `2.0` supports at most 35 prompt receipts and six tenant receipts
-per asset. Every receipt is validated before source-specific filtering. Unknown
+per asset. Current ledger `3.0` preserves these source meanings and additionally
+supports protected-access receipts. Every receipt is validated before source-specific filtering. Unknown
 sources, malformed counters, duplicate IDs and missing finding links invalidate
 the asset's current assessment rather than exposing a companion zero score.
 
@@ -338,6 +344,59 @@ Later cleanup or request failures cannot erase an acknowledged receipt prefix.
 Persistence failure and cancellation stop further probing. Private tenant inputs
 remain supported only through the explicit CLI/Python configuration workflow;
 the server API still rejects them.
+
+### Protected-access observation receipts
+
+Ledger `3.0` adds source `controlled_access_response`, version `1.0`, for the
+four existing protected GET families. Its combined per-asset limit is 77:
+35 prompt, six tenant and at most 36 access receipts. Access limits are eighteen
+authentication-bypass, five weak-credential, five weak-key and eight declared
+admin-path occurrences. These are bounds on observed occurrences, not additional
+requests or detection-effectiveness measurements.
+
+A private execution plan derives the selected resource and headers from pinned
+controls and the frozen samples. An issued-credential response must disclose the
+protected marker, and a separate fresh invalid-credential response must deny it
+without disclosure. Every control and probe uses a live task-bound response,
+complete actual request capture and exactly-once evaluated body. Missing, stale,
+reused, wrong-task or mismatched capabilities cannot mint evidence.
+
+Each receipt links one finding UUID to its run, asset, check/probe/context,
+per-check sequence, actual request ordinal and attempted/evaluated counts. It
+carries `control_proof` with the two actual control ordinals and statuses. Each
+admin path has fresh controls; earlier path failures can change later ordinals.
+Probe selection uses numeric `sample_index`, `header_index` for weak keys, or
+`protected_path_index` for admin paths. Session-entry failures reserve no request;
+cleanup does not invent attempts or evaluated responses.
+
+The public `access_target` binds the original base endpoint, provider, model and
+context. The numeric path index identifies a declared catalog resource, whose
+actual joined URL is independently verified privately. This keeps resource
+binding verifiable when a default credential such as `admin` is redacted from
+displayed paths. No secret is exempted from redaction. Raw bodies, transmitted
+credentials, protected markers, private plans and response tokens are omitted.
+
+Findings publish before response/session cleanup, pacing or the next request.
+A later failure cannot erase the acknowledged receipt/finding prefix. The check
+remains unfinished until a genuine terminal record exists, and confirmed risk
+can retain partial coverage after scoring. A sink failure or cancellation stops
+further probes. CLI timeout/cancellation exports the retained report with a
+nonzero exit; server recovery preserves committed evidence without replay.
+
+Modern probe hashes add `protected-access-response-observations-v1` around the
+unchanged v3 control definition. Their confirmations require valid receipts,
+including after a check finishes or if an envelope is stripped. Their sampled
+passes require ledger 3 and the complete successful sample. Frozen finalized
+v3 hashes remain supported under their existing controls and counters, and
+obsolete v2 claims remain unsupported. No archive, SQL schema or historical
+cache reclassification is needed for this additive contract; schema 6 remains.
+
+Malformed or unsupported public evidence can remain readable with unknown risk.
+It cannot invalidate an acknowledged eligible prefix or expose a companion zero.
+The complete ledger and target bindings are validated before writes or scoring.
+Receipts attest the scanner's observations, not independent target seeding or
+cryptographic report authenticity. Arbitrary custom sample catalogs, server
+private tenant inputs and CLI process-crash files remain separate work.
 
 Report comparison resolves an absent finding only when the same unambiguous,
 unredacted endpoint has explicit completed, passed evidence for every earlier

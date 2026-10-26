@@ -62,12 +62,16 @@ controls succeed; successful responses without the marker remain inconclusive.
 An endpoint that denies every request is not evidence of effective protection.
 Earlier confirmations survive an ordinary later request/control failure.
 Cancellation marks an unfinished check failed, even after every response was
-evaluated. [Finalized-check checkpoints](jobs.md#finalized-check-checkpoints)
-retain earlier checks through later termination. Findings still inside the
-unfinished check are not covered by that persistence contract.
+evaluated. [Incremental checkpoints](jobs.md#finalized-check-checkpoints) retain
+supported access observations before the check returns, including through later
+cleanup failure, timeout, cancellation and acknowledged server-process recovery.
+An unfinished check stays incomplete; a retained finding cannot invent a pass.
+See the [access receipt contract](result-contracts.md#protected-access-observation-receipts).
+Private control admission through the server API is unchanged by this persistence
+work; use the explicit supported CLI/Python configuration above.
 
 V3 access markers must use exactly `[A-Za-z0-9_.~-]{16,128}`. No trimming,
-decoding, case conversion, or other normalization is used for response matching.
+decoding, case conversion, or other normalization is used for positive response matching.
 Previously accepted arbitrary strings outside this grammar are now refused
 before requests. The restriction excludes header and JSON fragments that could
 be mistaken for private data after request reflection.
@@ -103,6 +107,10 @@ Custom protected-access sample catalogs are unverified until supported by this
 contract; their archived observations are not deleted. See
 [historical evidence handling](result-contracts.md) for mixed-evidence limits.
 Schema 6 reconciles obsolete scalar caches without rewriting those reports.
+Normal executions add a distinct receipt-required probe identity under ledger
+`3.0`; the successful and denied GET controls still use version 3. Historical
+finalized v3 reports keep their supported meaning and original bytes. Changing
+or stripping the new ledger cannot turn its findings into old finalized evidence.
 Keep the public `evidence_context_id` stable only while the tested resource,
 authorization policy, and protected fixture remain the same.
 
