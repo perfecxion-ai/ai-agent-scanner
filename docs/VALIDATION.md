@@ -958,6 +958,111 @@ provenance/receipts, private server tenant admission and CLI crash files remain
 separate work. No supplied driver was executed during review, and no operator
 database, registry or cloud target was accessed.
 
+### Protected-access v3 and cache-policy local acceptance
+
+The provenance prerequisite below now has a bounded correction across the four
+existing protected GET families. Public samples, request ordering and delays are
+unchanged. Private issued keys, markers and environment references are pinned
+before the first checkpoint. Model configuration and subsequent controls reuse
+the pinned key even if the environment changes. Unknown contexts cannot silently
+rebind a scan.
+
+Every control and probe requires a real live `BoundedResponse` with a complete
+captured GET: exact resource and Host, empty body, exact selected headers and
+bounded normal framing. Missing, stale or incomplete captures, cookies, hidden
+credentials and transmitted protected markers invalidate later evidence. Known
+marker transmission in an earlier scan request taints the affected asset. No
+request trace/counter algorithm or public ledger/checkpoint version is changed.
+
+Denied controls and decisive denied probes inspect bounded body/header material
+conservatively. Marker case variants and decoded JSON cannot masquerade as
+absence. Invalid, duplicate-key, nonfinite or over-bound JSON, invalid encodings,
+binary/NUL-bearing denials and embedded BOMs remain inconclusive. Valid UTF-8 BOM
+JSON without disclosure is supported. Positive marker matching remains exact;
+no semantic judge or arbitrary transformation exclusion is claimed.
+
+`authorized-and-denied-resource-controls-v3` changes all four recognized probe
+versions; confirmations additionally require builtin integer control version 3.
+Missing/old/Boolean/floating tags cannot establish current confirmation. Frozen
+v2 zero, high and partial reports stay byte-identical but project current unknown
+and cannot establish resolution, including comparisons between two old reports.
+Independent supported prompt/tenant evidence beside obsolete access passes
+retains its original eligible 90/critical. Custom scalar-only mocks cannot attest
+v3 wire provenance; projection unit fixtures explicitly use synthetic complete
+captures while live acceptance uses actual owned HTTP/HTTPS.
+
+Schema 6 is an explicit transactional scalar-policy upgrade. Recognized schema-5
+tables/indexes/triggers and original archive/metadata bytes, IDs, queue/schedule
+state and unrelated fields stay exact. Only changed risk caches/levels are
+updated, and the version stamp commits last. Existing observation triggers
+naturally invalidate affected owners; no trigger suppression or token restoration
+is used. Unchanged owners and recognized schema-6 restart remain unchanged.
+Recognized older layouts follow their existing nullable/generation upgrade paths.
+Bounded UTF-8/depth/size interpretation and genuine alias rules are reused.
+Fault injection at scan-cache, snapshot-cache and stamp stages rolls everything
+back. This is not an arbitrary database repair or a deployment migration.
+
+Four original v2 archives were captured through actual owned HTTP and the pinned
+`6af7fa2` producer before source changes. Their independently fixed archive,
+finding, receipt, probe and eight source-file hashes remain exact. Current v3
+HTTP produces genuine zero, high/critical and confirmed partial results across
+the existing four groups. Three fresh default CLI processes also reproduce and
+close an INFO-log privacy gap: a protected marker, key or environment reference
+used as an asset name was redacted in reports but leaked through three phase
+messages. Static phase logs now retain those messages without private names;
+no logging-level suppression is used and no database/registry is accessed.
+
+The broad first run excluding the old current-policy test file passes 4,165 with
+five failures: an earlier preflight/body fixture, two old test assumptions and
+the two inventory runs still expecting schema 5. The complete corrected candidate
+then passes 4,694 tests with source/server/CLI coverage, warnings as errors and
+94 percent coverage on Python 3.10.20. A subsequent 838-case focused gate covers
+the final three static log changes and the added 24 HTTPS CLI cases. Required CI
+runs the final committed tree.
+
+Author acceptance passes 214 provenance cases on Python 3.10 and 3.13; adding the
+three fresh-process log cases gives 217. Independent review passes 74 live-wire,
+archive and migration cases on both interpreters. All 464 current/legacy policy
+cases pass on both. The 24 trusted HTTPS CLI cases pass on both with coverage and
+warnings as errors: JSON/SARIF, certificate/hostname verification, 0/70/90 risk,
+confirmed partial retention after later failure, genuine nonzero exits, stable
+producer identity, owner-only files and raw/encoded privacy checks. They assert
+that access observation receipts are absent; unfinished-check retention is not
+implemented by this correction.
+
+Cleanup accounting remains conservative rather than a wire count. The shared
+response/session wrapper preserves cancellation through secondary errors and
+combines formerly duplicated cleanup failure handling. One combined-error fixture
+therefore records 37 attempted interactions instead of 54, while its actual 20
+wire requests, 20 evaluated responses and one confirmation are unchanged. Current
+and frozen legacy bounds are tested; no synthetic failures restore an old count.
+
+The cache/nullable/backup gate passes 141 focused cases on Python 3.10 and 146 on
+Python 3.13.15/SQLAlchemy 2.1.6. Both normal and optimized backup commands accept
+all thirteen cases with genuine current HTTP results and frozen old archives.
+Inventory format `inventory-acceptance-v2` first verifies schema-4 to 6 canonical
+cache reconciliation for 12 scans/10,000 observations, then explicitly restores
+its own original stale caches before traversal. Exact archives/non-cache rows,
+known DDL, filters/cursors, restart staleness and cleanup are checked. All 40
+inventory cases pass on both versions, including real normal/optimized Gunicorn;
+independent review passes ten upgrade/restoration fault cases.
+
+Final combined independent review passes 587 cases on Python 3.13.15 with
+coverage and warnings as errors: policy, live-wire, HTTPS CLI, log privacy and
+cache upgrade. Ruff and Bandit pass at the configured security threshold. Both
+distribution formats build and pass metadata checks; an isolated installed-wheel
+smoke verifies dependency consistency, CLI commands and exact build identity.
+All 71 CLI wheel source files match the checkout bytes. Neither distribution
+contains `AGENTS.md` or SQLite database files. Nothing was published.
+
+These are local synthetic correctness gates, not model sensitivity, a deployed
+operator upgrade, power-loss durability or enterprise readiness. No supplied
+private driver, cloud target, operator database/registry, publication or deployment
+was used. The next external gate is the scoped
+[native access/cache retest](access-provenance-retest.md). Protected-access
+within-check receipts, server private tenant inputs and CLI crash files remain
+separate work. Cross-platform delivery checks are recorded on the implementation PR.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose

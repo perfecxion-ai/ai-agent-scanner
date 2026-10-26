@@ -6,15 +6,22 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from yarl import URL
 
 from src.core import access_probe_policy as policy
+from src.core.access_evidence import guard_access_request, observe_access_request
 from src.core.contracts import collect_checks
 from src.core.pipeline import run_pipeline
-from src.core.transport import ScanBudget, scan_transport
+from src.core.request_provenance import RequestCapture
+from src.core.risk_projection import project_report_risk
+from src.core.transport import BoundedResponse, ScanBudget, scan_transport
+from src.reporting.workflows import compare_reports
 from src.security.access_control_tests import AccessControlTester
+from tests.legacy_access_fixtures import legacy_access_archive, legacy_access_report
 
 
 PROVIDER = 'openai-compatible'
@@ -27,21 +34,21 @@ METHODS = {
     'authorization_bypass': '_test_authorization_bypass',
 }
 FROZEN_VERSIONS = {
-    'authentication_bypass': '1:3f0447b8efe8505911d5cae3c705432cb5073f9bb5d2ccf8ad69d78e6c94994b',
-    'weak_credentials': '1:2949e75b8ac1689d274abe960c5ea0a6dbea3a319844a617f5675218412a8a3e',
-    'weak_api_key': '1:1d40302a992dec4913f0b3a178ea7fa439dc2acc700bebbebf374fdd2a00ded3',
-    'authorization_bypass': '1:4aaad5bc54ac79328891d87fa42c28b1468005c52f72afe0e42cfa2b5dac8cfc',
+    'authentication_bypass': '1:62464a1a864936d9387e4f73e3b47a573bc860934a6d303110e008fb6a9b2253',
+    'weak_credentials': '1:374bb5b81ccd4ea88bc741c1cf40d2741567f3466fd6f164aff3b6effea17b76',
+    'weak_api_key': '1:3a30ef5fa6b4416d43e80a853ca9d47ee04816fd974c1fdf79b2e15c11cde206',
+    'authorization_bypass': '1:3353e3f94195226099e1024ce0b1a2fb4fb336f77e8d44d5ee8c04eb57a00b78',
 }
 FROZEN_PATHS = ('/admin', '/admin/', '/administrator', '/api/admin', '/api/v1/admin',
                 '/admin/users', '/admin/config', '/system')
 FROZEN_DEFINITIONS = {
-    'authentication_bypass': ['18-header-variations', 'authorized-and-denied-resource-controls-v2'],
+    'authentication_bypass': ['18-header-variations', 'authorized-and-denied-resource-controls-v3'],
     'weak_credentials': [[('admin', 'admin'), ('admin', 'password'), ('admin', '123456'),
-                          ('admin', ''), ('test', 'test')], 'authorized-and-denied-resource-controls-v2'],
+                          ('admin', ''), ('test', 'test')], 'authorized-and-denied-resource-controls-v3'],
     'weak_api_key': [['test-key', 'demo-key', 'dev-key', 'api-key', '123456789'],
-                     'six-header-variations-v1', 'authorized-and-denied-resource-controls-v2'],
+                     'six-header-variations-v1', 'authorized-and-denied-resource-controls-v3'],
     'authorization_bypass': ['admin-path-sample-v1', list(FROZEN_PATHS),
-                             'authorized-and-denied-resource-controls-v2'],
+                             'authorized-and-denied-resource-controls-v3'],
 }
 
 
@@ -62,7 +69,7 @@ def records(rule, *, provider=PROVIDER, model=MODEL, paths=('/admin',), outcome=
              'reason': None, 'evidence_context_id': CONTEXT}
     finding = {key: check[key] for key in ('rule_id', 'probe_id', 'probe_version', 'evidence_context_id')}
     finding.update(vulnerability_type=rule, evidence_status='confirmed', status_code=200,
-                   control_status=policy.ACCESS_CONTROL_STATUS)
+                   control_status=policy.ACCESS_CONTROL_STATUS, protected_control_version=3)
     if rule == 'authorization_bypass':
         finding['path'] = paths[0]
     return check, finding
@@ -97,7 +104,7 @@ def test_every_ordered_admin_subset_has_exact_identity_and_pass_count(mask):
 async def test_real_decorators_preserve_all_current_hashes_without_requests(monkeypatch):
     monkeypatch.delenv('ACCESS_POLICY_UNSET_KEY', raising=False)
     tester = AccessControlTester()
-    agent = {'provider': PROVIDER, 'model': MODEL, 'authentication_required': True,
+    agent = {'id': 'fixture', 'provider': PROVIDER, 'model': MODEL, 'authentication_required': True,
              'protected_response_marker': 'opaque-fixture-protected-value',
              'api_key_env': 'ACCESS_POLICY_UNSET_KEY'}
     cases = [(rule, ('/admin',)) for rule in METHODS if rule != 'authorization_bypass']
@@ -223,12 +230,13 @@ def test_failed_confirmations_obey_recorded_accounting_and_evaluation_bounds(rul
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(('rule', 'wire_requests', 'recorded_attempts', 'findings_count'), [
-    ('authentication_bypass', 20, 54, 1), ('weak_credentials', 7, 12, 5),
+@pytest.mark.parametrize(('rule', 'transport_requests', 'recorded_attempts', 'findings_count'), [
+    # Nested response/session cleanup errors now share one producer catch.
+    ('authentication_bypass', 20, 37, 1), ('weak_credentials', 7, 12, 5),
     ('weak_api_key', 32, 37, 5), ('authorization_bypass', 9, 12, 3),
 ])
-async def test_actual_cleanup_failures_preserve_confirmations_with_bounded_accounting(
-        monkeypatch, rule, wire_requests, recorded_attempts, findings_count):
+async def test_complete_unit_capture_cleanup_failures_preserve_confirmations_with_bounded_accounting(
+        monkeypatch, rule, transport_requests, recorded_attempts, findings_count):
     marker = 'opaque-resource-proof-8a917c21'
     issued = 'issued-fixture-credential-4f780d92'
     monkeypatch.setenv('ACCESS_POLICY_ISSUED_KEY', issued)
@@ -238,29 +246,43 @@ async def test_actual_cleanup_failures_preserve_confirmations_with_bounded_accou
 
     class Response:
         def __init__(self, status, body):
-            self.status, self.body = status, body
+            self.status, self.raw = status, body.encode()
+            self.headers = {}
+            self.content = self
 
-        async def text(self):
-            return self.body
+        async def iter_chunked(self, _size):
+            yield self.raw
 
     class Request:
         def __init__(self, session, url, headers):
             self.session, self.url, self.headers = session, url, headers
 
         async def __aenter__(self):
+            guard_access_request('GET', self.url, {'headers': self.headers}, {})
             budget.reserve(self.url)
             credential = self.headers.get('Authorization', '')
             if credential == 'Bearer ' + issued:
-                return Response(200, marker)
-            if credential.startswith('Bearer scanner-invalid-'):
-                return Response(403, 'Denied')
-            state['probes'] += 1
-            index = state['probes']
-            self.session.cleanup_error = (index > 1 if rule == 'authentication_bypass' else
-                                          index % 6 == 0 if rule == 'weak_api_key' else True)
-            return Response(200, 'Public resource' if rule == 'weak_api_key' and index % 6 else marker)
+                response = Response(200, marker)
+            elif credential.startswith('Bearer scanner-invalid-'):
+                response = Response(403, 'Denied')
+            else:
+                state['probes'] += 1
+                index = state['probes']
+                self.session.cleanup_error = (index > 1 if rule == 'authentication_bypass' else
+                                              index % 6 == 0 if rule == 'weak_api_key' else True)
+                response = Response(200, 'Public resource' if rule == 'weak_api_key' and index % 6 else marker)
+            url = str(URL(self.url))
+            headers = {'Host': URL(url).raw_authority, **self.headers}
+            response.request_info = SimpleNamespace(method='GET', url=url, real_url=url, headers=headers)
+            capture = RequestCapture()
+            capture.sent_headers('GET', url, headers)
+            evidence = capture.seal(response)
+            observe_access_request(evidence)
+            self.response = BoundedResponse(response, budget, request_evidence=evidence)
+            return self.response
 
         async def __aexit__(self, *args):
+            self.response._request_active = False
             if self.session.cleanup_error:
                 raise OSError('Synthetic response cleanup failure')
 
@@ -287,12 +309,12 @@ async def test_actual_cleanup_failures_preserve_confirmations_with_bounded_accou
              'evidence_context_id': CONTEXT}
     with scan_transport(budget), collect_checks() as checks:
         findings = await getattr(AccessControlTester(), METHODS[rule])(agent)
-    assert budget.requests == wire_requests
+    assert budget.requests == transport_requests
     assert checks[0]['requests_attempted'] == recorded_attempts
-    assert checks[0]['responses_evaluated'] == wire_requests
+    assert checks[0]['responses_evaluated'] == transport_requests
     assert checks[0]['status'] == 'failed' and checks[0]['outcome'] == 'confirmed'
     assert len(findings) == findings_count
-    assert all(finding['protected_control_version'] == 2 for finding in findings)
+    assert all(finding['protected_control_version'] == 3 for finding in findings)
     assert all(policy.protected_access_confirmation(checks[0], finding, provider=PROVIDER, model=MODEL)
                for finding in findings)
     assert not policy.protected_access_pass(checks[0], provider=PROVIDER, model=MODEL)
@@ -358,14 +380,13 @@ def test_bracketed_model_with_original_public_context_remains_eligible():
 ])
 def test_numeric_control_provenance_supports_bounded_literal_redaction(rule, status):
     check, finding = records(rule)
-    finding.update(control_status=status, protected_control_version=2)
+    finding.update(control_status=status, protected_control_version=3)
     assert policy.protected_access_confirmation(check, finding, provider=PROVIDER, model=MODEL)
     del finding['protected_control_version']
-    assert policy.protected_access_confirmation(check, finding, provider=PROVIDER, model=MODEL) == (
-        status == policy.ACCESS_CONTROL_STATUS)
+    assert not policy.protected_access_confirmation(check, finding, provider=PROVIDER, model=MODEL)
 
 
-@pytest.mark.parametrize('version', [True, False, None, 0, 1, 3, '2', 2.0, [], {}])
+@pytest.mark.parametrize('version', [True, False, None, 0, 1, 2, 4, '3', 3.0, [], {}])
 def test_present_control_version_must_be_exact_supported_integer(version):
     check, finding = records('authentication_bypass')
     finding['protected_control_version'] = version
@@ -379,7 +400,7 @@ def test_present_control_version_must_be_exact_supported_integer(version):
 ])
 def test_numeric_control_version_cannot_repair_conflicting_or_missing_text(status):
     check, finding = records('authentication_bypass')
-    finding.update(protected_control_version=2, control_status=status)
+    finding.update(protected_control_version=3, control_status=status)
     assert not policy.protected_access_confirmation(check, finding, provider=PROVIDER, model=MODEL)
     del finding['control_status']
     assert not policy.protected_access_confirmation(check, finding, provider=PROVIDER, model=MODEL)
@@ -431,6 +452,38 @@ def test_old_definition_and_custom_sample_are_not_current(rule):
     assert not policy.protected_access_pass(dict(check, outcome='passed'), provider=PROVIDER, model=MODEL)
     check['probe_version'] = frozen_version(rule, definition=['custom-sample', policy.ACCESS_CONTROL_VERSION])
     assert policy.protected_access_probe(check, provider=PROVIDER, model=MODEL) is None
+
+
+@pytest.mark.parametrize('name', ['zero', 'high', 'partial', 'mixed'])
+def test_genuine_frozen_v2_access_evidence_stays_archived_without_current_access_eligibility(name):
+    archived = legacy_access_archive(name)
+    report = legacy_access_report(name)
+    before = json.dumps(report, sort_keys=True)
+    for asset in report['agents']:
+        checks = [value for value in asset['checks'] if value['rule_id'] in METHODS]
+        assert checks
+        for check in checks:
+            context = {'provider': asset['provider'], 'model': asset['model']}
+            assert policy.protected_access_probe(check, **context) is None
+            assert not policy.protected_access_pass(check, **context)
+            for finding in asset['vulnerabilities']:
+                if finding.get('rule_id') == check['rule_id']:
+                    assert finding['protected_control_version'] == 2
+                    assert not policy.protected_access_confirmation(check, finding, **context)
+    summary, assets = project_report_risk(report)
+    expected = 90.0 if name == 'mixed' else None
+    assert summary['overall_risk_score'] == expected
+    assert all(asset['risk_score'] == expected for asset in assets.values())
+    assert json.dumps(report, sort_keys=True) == before
+    assert legacy_access_archive(name) == archived
+
+
+def test_old_v2_quiet_report_cannot_resolve_an_old_v2_confirmed_finding():
+    high, quiet = legacy_access_report('high'), legacy_access_report('zero')
+    result = compare_reports(high, quiet)
+    assert result['resolved'] == []
+    assert len(result['resolution_unverified']) == 1
+    assert result['resolution_unverified'][0]['finding']['id'] == high['agents'][0]['vulnerabilities'][0]['id']
 
 
 def test_empty_reordered_or_unknown_admin_subsets_are_not_current():

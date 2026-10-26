@@ -7,6 +7,7 @@ import pytest
 from aiohttp import web
 
 from src.core.transport import ScanBudget, scan_transport
+from src.core.access_evidence import access_evidence_context
 from src.security.access_control_tests import AccessControlTester
 from src.security.security_engine import SecurityTestEngine
 
@@ -58,10 +59,10 @@ async def test_rejected_model_calls_cannot_report_completed_low_risk(target, sta
 
 @pytest.mark.asyncio
 async def test_denied_authentication_control_is_not_failed_model_coverage(target):
-    agent = {'endpoint': f'{target}/401', 'authentication_required': True,
+    agent = {'id': 'fixture', 'endpoint': f'{target}/401', 'authentication_required': True,
              'protected_response_marker': 'private-fixture-marker', 'api_key_env': 'FIXTURE_ISSUED_KEY'}
     budget = ScanBudget(allowed_networks=('127.0.0.1/32',), allow_loopback=True)
-    with scan_transport(budget):
+    with access_evidence_context([agent]), scan_transport(budget):
         assert await AccessControlTester()._has_access_controls(
             agent, agent['endpoint'], agent['protected_response_marker'], [])
     assert budget.failures == 0

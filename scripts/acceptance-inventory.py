@@ -34,7 +34,8 @@ from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVATIONS = 10000
-FORMAT_VERSION = 'inventory-acceptance-v1'
+FORMAT_VERSION = 'inventory-acceptance-v2'
+TARGET_SCHEMA_VERSION = 6
 ORGANIZATIONS = ('inventory-a', 'inventory-b', 'inventory-c')
 CATEGORIES = ('high', 'zero', 'unknown', 'historical')
 RISK_FIELDS = ('risk_score', 'risk_level', 'risk_coverage_status', 'risk_scoring_policy',
@@ -44,13 +45,13 @@ OPERATOR_INDEX = ('CREATE INDEX operator_inventory_fixture ON discovered_agent '
 REQUIRED_ASSERTIONS = (
     'private_environment_and_owned_schema4_fixture',
     'genuine_controlled_access_high_zero_and_unassessed_sources',
-    'native_schema4_to5_generation_indexes_and_triggers',
+    'native_schema4_to6_policy_reconciliation_generation_indexes_and_triggers',
     'complete_ordered_inventory_and_canonical_filters',
     'signed_cursor_tenant_tampering_and_invalid_limits',
     'committed_source_writes_invalidate_cursors',
     'rollback_and_other_tenant_writes_preserve_cursors',
-    'unchanged_archives_rows_and_operator_index',
-    'restart_preserves_full_traversal_and_cursor_generation',
+    'owned_stale_caches_restored_with_original_archives_rows_and_operator_index',
+    'restart_preserves_stale_caches_full_traversal_and_cursor_generation',
     'no_active_scans_schedules_or_admissions',
     'real_server_exits_and_process_groups_reaped',
     'required_secret_and_log_privacy_checks',
@@ -116,6 +117,75 @@ def archive(directory):
             require(re.fullmatch(r'[a-z_]+', name) is not None, 'unexpected_fixture_table')
             result[name] = sorted(database.execute('SELECT * FROM "' + name + '"').fetchall(), key=repr)  # nosec B608
         return result
+
+
+def definitions(directory):
+    with closing(connection(directory)) as database:
+        return set(database.execute('SELECT type,name,tbl_name,sql FROM sqlite_master').fetchall())
+
+
+def without_caches(directory, rows):
+    result = dict(rows)
+    with closing(connection(directory)) as database:
+        for name, omitted in [('scan_session', {'overall_risk_score'}),
+                              ('discovered_agent', {'risk_score', 'risk_level'})]:
+            columns = [row[1] for row in database.execute('PRAGMA table_info("' + name + '")')]
+            result[name] = [tuple(value for column, value in zip(columns, row, strict=True)
+                                  if column not in omitted) for row in rows[name]]
+    return result
+
+
+def restore_stale_caches(directory, original):
+    """Restore only the original deliberate cache contradictions in this fixture."""
+    with closing(connection(directory, write=True)) as database, database:
+        scans = [row[1] for row in database.execute('PRAGMA table_info(scan_session)')]
+        observations = [row[1] for row in database.execute('PRAGMA table_info(discovered_agent)')]
+        database.executemany('UPDATE scan_session SET overall_risk_score=? WHERE id=?', [
+            (row[scans.index('overall_risk_score')], row[scans.index('id')]) for row in original['scan_session']])
+        database.executemany('UPDATE discovered_agent SET risk_score=?,risk_level=? WHERE id=?', [
+            (row[observations.index('risk_score')], row[observations.index('risk_level')], row[observations.index('id')])
+            for row in original['discovered_agent']])
+
+
+def verify_upgrade_and_restore(directory, original, original_definitions, expected):
+    """Prove policy reconciliation before restoring stale caches for API traversal."""
+    from src.core.inventory_generation import INDEX_DEFINITIONS, TRIGGER_DEFINITIONS
+    upgraded = archive(directory)
+    require(without_caches(directory, upgraded) == without_caches(directory, original),
+            'upgrade_changed_noncache_rows_or_archived_json')
+    current_definitions = definitions(directory)
+    require(original_definitions <= current_definitions, 'upgrade_changed_original_definitions')
+    allowed = set(INDEX_DEFINITIONS) | set(TRIGGER_DEFINITIONS) | {
+        'inventory_generation', 'sqlite_autoindex_inventory_generation_1'}
+    require({row[1] for row in current_definitions - original_definitions} == allowed,
+            'upgrade_added_unexpected_definitions')
+    expected_scans = {organization + '-' + category: descriptor(category)['risk_score']
+                      for organization in ORGANIZATIONS for category in CATEGORIES}
+    expected_observations = {row['id']: (row['risk_score'], row['risk_level'])
+                             for rows in expected.values() for row in rows}
+    require(len(expected_observations) == OBSERVATIONS, 'upgrade_expected_observation_count_changed')
+    with closing(connection(directory)) as database:
+        scans = dict(database.execute('SELECT id,overall_risk_score FROM scan_session'))
+        observations = {row[0]: row[1:] for row in database.execute('SELECT id,risk_score,risk_level FROM discovered_agent')}
+    require(scans == expected_scans, 'upgrade_scan_cache_mismatch')
+    require(observations == expected_observations, 'upgrade_snapshot_cache_mismatch')
+    # The seed deliberately uses 99/critical for every cache, so every row must
+    # change during reconciliation before that contradiction is reintroduced.
+    with closing(connection(directory)) as database:
+        scan_columns = [row[1] for row in database.execute('PRAGMA table_info(scan_session)')]
+        asset_columns = [row[1] for row in database.execute('PRAGMA table_info(discovered_agent)')]
+    require(all(row[scan_columns.index('overall_risk_score')] == 99 for row in original['scan_session'])
+            and all((row[asset_columns.index('risk_score')], row[asset_columns.index('risk_level')]) == (99, 'critical')
+                    for row in original['discovered_agent']), 'original_stale_caches_missing')
+    generations = check_schema(directory)
+    restore_stale_caches(directory, original)
+    require(archive(directory) == original, 'owned_stale_cache_restore_changed_original_rows')
+    restored_generations = check_schema(directory)
+    require(all(restored_generations[owner] != token for owner, token in generations.items()),
+            'stale_cache_restore_did_not_invalidate_owned_generations')
+    return {'scan_caches_reconciled': len(scans), 'observation_caches_reconciled': len(observations),
+            'original_stale_scan_caches_restored': len(original['scan_session']),
+            'original_stale_observation_caches_restored': len(original['discovered_agent'])}
 
 
 def descriptor(category):
@@ -350,8 +420,14 @@ class Server:
 
 def check_schema(directory):
     from src.core.inventory_generation import INDEX_DEFINITIONS, TRIGGER_DEFINITIONS
+    from src.core.schema import SCHEMA_VERSION
+    require(SCHEMA_VERSION == TARGET_SCHEMA_VERSION, 'schema_policy_target_changed')
     with closing(connection(directory)) as database:
-        require(database.execute('SELECT version FROM schema_version WHERE id=1').fetchone() == (5,), 'schema_not_upgraded')
+        require(database.execute('SELECT version FROM schema_version WHERE id=1').fetchone() == (TARGET_SCHEMA_VERSION,),
+                'schema_not_upgraded')
+        require([row[1:] for row in database.execute('PRAGMA table_info(inventory_generation)')] == [
+            ('organization_id', 'VARCHAR(64)', 1, None, 1), ('generation', 'VARCHAR(32)', 1, None, 0)],
+            'generation_table_changed')
         require(dict(database.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger'")) == TRIGGER_DEFINITIONS,
                 'generation_triggers_changed')
         indexes = dict(database.execute("SELECT name,sql FROM sqlite_master WHERE type='index'"))
@@ -502,6 +578,7 @@ def runtime_identity():
 
 def execute(directory, environment, listener, values, output, deadline):
     original = archive(directory)
+    original_definitions = definitions(directory)
     expected = output.pop('_expected')
     output['assertions'].extend(REQUIRED_ASSERTIONS[:2])
     first = Server(directory, environment, listener, 'initial', deadline, values)
@@ -510,7 +587,8 @@ def execute(directory, environment, listener, values, output, deadline):
         first.authenticate(values)
         values.update({'jwt' + str(index): first.tokens[organization] for index, organization in enumerate(ORGANIZATIONS)})
         check_schema(directory)
-        output['schema_after'] = 5
+        output['cache_policy_upgrade'] = verify_upgrade_and_restore(directory, original, original_definitions, expected)
+        output['schema_after'] = TARGET_SCHEMA_VERSION
         output['assertions'].append(REQUIRED_ASSERTIONS[2])
         counts = traverse_all(first, expected)
         output['traversal_counts'] = counts
@@ -570,7 +648,8 @@ def main(argv=None):
     parser.add_argument('--timeout-seconds', type=timeout_value, default=120)
     output = {'format_version': FORMAT_VERSION, 'accepted': False, 'observation_count': OBSERVATIONS,
               'fixture_scope': 'repeated_observations_of_12_synthetic_assets',
-              'schema_before': None, 'schema_after': None, 'schema_target': 5, 'assertions': [], 'server_exits': []}
+              'schema_before': None, 'schema_after': None, 'schema_target': TARGET_SCHEMA_VERSION,
+              'assertions': [], 'server_exits': []}
     failures, values = [], {}
     temporary, directory, listener, previous_mask = None, None, None, None
     previous_handlers = {}

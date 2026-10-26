@@ -1,10 +1,19 @@
-"""Real access-check producers with a synthetic, non-network HTTP transport."""
+"""Access-policy unit fixtures with synthetic complete captures, without network I/O.
+
+These exercise producer/projection contracts. Live wire provenance is covered by
+the separate owned HTTP access-provenance fixtures and adversarial tests.
+"""
 
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+
+from yarl import URL
 
 from src.core.contracts import collect_checks
-from src.core.transport import ScanBudget, current_budget, scan_transport
+from src.core.transport import BoundedResponse, ScanBudget, current_budget, scan_transport
+from src.core.request_provenance import RequestCapture
+from src.core.access_evidence import guard_access_request, observe_access_request
 from src.security.access_control_tests import AccessControlTester
 
 
@@ -32,26 +41,40 @@ def target(**overrides):
 def transport(*, disclose=False):
     class Response:
         def __init__(self, status, body):
-            self.status, self.body = status, body
+            self.status, self.raw = status, body.encode()
+            self.headers = {}
+            self.content = self
 
-        async def text(self):
-            return self.body
+        async def iter_chunked(self, size):
+            yield self.raw
 
     class Request:
         def __init__(self, url, headers):
             self.url, self.headers = url, headers
 
         async def __aenter__(self):
+            guard_access_request('GET', self.url, {'headers': self.headers}, {})
             current_budget().reserve(self.url)
             credential = next((value for key, value in self.headers.items()
                                if key.lower() in {'authorization', 'x-api-key', 'x-goog-api-key'}), '')
             if credential in {ISSUED, 'Bearer ' + ISSUED}:
-                return Response(200, MARKER)
-            if 'scanner-invalid-' in credential:
-                return Response(401, 'Denied')
-            return Response(200, MARKER) if disclose else Response(403, 'Denied')
+                response = Response(200, MARKER)
+            elif 'scanner-invalid-' in credential:
+                response = Response(401, 'Denied')
+            else:
+                response = Response(200, MARKER) if disclose else Response(403, 'Denied')
+            url = str(URL(self.url))
+            headers = {'Host': URL(url).raw_authority, **self.headers}
+            response.request_info = SimpleNamespace(method='GET', url=url, real_url=url, headers=headers)
+            capture = RequestCapture()
+            capture.sent_headers('GET', url, headers)
+            evidence = capture.seal(response)
+            observe_access_request(evidence)
+            self.response = BoundedResponse(response, current_budget(), request_evidence=evidence)
+            return self.response
 
         async def __aexit__(self, *args):
+            self.response._request_active = False
             return False
 
     class Session:

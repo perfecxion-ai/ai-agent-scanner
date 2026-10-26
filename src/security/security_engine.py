@@ -3,6 +3,7 @@ from copy import deepcopy
 from typing import List, Dict, Any, Optional, Callable
 import logging
 from src.core.transport import current_budget
+from src.core.access_evidence import access_evidence_context, access_secrets
 from src.core.tenant_evidence import get_tenant_evidence, tenant_evidence_context, tenant_secrets
 from src.utils.request_builder import construct_agent_request, missing_credential_reason
 from src.core.contracts import (
@@ -31,7 +32,7 @@ class SecurityTestEngine:
 
     def checkpoint_secrets(self, agents):
         """Collect pinned tenant and predictable protected-access credentials."""
-        secrets = set(tenant_secrets())
+        secrets = set(tenant_secrets()) | set(access_secrets())
         if not any(agent.get('authentication_required') is True
                    and agent.get('protected_response_marker') for agent in agents):
             return secrets
@@ -42,7 +43,7 @@ class SecurityTestEngine:
     async def test_agents(self, agents: List[Dict[str, Any]], 
                          progress_callback: Optional[Callable] = None) -> List[Dict[str, Any]]:
         """Test all discovered agents for security vulnerabilities"""
-        with tenant_evidence_context(agents):
+        with tenant_evidence_context(agents), access_evidence_context(agents):
             return await self._test_prepared_agents(agents, progress_callback)
 
     async def _test_prepared_agents(self, agents, progress_callback):
@@ -68,7 +69,7 @@ class SecurityTestEngine:
     
     async def _test_single_agent(self, agent: Dict[str, Any]) -> Dict[str, Any]:
         """Test a single agent for security vulnerabilities"""
-        with tenant_evidence_context([agent]), collect_evidence(agent) as evidence:
+        with tenant_evidence_context([agent]), access_evidence_context([agent]), collect_evidence(agent) as evidence:
             result = await self._test_agent_result(agent, evidence)
             self._attach_evidence(result, evidence)
             return result

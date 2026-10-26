@@ -21,18 +21,22 @@ import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = ("v1", "v2", "v3", "v4", "v5", "rollback1", "rollback2", "rollback3", "future", "incomplete", "lock")
+CASES = ("v1", "v2", "v3", "v4", "v5", "v6", "rollback1", "rollback2", "rollback3", "rollback5",
+         "future", "incomplete", "lock")
 FILENAMES = {"source.sqlite", "backup.sqlite", "restore.sqlite", "old-copy.sqlite"}
+CACHE_OUTCOMES = {'assessed-zero': 'completed', 'assessed-high': 'completed',
+                  'retained-partial': 'partial', 'retained-tenant': 'partial',
+                  'legacy-zero': 'completed', 'legacy-high': 'completed', 'legacy-partial': 'partial'}
 
 
 def expected_assertions(case):
     assertions = ["stopped_readonly_backup_and_restore_integrity_schema_all_rows"]
     if case.startswith("v"):
-        if case == "v4":
-            assertions.append("schema_four_sources_preserved_without_nullable_rebuild")
+        if case in {"v4", "v5", "v6"}:
+            assertions.append("policy_refresh_preserves_sources_schema_and_unrelated_rows")
         assertions.extend(["upgrade_and_terminal_recovery", "queued_executed_once_without_active_replay",
                            "completed_evidence_audit_templates_preserved", "schedule_recovery_without_admission",
-                           "nullable_score_cache_preserves_unknown_zero_and_partial_confirmation",
+                           "access_policy_cache_preserves_legacy_unknown_current_zero_high_partial_and_tenant",
                            "inventory_generation_owners_shape_and_progress_stability",
                            "second_restart_idempotent"])
     else:
@@ -122,46 +126,44 @@ def report(scan_id):
 
 
 def controlled_report(scan_id, *, disclose=False, partial=False):
-    """Use real access-check production with a synthetic non-network transport."""
-    from unittest.mock import AsyncMock
-    from src.core.pipeline import run_pipeline
-    from src.risk.risk_assessor import RiskAssessment
-    from src.security.security_engine import SecurityTestEngine
-    from tests.controlled_access import target, transport
-
-    async def produce():
-        security = SecurityTestEngine()
-        security.prompt_tester.test_agent = AsyncMock(return_value=[])
-        security.access_tester.test_agent = security.access_tester._test_authentication_bypass
-        security.privacy_tester.test_agent = (AsyncMock(side_effect=RuntimeError('Synthetic later failure'))
-                                             if partial else AsyncMock(return_value=[]))
-        with transport(disclose=disclose):
-            value = await run_pipeline(None, security, RiskAssessment(), None, 'security_only',
-                                       agents=[target(id=scan_id + '-asset')])
-        value['scan_id'] = scan_id
-        return value
-
-    value = asyncio.run(produce())
+    """Exercise real transport and current controls on an owned loopback fixture."""
+    from tests.access_provenance_fixture import current_access_report
+    value = asyncio.run(current_access_report(mode='partial' if partial else 'vulnerable' if disclose else 'protected'))
+    value['scan_id'] = scan_id
     expected = 70 if disclose else 0
     require(value['summary']['overall_risk_score'] == expected, 'Controlled fixture lost its assessed score')
     require(value['status'] == ('partial' if partial else 'completed'), 'Controlled fixture status changed')
     return value
 
 
+def cache_fixtures():
+    """Keep genuine old archives beside current synthetic producer outputs."""
+    from tests.legacy_access_fixtures import legacy_access_archive, legacy_access_report
+    from tests.legacy_observation_fixtures import legacy_archive, legacy_report
+    outputs = {
+        'assessed-zero': (controlled_report('assessed-zero'), None),
+        'assessed-high': (controlled_report('assessed-high', disclose=True), None),
+        'retained-partial': (controlled_report('retained-partial', disclose=True, partial=True), None),
+        'retained-tenant': (legacy_report('subject-partial-final'), legacy_archive('subject-partial-final')),
+    }
+    for name in ('zero', 'high', 'partial'):
+        outputs['legacy-' + name] = (legacy_access_report(name), legacy_access_archive(name))
+    return outputs
+
+
 def seed(server, engine, version):
     from sqlalchemy import insert
     from src.core.schema import initialize_schema
     from tests.historical_schema import historical_metadata
-    if version < 5:
+    if version < 6:
         metadata = historical_metadata(version=version)
         metadata.create_all(engine)
     else:
         metadata = server.db.metadata
         initialize_schema(engine, metadata)
-    controlled = {'assessed-zero': controlled_report('assessed-zero'),
-                  'retained-partial': controlled_report('retained-partial', disclose=True, partial=True)}
+    controlled = cache_fixtures()
     with engine.begin() as connection:
-        if version < 5:
+        if version < 6:
             connection.execute(insert(metadata.tables["schema_version"]).values(id=1, version=version))
         for identifier, status in (("completed", "completed"), ("queued", "queued"),
                                    ("running", "running"), ("cancel", "cancel_requested")):
@@ -180,12 +182,19 @@ def seed(server, engine, version):
             id="completed-snapshot", scan_id="completed", agent_name="Retained synthetic asset",
             agent_type="fixture", discovery_method="synthetic", metadata={"retained": "asset-snapshot"},
             risk_score=0.0 if version < 4 else None))
-        for identifier, output in controlled.items():
+        for identifier, (output, archived) in controlled.items():
             asset = output['agents'][0]
+            from src.core.stored_risk import project_stored_risk
+            summary, projected = project_stored_risk(output)
+            score = (summary['overall_risk_score'] if version >= 6 else
+                     output['summary']['overall_risk_score'])
+            asset_score = (projected.get(asset['id'], {}).get('risk_score') if version >= 6 else asset['risk_score'])
+            asset_level = (projected.get(asset['id'], {}).get('risk_level', 'unknown') if version >= 6 else
+                           asset['risk_level'])
             connection.execute(insert(metadata.tables['scan_session']).values(
                 id=identifier, organization_id='backup-fixture', scan_name='Synthetic ' + identifier,
                 scan_type='security_only', status=output['status'], target_scope={}, scan_config={},
-                overall_risk_score=output['summary']['overall_risk_score']))
+                overall_risk_score=score))
             connection.execute(insert(metadata.tables['scan_job']).values(scan_id=identifier, status=output['status']))
             for event_name in ('admitted', 'terminal'):
                 connection.execute(insert(metadata.tables['audit_event']).values(
@@ -193,10 +202,12 @@ def seed(server, engine, version):
                     previous_status='running' if event_name == 'terminal' else None,
                     status=output['status'] if event_name == 'terminal' else 'queued'))
             connection.execute(insert(metadata.tables['scan_result']).values(scan_id=identifier, result=output))
+            if archived is not None:
+                connection.exec_driver_sql('UPDATE scan_result SET result=? WHERE scan_id=?', (archived, identifier))
             connection.execute(insert(metadata.tables['discovered_agent']).values(
                 id=identifier + '-snapshot', scan_id=identifier, agent_name='Retained controlled asset',
-                agent_type='fixture', discovery_method='synthetic', risk_score=asset['risk_score'],
-                risk_level=asset['risk_level'], metadata={'asset_id': asset['id']},
+                agent_type='fixture', discovery_method='synthetic', risk_score=asset_score,
+                risk_level=asset_level, metadata={'asset_id': asset['id']},
                 vulnerabilities=asset['vulnerabilities']))
         if version >= 2:
             connection.execute(insert(metadata.tables["scan_template"]).values(
@@ -257,26 +268,55 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
 
     def initialize():
         observed["initialized"] += 1
-        preserve_four = version == 4 and observed['initialized'] == 1
+        preserve_sources = version >= 4 and observed['initialized'] == 1
         statements = []
         def observe(_connection, _cursor, statement, _parameters, _context, _many):
             statements.append(statement)
-        if preserve_four:
+        if preserve_sources:
             event.listen(engine, 'before_cursor_execute', observe)
         try:
             initialize_schema(engine, server.db.metadata)
         finally:
-            if preserve_four:
+            if preserve_sources:
                 event.remove(engine, 'before_cursor_execute', observe)
-        if preserve_four:
+        if preserve_sources:
             upgraded = snapshot(owned_path(directory, 'restore.sqlite'))
-            old_rows = dict(baseline['rows'], schema_version=[(1, 5)])
-            require({name: rows for name, rows in upgraded['rows'].items() if name != 'inventory_generation'}
-                    == old_rows and set(map(tuple, baseline['schema'])) <= set(map(tuple, upgraded['schema']))
+            from src.core.schema import SCHEMA_VERSION
+            def retained(values):
+                result = dict(values)
+                for table, omitted in [('scan_session', {'overall_risk_score'}),
+                                       ('discovered_agent', {'risk_score', 'risk_level'})]:
+                    columns = list(server.db.metadata.tables[table].columns.keys())
+                    result[table] = [tuple(value for name, value in zip(columns, row, strict=True)
+                                          if name not in omitted) for row in result[table]]
+                result.pop('inventory_generation', None)
+                result['schema_version'] = [(1, SCHEMA_VERSION)]
+                return result
+            require(retained(upgraded['rows']) == retained(baseline['rows'])
+                    and (upgraded['schema'] == baseline['schema'] if version >= 5 else
+                         set(map(tuple, baseline['schema'])) <= set(map(tuple, upgraded['schema'])))
                     and not any('DROP TABLE' in statement.upper() or '_aiscan_v4_' in statement
                                 for statement in statements),
-                    'Schema four upgrade changed existing sources or rebuilt nullable tables')
-            checks.append('schema_four_sources_preserved_without_nullable_rebuild')
+                    'Policy refresh changed existing sources, schema, or unrelated rows')
+            if version >= 5:
+                asset_columns = list(server.DiscoveredAgentModel.__table__.columns.keys())
+                scan_columns = list(server.ScanSession.__table__.columns.keys())
+                old_assets = {row[0]: dict(zip(asset_columns, row, strict=True))
+                              for row in baseline['rows']['discovered_agent']}
+                owners = {row[0]: row[scan_columns.index('organization_id')]
+                          for row in baseline['rows']['scan_session']}
+                changed_owners = set()
+                for row in upgraded['rows']['discovered_agent']:
+                    current = dict(zip(asset_columns, row, strict=True))
+                    previous = old_assets[current['id']]
+                    if any(current[key] != previous[key] for key in ('risk_score', 'risk_level')):
+                        changed_owners.add(owners[current['scan_id']])
+                previous = dict(baseline['rows']['inventory_generation'])
+                current = dict(upgraded['rows']['inventory_generation'])
+                require(set(previous) == set(current)
+                        and {owner for owner in previous if previous[owner] != current[owner]} == changed_owners,
+                        'Policy refresh invalidated unrelated inventory owners')
+            checks.append('policy_refresh_preserves_sources_schema_and_unrelated_rows')
 
     def worker(identifier, cancelled):
         observed["executed"].append(identifier)
@@ -347,8 +387,7 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
             jobs = dict(connection.execute(select(store.jobs.c.scan_id, store.jobs.c.status)).all())
             outstanding = connection.scalar(select(server.ScanSchedule.outstanding_scan_id).where(server.ScanSchedule.id == "enabled"))
         return jobs == {"completed": "completed", "queued": "completed", "running": "interrupted",
-                        "cancel": "cancelled", 'assessed-zero': 'completed',
-                        'retained-partial': 'partial'} and outstanding is None
+                        "cancel": "cancelled", **CACHE_OUTCOMES} and outstanding is None
 
     first = dispatcher()
     try:
@@ -373,7 +412,7 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
     require(without_caches(rows['discovered_agent'], asset_columns, {'risk_score', 'risk_level'})
             == without_caches(original['discovered_agent'], asset_columns, {'risk_score', 'risk_level'}),
             'Agent snapshot fields outside score caches changed')
-    for identifier in ('completed', 'assessed-zero', 'retained-partial'):
+    for identifier in ('completed', *CACHE_OUTCOMES):
         before = [row for row in original['scan_session'] if row[0] == identifier]
         after = [row for row in rows['scan_session'] if row[0] == identifier]
         require(without_caches(before, scan_columns, {'overall_risk_score'})
@@ -398,9 +437,14 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
                 for table, column in (('scan_session', 'overall_risk_score'), ('discovered_agent', 'risk_score'))),
             'Score columns are not nullable without SQL defaults')
     require(scan_scores == {'completed': None, 'queued': None, 'running': None, 'cancel': None,
-                            'assessed-zero': 0.0, 'retained-partial': 70.0}, 'Scan score caches lost canonical values')
+                            'assessed-zero': 0.0, 'assessed-high': 70.0, 'retained-partial': 70.0,
+                            'retained-tenant': 90.0, 'legacy-zero': None, 'legacy-high': None,
+                            'legacy-partial': None}, 'Scan score caches lost canonical values')
     require(asset_scores == {'completed-snapshot': (None, 'unknown'), 'assessed-zero-snapshot': (0.0, 'minimal'),
-                             'retained-partial-snapshot': (70.0, 'high')}, 'Asset score caches lost canonical values')
+                             'assessed-high-snapshot': (70.0, 'high'),
+                             'retained-partial-snapshot': (70.0, 'high'), 'retained-tenant-snapshot': (90.0, 'critical'),
+                             'legacy-zero-snapshot': (None, 'unknown'), 'legacy-high-snapshot': (None, 'unknown'),
+                             'legacy-partial-snapshot': (None, 'unknown')}, 'Asset score caches lost canonical values')
     require(all(scans[key] == value == reports[key]["status"] for key, value in jobs.items()),
             "Recovered job/session/report states disagree")
     require(Counter(row["scan_id"] for row in events if row["event"] == "claimed") == {"queued": 1}, "Unexpected claim history")
@@ -422,7 +466,7 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
     require(observed["preflight"] == observed["admitted"] == 0, "Restart scheduled new work")
     checks.extend(["upgrade_and_terminal_recovery", "queued_executed_once_without_active_replay",
                    "completed_evidence_audit_templates_preserved", "schedule_recovery_without_admission",
-                   "nullable_score_cache_preserves_unknown_zero_and_partial_confirmation"])
+                   "access_policy_cache_preserves_legacy_unknown_current_zero_high_partial_and_tenant"])
     generations = inventory_generation_state(server, engine)
     with engine.begin() as connection:
         original_progress = connection.scalar(select(server.ScanSession.progress).where(server.ScanSession.id == 'completed'))

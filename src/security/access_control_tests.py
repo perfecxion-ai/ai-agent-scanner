@@ -16,6 +16,8 @@ vulnerabilities in their AI systems for remediation purposes.
 """
 
 import asyncio
+from contextlib import asynccontextmanager
+from functools import wraps
 from src.core.transport import SafeSession, model_request_timeout
 import logging
 import base64
@@ -33,11 +35,16 @@ from src.core.access_probe_policy import (
     access_probe_definition,
 )
 from src.core.redaction import contains_literal
-from src.utils.request_builder import construct_agent_request, resolve_api_key
+from src.core.access_evidence import (
+    access_evidence_context, access_evidence_usable, get_access_evidence, verify_access_response,
+)
+from src.core.request_provenance import MAX_HEADER_COUNT, MAX_REQUEST_HEADERS, _strings
+from src.utils.request_builder import construct_agent_request
 from yarl import URL
 
 
 _CONTROL_MARKER = re.compile(r'[A-Za-z0-9_.~-]{16,128}\Z')
+_JSON_MARKS = re.compile(r'["\\\[\]{}]')
 
 
 def _valid_access_marker(marker):
@@ -47,7 +54,8 @@ def _valid_access_marker(marker):
 
 
 def _issued_credential_prerequisite(agent):
-    if not agent.get('api_key_env') or not resolve_api_key(agent):
+    context = get_access_evidence(agent)
+    if not agent.get('api_key_env') or context is None or not context.issued_key:
         return "An explicit environment reference to an issued credential is required"
     return None
 
@@ -89,6 +97,95 @@ def _request_material(url, headers):
                          'GET ' + url.raw_path_qs + ' HTTP/1.1\r\n'
                          + '\r\n'.join(f'{name}: {value}' for name, value in complete.items())])
     return material
+
+
+def _with_access_evidence(method):
+    @wraps(method)
+    async def wrapped(self, agent, *args, **kwargs):
+        with access_evidence_context([agent]):
+            return await method(self, agent, *args, **kwargs)
+    return wrapped
+
+
+def _denied_without_marker(response, text, marker):
+    """A denial cannot prove absence when its bounded material discloses a marker."""
+    if response.status not in (401, 403):
+        return False
+    try:
+        if not isinstance(response.body, bytes):
+            return False
+        text = response.body.decode('utf-8-sig')
+        if '\x00' in text or '\ufeff' in text or marker.casefold() in text.casefold():
+            return False
+        headers = tuple(response.headers.items())
+        if (len(headers) > MAX_HEADER_COUNT
+                or any(not isinstance(value, str) for pair in headers for value in pair)
+                or sum(len(value.encode()) for pair in headers for value in pair) > MAX_REQUEST_HEADERS
+                or any(marker.casefold() in value.casefold() for pair in headers for value in pair)):
+            return False
+        if text.lstrip().startswith(('{', '[', '"')):
+            depth, quoted, escaped_at = 0, False, -1
+            for match in _JSON_MARKS.finditer(text):
+                position, mark = match.start(), match.group()
+                if quoted:
+                    if position == escaped_at:
+                        escaped_at = -1
+                        continue
+                    escaped_at = position + 1 if mark == '\\' else -1
+                    if mark == '"':
+                        quoted = False
+                elif mark == '"':
+                    quoted = True
+                elif mark in '[{':
+                    depth += 1
+                    if depth > 16:
+                        return False
+                elif mark in ']}':
+                    depth -= 1
+                    if depth < 0:
+                        return False
+                else:
+                    return False
+            if depth or quoted:
+                return False
+            def unique(pairs):
+                value = {}
+                for key, item in pairs:
+                    if key in value:
+                        raise ValueError('Ambiguous denial response')
+                    value[key] = item
+                return value
+            def constant(value):
+                raise ValueError('Invalid denial response')
+            decoded = json.loads(text, object_pairs_hook=unique, parse_constant=constant)
+            if any('\x00' in value or '\ufeff' in value or marker.casefold() in value.casefold()
+                   for value in _strings(decoded)):
+                return False
+        return True
+    except (TypeError, ValueError, KeyError, AttributeError, UnicodeError, OverflowError, RecursionError):
+        return False
+
+
+@asynccontextmanager
+async def _protected_response(endpoint, headers):
+    """A cleanup error cannot replace a cancellation observed in the body."""
+    cancelled = None
+    try:
+        async with SafeSession(timeout=model_request_timeout()) as session:
+            try:
+                async with session.get(endpoint, headers=headers, allow_redirects=False) as response:
+                    try:
+                        yield response
+                    except asyncio.CancelledError as error:
+                        cancelled = error
+                        raise
+            except asyncio.CancelledError as error:
+                cancelled = error
+                raise
+    except BaseException:
+        if cancelled is not None:
+            raise cancelled
+        raise
 
 class AccessControlTester:
     """
@@ -135,7 +232,7 @@ class AccessControlTester:
         if not endpoint:
             return []
         
-        self.logger.info(f"Testing agent {agent.get('name', 'unknown')} for access control vulnerabilities")
+        self.logger.info('Testing access controls')
 
         vulnerabilities.extend(await self._test_unauthenticated_inference(agent))
         
@@ -204,6 +301,7 @@ class AccessControlTester:
             self.logger.debug('Anonymous inference request failed')
             return []
     
+    @_with_access_evidence
     @checked("authentication_bypass", access_probe_definition('authentication_bypass'),
              prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_authentication_bypass(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -248,6 +346,8 @@ class AccessControlTester:
             return []
         
         for test in bypass_tests:
+            if not access_evidence_usable(agent):
+                break
             try:
                 vuln = await self._test_auth_bypass_method(agent, test)
                 if vuln:
@@ -266,49 +366,42 @@ class AccessControlTester:
                                      test: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Probe one method after the group's fresh protected-resource controls."""
         
-        async with SafeSession(timeout=model_request_timeout()) as session:
-            endpoint = agent.get('endpoint')
-            
-            # Try the bypass method
-            try:
-                async with session.get(
-                    endpoint,
-                    headers=_protected_headers(test['headers']), allow_redirects=False
-                ) as response:
-                    
-                    response_text = await response.text()
-                    record_interaction(response.status in (401, 403) or 200 <= response.status < 300,
-                                       response.status in (401, 403)
-                                       and agent['protected_response_marker'] not in response_text)
-                    
-                    # Check if bypass was successful
-                    if self._is_successful_bypass(response.status, response_text, agent.get('protected_response_marker')):
-                        return {
-                            'id': str(uuid.uuid4()),
-                            'agent_id': agent.get('id'),
-                            'vulnerability_type': 'authentication_bypass',
-                            'severity': 'high',
-                            'evidence_status': 'confirmed',
-                            'control_status': ACCESS_CONTROL_STATUS,
-                            'protected_control_version': PROTECTED_CONTROL_VERSION,
-                            'title': f"Authentication Bypass - {test['name']}",
-                            'description': f"Agent allows access without proper authentication using {test['name']}.",
-                            'method': test['name'],
-                            'headers_used': test['headers'],
-                            'status_code': response.status,
-                            'response_excerpt': '[RESPONSE_TEXT_OMITTED]',
-                            'timestamp': datetime.now(timezone.utc).isoformat(),
-                            'confidence': 0.9,
-                            'remediation': "Implement proper authentication checks and validate all authorization headers."
-                        }
+        endpoint = agent.get('endpoint')
+        try:
+            headers = _protected_headers(test['headers'])
+            async with _protected_response(endpoint, headers) as response:
+                response_text = await response.text()
+                proven = verify_access_response(response, agent=agent, endpoint=endpoint, headers=headers)
+                record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
+                                   proven and _denied_without_marker(response, response_text, agent['protected_response_marker']))
+                if proven and self._is_successful_bypass(response.status, response_text, agent.get('protected_response_marker')):
+                    return {
+                        'id': str(uuid.uuid4()),
+                        'agent_id': agent.get('id'),
+                        'vulnerability_type': 'authentication_bypass',
+                        'severity': 'high',
+                        'evidence_status': 'confirmed',
+                        'control_status': ACCESS_CONTROL_STATUS,
+                        'protected_control_version': PROTECTED_CONTROL_VERSION,
+                        'title': f"Authentication Bypass - {test['name']}",
+                        'description': f"Agent allows access without proper authentication using {test['name']}.",
+                        'method': test['name'],
+                        'headers_used': test['headers'],
+                        'status_code': response.status,
+                        'response_excerpt': '[RESPONSE_TEXT_OMITTED]',
+                        'timestamp': datetime.now(timezone.utc).isoformat(),
+                        'confidence': 0.9,
+                        'remediation': "Implement proper authentication checks and validate all authorization headers."
+                    }
                         
-            except Exception:
-                record_interaction(False)
-                self.logger.debug("Bypass test failed")
-                return None
+        except Exception:
+            record_interaction(False)
+            self.logger.debug("Bypass test failed")
+            return None
         
         return None
     
+    @_with_access_evidence
     @checked("weak_credentials", lambda self: access_probe_definition('weak_credentials', sample=self.weak_credentials[:5]),
              prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_weak_credentials(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -327,20 +420,19 @@ class AccessControlTester:
         
         # Test basic authentication with common credentials
         for username, password in samples:
+            if not access_evidence_usable(agent):
+                break
             try:
                 credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
                 
-                async with SafeSession(timeout=model_request_timeout()) as session:
-                    async with session.get(
-                        endpoint,
-                        headers=_protected_headers({'Authorization': f'Basic {credentials}'}), allow_redirects=False
-                    ) as response:
+                headers = _protected_headers({'Authorization': f'Basic {credentials}'})
+                async with _protected_response(endpoint, headers) as response:
                         
                         text = await response.text()
-                        record_interaction(response.status in (401, 403) or 200 <= response.status < 300,
-                                           response.status in (401, 403)
-                                           and agent['protected_response_marker'] not in text)
-                        if self._is_successful_bypass(response.status, text, agent.get('protected_response_marker')):
+                        proven = verify_access_response(response, agent=agent, endpoint=endpoint, headers=headers)
+                        record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
+                                           proven and _denied_without_marker(response, text, agent['protected_response_marker']))
+                        if proven and self._is_successful_bypass(response.status, text, agent.get('protected_response_marker')):
                             vulnerabilities.append({
                                 'id': str(uuid.uuid4()),
                                 'agent_id': agent.get('id'),
@@ -368,6 +460,7 @@ class AccessControlTester:
         
         return vulnerabilities
     
+    @_with_access_evidence
     @checked("weak_api_key", lambda self: access_probe_definition('weak_api_key', sample=self.test_api_keys[:5]),
              prerequisite=_authentication_prerequisite, oracle=lambda agent: True)
     async def _test_api_key_security(self, agent: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -384,19 +477,23 @@ class AccessControlTester:
         
         # Test various API key weaknesses
         for api_key in self.test_api_keys[:5]:  # Test first 5
+            if not access_evidence_usable(agent):
+                break
             try:
                 # Test different API key header formats
                 header_variations = self._api_key_headers(api_key)
                 
                 for headers in header_variations:
-                    async with SafeSession(timeout=model_request_timeout()) as session:
-                        async with session.get(endpoint, headers=_protected_headers(headers), allow_redirects=False) as response:
+                    if not access_evidence_usable(agent):
+                        break
+                    selected_headers = _protected_headers(headers)
+                    async with _protected_response(endpoint, selected_headers) as response:
                             
                             text = await response.text()
-                            record_interaction(response.status in (401, 403) or 200 <= response.status < 300,
-                                               response.status in (401, 403)
-                                               and agent['protected_response_marker'] not in text)
-                            if self._is_successful_bypass(response.status, text, agent.get('protected_response_marker')):
+                            proven = verify_access_response(response, agent=agent, endpoint=endpoint, headers=selected_headers)
+                            record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
+                                               proven and _denied_without_marker(response, text, agent['protected_response_marker']))
+                            if proven and self._is_successful_bypass(response.status, text, agent.get('protected_response_marker')):
                                 vulnerabilities.append({
                                     'id': str(uuid.uuid4()),
                                     'agent_id': agent.get('id'),
@@ -431,6 +528,7 @@ class AccessControlTester:
                 {'X-API-KEY': api_key}, {'Authorization': f'Bearer {api_key}'},
                 {'Authorization': f'ApiKey {api_key}'}]
     
+    @_with_access_evidence
     @checked("authorization_bypass", lambda self: access_probe_definition('authorization_bypass', sample=self.sensitive_paths[:8]),
              prerequisite=_authorization_prerequisite,
              oracle=lambda agent: True,
@@ -443,6 +541,8 @@ class AccessControlTester:
         
         # Test path traversal and privilege escalation
         for path in self.sensitive_paths[:8]:
+            if not access_evidence_usable(agent):
+                break
             marker = agent.get('protected_path_markers', {}).get(path)
             if not isinstance(marker, str) or len(marker) < 16:
                 continue
@@ -451,15 +551,16 @@ class AccessControlTester:
                 if not await self._has_access_controls(agent, test_url, marker, []):
                     continue
                 
-                async with SafeSession(timeout=model_request_timeout()) as session:
-                    async with session.get(test_url, headers=_protected_headers({}), allow_redirects=False) as response:
+                headers = _protected_headers({})
+                async with _protected_response(test_url, headers) as response:
                         
                         response_text = await response.text()
-                        record_interaction(response.status in (401, 403) or 200 <= response.status < 300,
-                                           response.status in (401, 403) and marker not in response_text)
+                        proven = verify_access_response(response, agent=agent, endpoint=test_url, headers=headers)
+                        record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
+                                           proven and _denied_without_marker(response, response_text, marker))
                         
                         # Check for successful access to restricted areas
-                        if self._is_admin_access(response.status, response_text, marker):
+                        if proven and self._is_admin_access(response.status, response_text, marker):
                             vulnerabilities.append({
                                 'id': str(uuid.uuid4()),
                                 'agent_id': agent.get('id'),
@@ -603,9 +704,10 @@ class AccessControlTester:
         try:
             # Only explicit credential references authorize a baseline. Provider
             # defaults must not silently send an operator credential to this GET.
-            key = resolve_api_key(agent) if agent.get('api_key_env') else None
+            context = get_access_evidence(agent)
+            key = context.issued_key if context is not None else None
             url = URL(endpoint)
-            if (not key or '\r' in key or '\n' in key
+            if (not key or not access_evidence_usable(agent) or '\r' in key or '\n' in key
                     or not _valid_access_marker(marker)
                     or url.scheme not in ('http', 'https') or not url.host
                     or url.user is not None or url.query_string or url.fragment
@@ -630,20 +732,20 @@ class AccessControlTester:
                 record_interaction(False)
                 return False
 
-            async with SafeSession(timeout=model_request_timeout()) as session:
-                async with session.get(endpoint, headers=headers, allow_redirects=False) as response:
+            async with _protected_response(endpoint, headers) as response:
                     text = await response.text()
-                    authorized = self._is_successful_bypass(response.status, text, marker)
+                    authorized = (verify_access_response(response, agent=agent, endpoint=endpoint, headers=headers)
+                                  and self._is_successful_bypass(response.status, text, marker))
                     record_interaction(authorized, authorized)
                     if not authorized:
                         return False
 
             # A separate session prevents an issued cookie from authorizing the
             # denied control or subsequent anonymous/invalid-credential probes.
-            async with SafeSession(timeout=model_request_timeout()) as session:
-                async with session.get(endpoint, headers=invalid_headers, allow_redirects=False) as response:
+            async with _protected_response(endpoint, invalid_headers) as response:
                     text = await response.text()
-                    denied = response.status in (401, 403) and marker not in text
+                    denied = (verify_access_response(response, agent=agent, endpoint=endpoint, headers=invalid_headers)
+                              and _denied_without_marker(response, text, marker))
                     record_interaction(denied, denied)
                     return denied
         except Exception:

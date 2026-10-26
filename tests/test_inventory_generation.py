@@ -85,7 +85,7 @@ def test_fresh_registration_and_restart_are_exact_and_do_not_churn(database):
     assert fingerprint(engine) == before
 
 
-def test_schema_four_upgrade_preserves_archives_scalars_and_operator_indexes(database):
+def test_schema_four_upgrade_reconciles_only_caches_and_preserves_archives_and_operator_indexes(database):
     module, engine = database
     old = historical_metadata(version=4)
     old.create_all(engine)
@@ -112,14 +112,22 @@ def test_schema_four_upgrade_preserves_archives_scalars_and_operator_indexes(dat
         event.remove(engine, 'before_cursor_execute', observe)
     definitions, rows = fingerprint(engine)
     expected = deepcopy(prior_rows)
-    expected['schema_version'] = [(1, 5)]
+    expected['schema_version'] = [(1, schema.SCHEMA_VERSION)]
+    for name, values in [('scan_session', {'overall_risk_score': None}),
+                         ('discovered_agent', {'risk_score': None, 'risk_level': 'unknown'})]:
+        columns = list(old.tables[name].columns.keys())
+        expected[name] = [tuple(values.get(column, value) for column, value in zip(columns, row, strict=True))
+                          for row in expected[name]]
     assert {name: value for name, value in rows.items() if name != TABLE_NAME} == expected
     assert set(rows[TABLE_NAME][i][0] for i in range(len(rows[TABLE_NAME]))) == {'tenant-a', 'tenant-b'}
     assert all(re.fullmatch('[0-9a-f]{32}', row[1]) for row in rows[TABLE_NAME])
     assert set(prior_definitions) <= set(definitions)
     assert not any('DROP TABLE' in statement or '_aiscan_v4_' in statement for statement in statements)
-    assert not any(statement.upper().startswith('UPDATE SCAN_SESSION') or
-                   statement.upper().startswith('UPDATE DISCOVERED_AGENT') for statement in statements)
+    cache_updates = [statement for statement in statements if statement.upper().startswith(
+        ('UPDATE SCAN_SESSION', 'UPDATE DISCOVERED_AGENT'))]
+    assert len(cache_updates) == 2
+    assert any('SET overall_risk_score=' in statement for statement in cache_updates)
+    assert any('SET risk_score=?, risk_level=' in statement for statement in cache_updates)
 
 
 @pytest.mark.parametrize('version', [1, 2, 3])
@@ -135,7 +143,7 @@ def test_older_upgrades_apply_nullable_migration_before_generation(database, ver
             **observation_values('asset-a', 'scan-a'), risk_score=99.0, risk_level='critical'))
     schema.initialize_schema(engine, module.db.metadata)
     with engine.connect() as connection:
-        assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == 5
+        assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == schema.SCHEMA_VERSION
         assert connection.exec_driver_sql('SELECT overall_risk_score FROM scan_session').scalar_one() is None
         assert connection.exec_driver_sql('SELECT risk_score,risk_level FROM discovered_agent').one() == (None, 'unknown')
         assert set(token_state(connection)) == {'tenant-a'}

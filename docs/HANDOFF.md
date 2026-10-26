@@ -187,6 +187,29 @@ inside its unfinished check. Fix provenance first with versioned semantics and
 explicit historical scalar-cache reconciliation, then add access receipts as a
 separate slice. See [audit evidence](VALIDATION.md#protected-access-request-provenance-prerequisite).
 
+The access provenance correction now has local acceptance. Four existing GET
+families use pinned private controls, exact live outbound captures and v3
+semantics. Reflected markers, extra credentials, incomplete captures and
+disclosing/malformed denials cannot confirm or pass. New confirmations require
+integer control version 3. Older v2 access-only claims become current unknowns;
+their original reports remain readable and unchanged.
+
+Schema 6 reconciles obsolete scalar caches transactionally without rebuilding
+schema-5 tables, changing archive bytes or suppressing existing generation
+triggers. Genuine current zero/partial evidence and independent prompt/tenant
+risk remain supported. The inventory gate now checks reconciliation before
+restoring its owned stale fixture caches for traversal and restart.
+
+Local coverage passes 4,694 cases, followed by 838 focused cases covering the
+final static phase-log privacy fix and 24 trusted HTTPS CLI cases. See
+[acceptance](VALIDATION.md#protected-access-v3-and-cache-policy-local-acceptance).
+Delivery CI is recorded on the implementation PR. The next external gate is
+the [self-contained native access/cache retest](access-provenance-retest.md),
+pinned to the merged revision after delivery checks pass. No private target
+configuration or broad tenant/model cohort rerun is required. Protected-access
+within-check receipts remain open; this prerequisite does not retain a finding
+from an interrupted unfinished access check.
+
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
 operator retest only when a merged runtime change needs real-service validation,

@@ -128,7 +128,7 @@ database URLs, or queue contents.
 ## Schema upgrades
 
 Stop the server and back up the SQLite database with a consistent SQLite backup
-operation before upgrading. Startup validates schema version 5 while holding the
+operation before upgrading. Startup validates schema version 6 while holding the
 dispatcher lock. An empty database is initialized automatically. Recognized
 unversioned layouts are the original `scan_session` and `discovered_agent` tables,
 those tables plus `scan_result`, or those tables plus `scan_result` and `scan_job`.
@@ -146,7 +146,7 @@ upgrades add `scan_template`, `scan_schedule`, and `scan_occurrence`. Exact vers
 columns without recreating existing schedule tables. Schema 4 already has those
 nullable columns. All recognized older layouts then install schema-5 inventory
 generation metadata. Fresh and recognized unversioned layouts initialize to
-version 5. An unstamped extra template/schedule table or a partial versioned
+version 6. An unstamped extra template/schedule table or a partial versioned
 layout is not a recognized upgrade path. See [saved template boundaries](scan-templates.md)
 and [finite schedule boundaries](scan-schedules.md).
 
@@ -158,7 +158,7 @@ Missing or unsupported evidence becomes null, and an unassessed snapshot's cache
 level becomes `unknown`. Snapshot aliases follow the API's explicit `asset_id` or
 row-ID fallback; malformed explicit aliases cannot supply a score.
 
-Only the two score-bearing tables are rebuilt. SQL copying preserves IDs and
+Only the pre-schema-4 nullable upgrade rebuilds the two score-bearing tables. SQL copying preserves IDs and
 stored JSON/text bytes; archived reports, findings, job/audit records, and other
 row fields are preserved. Accepted indexes are recreated from their original SQL.
 A failure during copying, index recreation, cache projection, or version stamping
@@ -185,6 +185,18 @@ invalidate cursors; report and observation writes always invalidate them.
 Startup validates the full trigger and reserved-index definitions; repeated
 startup does not regenerate unchanged tokens. Candidate indexes can still require
 cross-scan sorting, so the inventory reader also enforces work limits.
+
+Schema 6 keeps the recognized schema-5 tables, indexes and triggers. Its
+policy-only upgrade reprojects saved reports through current access semantics,
+changing only necessary scan/snapshot risk caches and snapshot risk levels.
+Unsupported v2 access-only scores become SQL NULL; genuine v3 zero and confirmed
+partial findings remain supported. Independent prompt/tenant evidence survives
+obsolete access passes. Archived reports, metadata, IDs and unrelated fields stay
+exact. Existing observation triggers invalidate only owners whose snapshot caches
+change. The source policy fingerprint also invalidates cursors from older code.
+Cache changes and the version-6 stamp share the upgrade transaction; failure
+rolls them back. Recognized schema-6 restart validates definitions without another
+cache refresh. This is a versioned upgrade, not continuous cache repair.
 
 Unknown tables, views, additional or altered triggers, expression indexes, additional constraints or unique indexes,
 `WITHOUT ROWID`/`STRICT` table options, explicit column collations or conflict policies,
@@ -215,7 +227,7 @@ parent bounds child output, kills/reaps timed-out children, and removes the
 temporary databases after success or failure. JSON includes `accepted`, each
 case's assertions, and bounded failure details; failure returns nonzero.
 
-All eleven cases include frozen schema 1/2/3/4 fixtures and a schema-5 fixture
+All thirteen cases include frozen schema 1/2/3/4/5 fixtures and a schema-6 fixture
 created through the real initializer. They contain completed evidence, agent snapshots, audit
 history, queued work, and previously active work. Templates and schedules are
 seeded where supported. After stopping and disposing seed connections, a read-only
@@ -229,11 +241,12 @@ allowed. A second restart must not change rows, evidence, or audit history.
 Successful upgrades assert null for unsupported cached scores, preserve a genuine
 assessed zero and a retained confirmed partial score, and allow only the documented
 score/level fields to change in existing completed rows. Archived report JSON and
-all other completed fields stay exact.
-The schema-4 case also proves no nullable-table rebuild occurs. Generation owners,
+all other completed fields stay exact. Natural generation changes from affected
+snapshot caches are checked separately. The schema-4 and schema-5 cases also
+prove no nullable-table rebuild occurs. Generation owners,
 token shape, progress stability, and unchanged restart generations are asserted.
 
-Negative cases verify exclusive ownership precedes initialization, schema 1/2/3
+Negative cases verify exclusive ownership precedes initialization, schema 1/2/3/5
 version-stamp failures roll back, future versions remain unchanged, and a restored
 copy missing a report is rejected before initialization even though its SQLite
 integrity check passes. An independent restore of the untouched backup must retain

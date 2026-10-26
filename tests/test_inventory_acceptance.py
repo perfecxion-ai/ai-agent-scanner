@@ -1,6 +1,6 @@
 """The public inventory gate owns its fixtures and fails closed on driver errors."""
 
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 import importlib.util
 import json
 import os
@@ -60,6 +60,10 @@ def test_complete_real_server_gate_isolated_from_operator_settings_and_alias_tmp
     assert output['assertions'] == list(gate.REQUIRED_ASSERTIONS)
     assert output['observation_count'] == 10000
     assert output['fixture_scope'] == 'repeated_observations_of_12_synthetic_assets'
+    assert output['schema_before'] == 4 and output['schema_after'] == output['schema_target'] == 6
+    assert output['cache_policy_upgrade'] == {
+        'scan_caches_reconciled': 12, 'observation_caches_reconciled': 10000,
+        'original_stale_scan_caches_restored': 12, 'original_stale_observation_caches_restored': 10000}
     assert output['server_exits'] == [{'phase': 'initial', 'returncode': 0}, {'phase': 'restart', 'returncode': 0}]
     assert sum(value for name, value in output['traversal_counts'].items() if name.endswith(':all')) == 10000
     assert sum(value for name, value in output['traversal_counts'].items() if name.endswith(':high')) == 2500
@@ -282,3 +286,92 @@ def test_missing_server_extra_has_a_clear_nonzero_result(monkeypatch, capsys):
     assert gate.main([]) == 1
     output = json.loads(capsys.readouterr().out)
     assert output['accepted'] is False and 'server extra' in output['hint']
+
+
+@pytest.fixture
+def policy_upgraded_fixture(monkeypatch):
+    from src.core.inventory_generation import register_inventory_metadata
+    from src.core.schema import initialize_schema
+    from tests.historical_schema import historical_metadata
+    monkeypatch.setattr(gate, 'OBSERVATIONS', 12)
+    with owned() as directory:
+        engine = create_engine('sqlite:///' + str(directory / 'fixture.sqlite'))
+        old = historical_metadata(version=4)
+        current = historical_metadata(version=4)
+        register_inventory_metadata(current)
+        expected = {organization: [] for organization in gate.ORGANIZATIONS}
+        try:
+            old.create_all(engine)
+            with engine.begin() as transaction:
+                transaction.execute(old.tables['schema_version'].insert().values(id=1, version=4))
+                for organization in gate.ORGANIZATIONS:
+                    for category in gate.CATEGORIES:
+                        identifier = organization + '-' + category
+                        report = gate.produce(identifier, category, private_values())
+                        transaction.execute(old.tables['scan_session'].insert().values(
+                            id=identifier, organization_id=organization, scan_name='Owned cache lifecycle',
+                            scan_type=report['scan_type'], status=report['status'], target_scope={}, scan_config={},
+                            overall_risk_score=99))
+                        transaction.execute(old.tables['scan_result'].insert().values(scan_id=identifier, result=report))
+                        observation = 'observation-' + identifier
+                        transaction.execute(old.tables['discovered_agent'].insert().values(
+                            id=observation, scan_id=identifier, agent_name='Owned cache lifecycle',
+                            agent_type='assistant', discovery_method='synthetic', risk_score=99, risk_level='critical',
+                            metadata={'asset_id': identifier + '-asset'}))
+                        expected[organization].append({'id': observation, **gate.descriptor(category)})
+                transaction.exec_driver_sql(gate.OPERATOR_INDEX)
+            original, definitions = gate.archive(directory), gate.definitions(directory)
+            initialize_schema(engine, current)
+            yield directory, original, definitions, expected, engine, current
+        finally:
+            engine.dispose()
+
+
+def test_policy_upgrade_is_checked_before_original_stale_caches_are_restored(policy_upgraded_fixture):
+    directory, original, definitions, expected, _, _ = policy_upgraded_fixture
+    assert gate.archive(directory) != original
+    outcome = gate.verify_upgrade_and_restore(directory, original, definitions, expected)
+    assert outcome == {'scan_caches_reconciled': 12, 'observation_caches_reconciled': 12,
+                       'original_stale_scan_caches_restored': 12, 'original_stale_observation_caches_restored': 12}
+    assert gate.archive(directory) == original
+
+
+@pytest.mark.parametrize('statement,code', [
+    ('UPDATE discovered_agent SET risk_score=99,risk_level=\'critical\'', 'upgrade_snapshot_cache_mismatch'),
+    ('UPDATE scan_session SET overall_risk_score=99', 'upgrade_scan_cache_mismatch'),
+    ("UPDATE discovered_agent SET agent_name='Changed outside cache'", 'upgrade_changed_noncache_rows_or_archived_json'),
+    ("UPDATE scan_result SET result='{}'", 'upgrade_changed_noncache_rows_or_archived_json'),
+    ('DROP INDEX operator_inventory_fixture', 'upgrade_changed_original_definitions'),
+    ('CREATE INDEX unexpected_policy_index ON discovered_agent(agent_name)', 'upgrade_added_unexpected_definitions'),
+], ids=['snapshot-cache', 'scan-cache', 'snapshot-noncache', 'archive-json', 'original-index', 'extra-index'])
+def test_stale_cache_restoration_cannot_hide_a_bad_upgrade(policy_upgraded_fixture, statement, code):
+    directory, original, definitions, expected, _, _ = policy_upgraded_fixture
+    with closing(gate.connection(directory, write=True)) as database, database:
+        database.execute(statement)
+    with pytest.raises(gate.GateFailure, match='^' + code + '$'):
+        gate.verify_upgrade_and_restore(directory, original, definitions, expected)
+
+
+@pytest.mark.parametrize('fault', ['skipped', 'noncache-write'])
+def test_stale_restore_requires_exact_original_rows(policy_upgraded_fixture, monkeypatch, fault):
+    directory, original, definitions, expected, _, _ = policy_upgraded_fixture
+    actual = gate.restore_stale_caches
+    def restore(directory, original):
+        if fault == 'noncache-write':
+            actual(directory, original)
+            with closing(gate.connection(directory, write=True)) as database, database:
+                database.execute("UPDATE discovered_agent SET agent_name='Unexpected restoration write'")
+    monkeypatch.setattr(gate, 'restore_stale_caches', restore)
+    with pytest.raises(gate.GateFailure, match='^owned_stale_cache_restore_changed_original_rows$'):
+        gate.verify_upgrade_and_restore(directory, original, definitions, expected)
+
+
+def test_schema_six_restart_keeps_reintroduced_stale_caches_and_generations(policy_upgraded_fixture):
+    from src.core.schema import initialize_schema
+    directory, original, definitions, expected, engine, metadata = policy_upgraded_fixture
+    gate.verify_upgrade_and_restore(directory, original, definitions, expected)
+    generations, definitions = gate.check_schema(directory), gate.definitions(directory)
+    initialize_schema(engine, metadata)
+    assert gate.archive(directory) == original
+    assert gate.check_schema(directory) == generations
+    assert gate.definitions(directory) == definitions

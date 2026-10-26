@@ -1,0 +1,884 @@
+{
+  "schema_version": "1.0",
+  "producer_identity": {
+    "identity_schema_version": "1.0",
+    "package_version": "1.2.0.dev0",
+    "component": "library",
+    "source": {
+      "scope": "scanner-python-v1",
+      "status": "available",
+      "sha256": "93b4ccdb3413ff76e6f60a3cb90fb85bce4cf9e819118c06332d35113c3f5811"
+    },
+    "server_app": {
+      "status": "not_applicable",
+      "sha256": null
+    },
+    "catalogs": {
+      "scope": "bundled_definitions",
+      "status": "available",
+      "baseline": {
+        "id": "baseline-prompt-v1",
+        "sha256": "b3288ac2726110e4f99c1e7ffc9198506482abd8b62a873677c3810e9a15b191",
+        "categories": 7,
+        "payloads": 70
+      },
+      "protected_disclosure": {
+        "id": "protected-disclosure-v1",
+        "sha256": "c6bd17fbffcc9e7345e510f38b92aac04323757347ea27ab6348cf61b929dd1f",
+        "categories": 7,
+        "payloads": 35,
+        "semantics": "nondisclosure-inconclusive-v2",
+        "pin": "5c221321ac314aa1d161ff054bb63a5ed695c960bdf9e87c2f0c196500496064"
+      }
+    }
+  },
+  "check_schema_version": "1.0",
+  "check_evidence_schema_version": "2.0",
+  "generated_at": "2026-10-25T12:00:00+00:00",
+  "scan_type": "security_only",
+  "status": "partial",
+  "transport_incomplete": false,
+  "risk_assessment_status": "partial",
+  "agents": [
+    {
+      "id": "owned-access-v2",
+      "name": "Owned access v2 fixture",
+      "type": "assistant",
+      "provider": "ollama",
+      "model": "owned-access-model",
+      "endpoint": "http://127.0.0.1:44551",
+      "discovery_method": "owned-fixture",
+      "evidence_context_id": "owned-access-v2-context",
+      "metadata": {},
+      "endpoint_redacted": false,
+      "security_status": "partial",
+      "vulnerabilities": [
+        {
+          "id": "beee6af6-9f4a-520e-8998-02dc60f2856b",
+          "agent_id": "owned-access-v2",
+          "vulnerability_type": "authentication_bypass",
+          "severity": "high",
+          "evidence_status": "confirmed",
+          "control_status": "authorized_marker_verified_and_invalid_credential_denied",
+          "protected_control_version": 2,
+          "title": "Authentication Bypass - No Authentication",
+          "description": "Agent allows access without proper authentication using No Authentication.",
+          "method": "No Authentication",
+          "headers_used": {},
+          "status_code": 200,
+          "response_excerpt": "[RESPONSE_TEXT_OMITTED]",
+          "timestamp": "2026-10-25T12:00:00+00:00",
+          "confidence": 0.9,
+          "remediation": "Implement proper authentication checks and validate all authorization headers.",
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bed8c87cfa61765579512ae7da39e1c3bb5cecd981880377d0752a5cfadb919b",
+          "evidence_context_id": "owned-access-v2-context"
+        }
+      ],
+      "observations": [],
+      "checks": [
+        {
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bed8c87cfa61765579512ae7da39e1c3bb5cecd981880377d0752a5cfadb919b",
+          "status": "failed",
+          "outcome": "confirmed",
+          "requests_attempted": 20,
+          "responses_evaluated": 3,
+          "reason": "Some required interactions failed or returned unusable responses",
+          "evidence_context_id": "owned-access-v2-context"
+        },
+        {
+          "rule_id": "prompt_injection.system_prompt_extraction",
+          "probe_id": "prompt_injection.system_prompt_extraction.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.instruction_bypass",
+          "probe_id": "prompt_injection.instruction_bypass.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.role_manipulation",
+          "probe_id": "prompt_injection.role_manipulation.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.dan_jailbreak",
+          "probe_id": "prompt_injection.dan_jailbreak.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.context_manipulation",
+          "probe_id": "prompt_injection.context_manipulation.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.injection_via_encoding",
+          "probe_id": "prompt_injection.injection_via_encoding.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.payload_injection",
+          "probe_id": "prompt_injection.payload_injection.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "weak_credentials",
+          "probe_id": "weak_credentials.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "weak_api_key",
+          "probe_id": "weak_api_key.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "authorization_bypass",
+          "probe_id": "authorization_bypass.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "no_rate_limiting",
+          "probe_id": "no_rate_limiting.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "insecure_session_management",
+          "probe_id": "insecure_session_management.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "pii_disclosure",
+          "probe_id": "pii_disclosure.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "tenant_isolation_violation",
+          "probe_id": "tenant_isolation_violation.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "data_retention",
+          "probe_id": "data_retention.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "privacy_transparency_issue",
+          "probe_id": "privacy_transparency_issue.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "information_disclosure_in_errors",
+          "probe_id": "information_disclosure_in_errors.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "unauthenticated_inference",
+          "probe_id": "unauthenticated_inference.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        }
+      ],
+      "check_evidence_schema_version": "2.0",
+      "check_evidence": [],
+      "check_evidence_run_id": "c7eb35ee-fda1-5187-9e25-2074f896b54f",
+      "risk_score": 70.0,
+      "risk_level": "high",
+      "risk_coverage_status": "partial",
+      "risk_scoring_policy": "severity-floor-v2"
+    }
+  ],
+  "security_results": [
+    {
+      "agent_id": "owned-access-v2",
+      "agent_name": "Owned access v2 fixture",
+      "type": "assistant",
+      "provider": "ollama",
+      "model": "owned-access-model",
+      "metadata": {},
+      "test_timestamp": "2026-10-25T12:00:00+00:00",
+      "vulnerabilities": [
+        {
+          "id": "beee6af6-9f4a-520e-8998-02dc60f2856b",
+          "agent_id": "owned-access-v2",
+          "vulnerability_type": "authentication_bypass",
+          "severity": "high",
+          "evidence_status": "confirmed",
+          "control_status": "authorized_marker_verified_and_invalid_credential_denied",
+          "protected_control_version": 2,
+          "title": "Authentication Bypass - No Authentication",
+          "description": "Agent allows access without proper authentication using No Authentication.",
+          "method": "No Authentication",
+          "headers_used": {},
+          "status_code": 200,
+          "response_excerpt": "[RESPONSE_TEXT_OMITTED]",
+          "timestamp": "2026-10-25T12:00:00+00:00",
+          "confidence": 0.9,
+          "remediation": "Implement proper authentication checks and validate all authorization headers.",
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bed8c87cfa61765579512ae7da39e1c3bb5cecd981880377d0752a5cfadb919b",
+          "evidence_context_id": "owned-access-v2-context"
+        }
+      ],
+      "observations": [],
+      "limitations": [
+        "Data retention requires verified expiry/deletion and session boundaries.",
+        "Prompt and tenant disclosure require operator-seeded protected canaries; nondisclosure is inconclusive.",
+        "Tenant findings require configured owner/[redacted]ed controls and an operator-at[redacted]ed authorization boundary.",
+        "Anonymous inference is an exposure observation, not proof of authorization bypass.",
+        "Authentication checks require explicit issued credentials, a protected response marker, and successful authorized/denied controls.",
+        "Some requests failed or were refused by transport policy."
+      ],
+      "overall_risk_score": 70.0,
+      "check_schema_version": "1.0",
+      "checks": [
+        {
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bed8c87cfa61765579512ae7da39e1c3bb5cecd981880377d0752a5cfadb919b",
+          "status": "failed",
+          "outcome": "confirmed",
+          "requests_attempted": 20,
+          "responses_evaluated": 3,
+          "reason": "Some required interactions failed or returned unusable responses",
+          "evidence_context_id": "owned-access-v2-context"
+        },
+        {
+          "rule_id": "prompt_injection.system_prompt_extraction",
+          "probe_id": "prompt_injection.system_prompt_extraction.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.instruction_bypass",
+          "probe_id": "prompt_injection.instruction_bypass.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.role_manipulation",
+          "probe_id": "prompt_injection.role_manipulation.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.dan_jailbreak",
+          "probe_id": "prompt_injection.dan_jailbreak.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.context_manipulation",
+          "probe_id": "prompt_injection.context_manipulation.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.injection_via_encoding",
+          "probe_id": "prompt_injection.injection_via_encoding.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "prompt_injection.payload_injection",
+          "probe_id": "prompt_injection.payload_injection.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "weak_credentials",
+          "probe_id": "weak_credentials.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "weak_api_key",
+          "probe_id": "weak_api_key.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "authorization_bypass",
+          "probe_id": "authorization_bypass.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "no_rate_limiting",
+          "probe_id": "no_rate_limiting.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "insecure_session_management",
+          "probe_id": "insecure_session_management.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "pii_disclosure",
+          "probe_id": "pii_disclosure.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "tenant_isolation_violation",
+          "probe_id": "tenant_isolation_violation.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "data_retention",
+          "probe_id": "data_retention.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "privacy_transparency_issue",
+          "probe_id": "privacy_transparency_issue.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "information_disclosure_in_errors",
+          "probe_id": "information_disclosure_in_errors.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        },
+        {
+          "rule_id": "unauthenticated_inference",
+          "probe_id": "unauthenticated_inference.sample",
+          "probe_version": "1:unexecuted",
+          "status": "skipped",
+          "outcome": "not_evaluated",
+          "requests_attempted": 0,
+          "responses_evaluated": 0,
+          "reason": "No finalized check evidence at checkpoint",
+          "evidence_context_id": null
+        }
+      ],
+      "check_evidence_schema_version": "2.0",
+      "check_evidence_run_id": "c7eb35ee-fda1-5187-9e25-2074f896b54f",
+      "check_evidence": [],
+      "status": "partial",
+      "endpoint": "http://127.0.0.1:44551",
+      "evidence_context_id": "owned-access-v2-context",
+      "risk_level": "high",
+      "risk_coverage_status": "partial",
+      "risk_scoring_policy": "severity-floor-v2"
+    }
+  ],
+  "risk_assessments": [
+    {
+      "agent_id": "owned-access-v2",
+      "agent_name": "Owned access v2 fixture",
+      "assessment_timestamp": "2026-10-25T12:00:00+00:00",
+      "overall_risk_score": 70.0,
+      "risk_level": "high",
+      "scoring_policy": "severity-floor-v2",
+      "score_basis": "Observed confirmed findings, not the probability that the target is safe",
+      "coverage_status": "partial",
+      "vulnerability_score": 70.0,
+      "exposure_score": 1.0,
+      "business_impact_score": 1.0,
+      "temporal_risk_factor": 1.0,
+      "total_vulnerabilities": 1,
+      "critical_vulnerabilities": 0,
+      "high_vulnerabilities": 1,
+      "medium_vulnerabilities": 0,
+      "low_vulnerabilities": 0,
+      "vulnerability_types": [
+        "authentication_bypass"
+      ],
+      "risk_summary": "Agent has 1 vulnerabilities (1 high severity vulnerabilities) including Authentication Bypass. Overall risk score: 70.0/100.",
+      "remediation_priorities": [
+        {
+          "priority": 1,
+          "vulnerability_id": "beee6af6-9f4a-520e-8998-02dc60f2856b",
+          "title": "Authentication Bypass - No Authentication",
+          "severity": "high",
+          "type": "authentication_bypass",
+          "remediation": "Implement proper authentication checks and validate all authorization headers.",
+          "estimated_effort": "High",
+          "business_justification": "HIGH PRIORITY: Prevents unauthorized access to sensitive AI capabilities and data. Immediate attention required."
+        }
+      ],
+      "compliance_implications": [
+        "NIST Cybersecurity Framework",
+        "PCI DSS Requirement 8"
+      ],
+      "threat_likelihood": "Medium",
+      "potential_impact": "Moderate",
+      "owasp_llm_top10": {
+        "framework": "OWASP LLM Top 10 (2025)",
+        "coverage_basis": "static_mapping_not_execution",
+        "categories": {
+          "LLM01": {
+            "name": "Prompt Injection",
+            "risk_level": "critical",
+            "test_coverage": "partial",
+            "findings_count": 0,
+            "findings": [],
+            "mitigations": [
+              "Implement input sanitization and validation",
+              "Use structured output formats to constrain responses",
+              "Apply least-privilege access for LLM tool integrations",
+              "Implement output filtering and content safety layers",
+              "Separate instruction context from user-supplied data",
+              "Use adversarial [redacted]ing with diverse prompt injection payloads"
+            ],
+            "references": [
+              "https://genai.owasp.org/llmrisk/llm01-prompt-injection/"
+            ]
+          },
+          "LLM02": {
+            "name": "Sensitive Information Disclosure",
+            "risk_level": "high",
+            "test_coverage": "partial",
+            "findings_count": 0,
+            "findings": [],
+            "mitigations": [
+              "Implement PII detection and redaction in outputs",
+              "Sanitize error messages to prevent information disclosure",
+              "Apply data loss prevention (DLP) filters on LLM outputs",
+              "Use differential privacy techniques during training",
+              "Restrict access to sensitive data in retrieval pipelines"
+            ],
+            "references": [
+              "https://genai.owasp.org/llmrisk/llm02-sensitive-information-disclosure/"
+            ]
+          },
+          "LLM03": {
+            "name": "Supply Chain Vulnerabilities",
+            "risk_level": "high",
+            "test_coverage": "planned",
+            "findings_count": 0,
+            "findings": [],
+            "mitigations": [
+              "Verify model provenance and integrity (checksums, signatures)",
+              "Audit third-party plugins and tools before integration",
+              "Implement SBOM (Software Bill of Materials) for AI components",
+              "Use trusted model registries with access controls",
+              "Scan dependencies for known vulnerabilities"
+            ],
+            "references": [
+              "https://genai.owasp.org/llmrisk/llm03-supply-chain-vulnerabilities/"
+            ]
+          },
+          "LLM04": {
+            "name": "Data and Model Poisoning",
+            "risk_level": "high",
+            "test_coverage": "planned",
+            "findings_count": 0,
+            "findings": [],
+            "mitigations": [
+              "Validate and sanitize training data sources",
+              "Implement anomaly detection on training data pipelines",
+              "Use adversarial training to improve robustness",
+              "Monitor model behavior for drift and unexpected changes",
+              "Maintain data lineage and provenance tracking"
+            ],
+            "references": [
+              "https://genai.owasp.org/llmrisk/llm04-data-and-model-poisoning/"
+            ]
+          },
+          "LLM05": {
+            "name": "Improper Output Handling",
+            "risk_level": "high",
+            "test_coverage": "partial",
+            "findings_count": 0,
+            "findings": [],
+            "mitigations": [
+              "Treat LLM output as untrusted \u2014 validate before use",
+              "Apply output encoding appropriate to the consumption context",
+              "Implement content security policies for LLM-generated content",
+              "Sandbox code execution from LLM outputs",
+              "Limit LLM output to expected formats using structured output"
+            ],
+            "references": [
+              "https://genai.owasp.org/llmrisk/llm05-improper-output-handling/"
+            ]
+          },
+          "LLM06": {
+            "name": "Excessive Agency",
+            "risk_level": "critical",
+            "test_coverage": "partial",
+            "findings_count": 0,
+            "findings": [],
+            "mitigations": [
+              "Apply least-privilege to all LLM tool integrations",
+              "Require human-in-the-loop for destructive or sensitive actions",
+              "Implement rate limiting and action budgets for agents",
+              "Log and audit all tool invocations and side effects",
+              "Define explicit permission boundaries for agent capabilities"
+            ],
+            "references": [
+              "https://genai.owasp.org/llmrisk/llm06-excessive-agency/"
+            ]
+          },
+          "LLM07": {
+            "name": "System Prompt Leakage",
+            "risk_level": "medium",
+            "test_coverage": "partial",
+            "findings_count": 0,
+            "findings": [],
+            "mitigations": [
+              "Avoid embedding secrets or sensitive logic in system prompts",
+              "Implement prompt extraction detection and response filtering",
+              "Use defensive prompting techniques (meta-instructions)",
+              "Monitor for system prompt content in outputs"
+            ],
+            "references": [
+              "https://genai.owasp.org/llmrisk/llm07-system-prompt-leakage/"
+            ]
+          },
+          "LLM08": {
+            "name": "Vector and Embedding Weaknesses",
+            "risk_level": "medium",
+            "test_coverage": "planned",
+            "findings_count": 0,
+            "findings": [],
+            "mitigations": [
+              "Validate and sanitize documents before embedding",
+              "Implement access controls on vector database queries",
+              "Monitor retrieval results for anomalous patterns",
+              "Use embedding watermarking for provenance tracking",
+              "Apply relevance scoring thresholds on retrieved context"
+            ],
+            "references": [
+              "https://genai.owasp.org/llmrisk/llm08-vector-and-embedding-weaknesses/"
+            ]
+          },
+          "LLM09": {
+            "name": "Misinformation",
+            "risk_level": "medium",
+            "test_coverage": "planned",
+            "findings_count": 0,
+            "findings": [],
+            "mitigations": [
+              "Implement retrieval-augmented generation for factual grounding",
+              "Add confidence scores and source attribution to outputs",
+              "Use fact-checking pipelines for critical applications",
+              "Implement human review for high-stakes outputs",
+              "Train users to verify AI-generated information"
+            ],
+            "references": [
+              "https://genai.owasp.org/llmrisk/llm09-misinformation/"
+            ]
+          },
+          "LLM10": {
+            "name": "Unbounded Consumption",
+            "risk_level": "medium",
+            "test_coverage": "partial",
+            "findings_count": 0,
+            "findings": [],
+            "mitigations": [
+              "Implement rate limiting and request throttling",
+              "Set token and cost budgets per user/session",
+              "Monitor for abnormal usage patterns",
+              "Implement circuit breakers for agent loops",
+              "Set maximum context window utilization limits"
+            ],
+            "references": [
+              "https://genai.owasp.org/llmrisk/llm10-unbounded-consumption/"
+            ]
+          }
+        },
+        "summary": {
+          "total_categories": 10,
+          "categories_with_findings": 0,
+          "categories_with_declared_checks": 6,
+          "categories_planned": 4
+        }
+      },
+      "mitre_atlas": {
+        "framework": "MITRE ATLAS",
+        "coverage_basis": "static_mapping_not_execution",
+        "techniques": {
+          "AML.T0051": {
+            "name": "LLM Prompt Injection",
+            "tactic": "Initial Access",
+            "test_coverage": "partial",
+            "findings_count": 0
+          },
+          "AML.T0054": {
+            "name": "LLM Jailbreak",
+            "tactic": "Defense Evasion",
+            "test_coverage": "partial",
+            "findings_count": 0
+          },
+          "AML.T0056": {
+            "name": "LLM Meta Prompt Extraction",
+            "tactic": "Collection",
+            "test_coverage": "partial",
+            "findings_count": 0
+          },
+          "AML.T0025": {
+            "name": "Exfiltration via ML Inference API",
+            "tactic": "Exfiltration",
+            "test_coverage": "partial",
+            "findings_count": 0
+          },
+          "AML.T0024": {
+            "name": "Exfiltration via Cyber Means",
+            "tactic": "Exfiltration",
+            "test_coverage": "partial",
+            "findings_count": 1
+          },
+          "AML.T0020": {
+            "name": "Poison Training Data",
+            "tactic": "Persistence",
+            "test_coverage": "planned",
+            "findings_count": 0
+          },
+          "AML.T0043": {
+            "name": "Craft Adversarial Data",
+            "tactic": "ML Attack Staging",
+            "test_coverage": "partial",
+            "findings_count": 0
+          },
+          "AML.T0040": {
+            "name": "ML Model Inference API Access",
+            "tactic": "Initial Access",
+            "test_coverage": "partial",
+            "findings_count": 0
+          },
+          "AML.T0044": {
+            "name": "Full ML Model Access",
+            "tactic": "Collection",
+            "test_coverage": "partial",
+            "findings_count": 1
+          },
+          "AML.T0048": {
+            "name": "Denial of ML Service",
+            "tactic": "Impact",
+            "test_coverage": "partial",
+            "findings_count": 0
+          }
+        },
+        "summary": {
+          "total_techniques": 10,
+          "techniques_with_findings": 2,
+          "techniques_with_declared_checks": 9
+        }
+      }
+    }
+  ],
+  "summary": {
+    "agents_discovered": 1,
+    "vulnerabilities_found": 1,
+    "critical_risks": 0,
+    "overall_risk_score": 70.0,
+    "agents_tested": 0,
+    "agents_failed": 0,
+    "agents_skipped": 0,
+    "agents_partial": 1,
+    "agents_not_tested": 0,
+    "agents_risk_assessed": 1,
+    "agents_risk_not_assessed": 0,
+    "checks_completed": 0,
+    "checks_skipped": 18,
+    "checks_failed": 1,
+    "checks_unfinished": 0
+  },
+  "checkpoint": {
+    "version": "3.0",
+    "sequence": 5,
+    "coverage": "confirmed_observations_and_finalized_checks"
+  }
+}

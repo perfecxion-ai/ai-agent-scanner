@@ -279,7 +279,11 @@ def test_keyword_text_in_benign_quoted_default_free_ddl_comments_is_ignored(migr
 @pytest.mark.parametrize('stage', ['create', 'copy', 'drop', 'rename', 'index', 'cache', 'stamp'])
 def test_every_rebuild_stage_rolls_back_schema_rows_and_version(migration, stage):
     module, engine = migration
-    seed(engine)
+    if stage == 'cache':
+        from tests.legacy_observation_fixtures import legacy_report
+        seed(engine, legacy_report('subject-partial-final'))
+    else:
+        seed(engine)
     with engine.begin() as connection:
         connection.exec_driver_sql('CREATE INDEX retained ON discovered_agent (scan_id)')
     before = raw_state(engine)

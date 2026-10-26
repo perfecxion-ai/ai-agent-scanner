@@ -16,6 +16,9 @@ from yarl import URL
 
 from src.core.request_evidence import bind_response, cancel_request, capture_body, close_request, reserved_request
 from src.core.request_provenance import RequestCapture
+from src.core.access_evidence import (
+    AccessEvidenceError, guard_access_request, observe_access_request,
+)
 from src.core.tenant_evidence import (
     TenantEvidenceError, guard_tenant_request, observe_tenant_request,
 )
@@ -152,6 +155,7 @@ class BoundedResponse:
         self.body = None
         self._evidence_token = evidence_token
         self.__request_evidence = request_evidence
+        self._request_active = True
         bind_response(evidence_token, self)
 
     def __getattr__(self, name):
@@ -236,11 +240,16 @@ class SafeSession:
         evidence_token = None
         capture = None
         tenant_observed = False
+        access_observed = False
         try:
             try:
                 guard_tenant_request(method, url, kwargs, getattr(self.session, 'headers', {}))
             except TenantEvidenceError:
                 raise TransportPolicyError('Protected tenant evidence conflicts with request material') from None
+            try:
+                guard_access_request(method, url, kwargs, getattr(self.session, 'headers', {}))
+            except AccessEvidenceError:
+                raise TransportPolicyError('Protected access evidence conflicts with request material') from None
             self.budget.reserve(url)
             evidence_token = reserved_request()
             if 'timeout' in kwargs:
@@ -253,7 +262,13 @@ class SafeSession:
                     request_evidence = capture.seal(response)
                     observe_tenant_request(request_evidence)
                     tenant_observed = True
-                    yield BoundedResponse(response, self.budget, evidence_token, request_evidence)
+                    observe_access_request(request_evidence)
+                    access_observed = True
+                    bounded = BoundedResponse(response, self.budget, evidence_token, request_evidence)
+                    try:
+                        yield bounded
+                    finally:
+                        bounded._request_active = False
                 except asyncio.CancelledError:
                     cancel_request(evidence_token)
                     raise
@@ -282,6 +297,9 @@ class SafeSession:
             if (capture is not None and not tenant_observed
                     and (capture.headers is not None or capture.failed)):
                 observe_tenant_request(None)
+            if (capture is not None and not access_observed
+                    and (capture.headers is not None or capture.failed)):
+                observe_access_request(None)
             close_request(evidence_token)
 
     def get(self, url, **kwargs):

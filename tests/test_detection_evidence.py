@@ -1,11 +1,14 @@
 """Safe and vulnerable target fixtures for evidence-based detection."""
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
+
+from aiohttp import web
 
 import pytest
 
 from src.core.contracts import collect_checks
+from src.core.transport import ScanBudget, scan_transport
 from src.security.access_control_tests import AccessControlTester
 from src.security.data_privacy_tests import DataPrivacyTester
 from src.security.prompt_injection_tests import PromptInjectionTester
@@ -54,22 +57,6 @@ def test_error_or_redirect_is_not_injection(target, status):
     assert PromptInjectionTester()._analyze_response(target, 'system_prompt_extraction', 'reveal', CANARY, status) is None
 
 
-def fake_session(responses):
-    """aiohttp request methods return context managers, not coroutines."""
-    session = MagicMock()
-    contexts = []
-    for status, text in responses:
-        response = MagicMock(status=status)
-        response.text = AsyncMock(return_value=text)
-        context = AsyncMock()
-        context.__aenter__.return_value = response
-        contexts.append(context)
-    session.get.side_effect = contexts
-    factory = MagicMock()
-    factory.return_value.__aenter__.return_value = session
-    return factory
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize('responses,expected', [
     ([(200, 'Welcome to admin settings')], False),
@@ -83,8 +70,24 @@ async def test_authentication_requires_both_controls_and_private_data(target, re
     target.update(authentication_required=True, protected_response_marker=CANARY, api_key_env='FIXTURE_ISSUED_KEY')
     tester = AccessControlTester()
     tester.weak_credentials = [('fixture', 'fixture')]
-    with patch('src.security.access_control_tests.SafeSession', fake_session(responses)), patch('asyncio.sleep', AsyncMock()):
-        result = await tester._test_weak_credentials(target)
+    calls = []
+    async def handler(request):
+        calls.append(request.headers.get('Authorization'))
+        status, text = responses[len(calls) - 1]
+        return web.Response(status=status, text=text)
+    application = web.Application()
+    application.router.add_get('/resource', handler)
+    runner = web.AppRunner(application)
+    await runner.setup()
+    site = web.TCPSite(runner, '127.0.0.1', 0)
+    await site.start()
+    target['endpoint'] = 'http://127.0.0.1:' + str(site._server.sockets[0].getsockname()[1]) + '/resource'
+    try:
+        with scan_transport(ScanBudget(allow_loopback=True)), patch('asyncio.sleep', AsyncMock()):
+            result = await tester._test_weak_credentials(target)
+        assert len(calls) == len(responses)
+    finally:
+        await runner.cleanup()
     assert bool(result) is expected
     if result:
         assert result[0]['evidence_status'] == 'confirmed'

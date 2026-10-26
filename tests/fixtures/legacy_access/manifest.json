@@ -1,0 +1,205 @@
+{
+  "producer_revision": "6af7fa2cd6d2a2b1e3ff67a12ff348df092f7413",
+  "source_sha256": {
+    "src/core/access_probe_policy.py": "1dc9e488ff6a3a2fc741410dbf1d2ccf618690ca636596524415a0c7880179ef",
+    "src/core/contracts.py": "3bdfa3144d39bcedc155e3df48d4e1bed5f70f6e738399334bc31f3061f0620f",
+    "src/core/pipeline.py": "91e4063d6f5d78358b2b1b109b3608aa611db0f4651b9e2a8e9d526508d900ae",
+    "src/core/risk_projection.py": "a8572e0c6f31cae76c117a8b83b632a8be6bfb877f2ee967ba2874363d66cb41",
+    "src/core/request_provenance.py": "4616bb47866646ea28d2d5d8d772e9f6f8b3f051afa7a8dee565701f4dad04ad",
+    "src/core/transport.py": "c2cf12f9c4332f1f7fb2ffd5d864b271c07cccb7e26c84926248e5b841da88b3",
+    "src/security/access_control_tests.py": "7dd276c0a797b31c2fbe472f8ae3e6a86539746011013337564c86f5cac0b20c",
+    "src/security/security_engine.py": "522cb2873bdb81c457b8cb84cfa4bd210d17f7cc85a0da62a29306e2611e7e06"
+  },
+  "archives": {
+    "zero": {
+      "sha256": "61cc4cf5ab94acf7523e53d9f315bcb1808047992f7c95ca12fb2a2cd1cd3af8",
+      "original_score": 0.0,
+      "original_level": "minimal",
+      "original_status": "completed",
+      "original_coverage": "sampled",
+      "run_id": "1d604c46-e780-5681-8a53-3f32d2057348",
+      "finding_ids": [],
+      "receipt_ids": [],
+      "checks": [
+        {
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bed8c87cfa61765579512ae7da39e1c3bb5cecd981880377d0752a5cfadb919b",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 20,
+          "responses_evaluated": 20
+        },
+        {
+          "rule_id": "weak_credentials",
+          "probe_id": "weak_credentials.sample",
+          "probe_version": "1:8e6a179b87e8ca16a76ff737d07509677b769116a0a55f0227eff07396585be4",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 7,
+          "responses_evaluated": 7
+        },
+        {
+          "rule_id": "weak_api_key",
+          "probe_id": "weak_api_key.sample",
+          "probe_version": "1:4dc764677d1975c536ea08ab929a32456b4692b9d6f2ab13f3177f20b5fc57cc",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 32,
+          "responses_evaluated": 32
+        },
+        {
+          "rule_id": "authorization_bypass",
+          "probe_id": "authorization_bypass.sample",
+          "probe_version": "1:cafba51b8599965f9b2200cae698367b9fcb9fc64e384a72c3c1074c1efed40f",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 3,
+          "responses_evaluated": 3
+        }
+      ],
+      "http_requests": 62,
+      "get_requests": 62,
+      "post_requests": 0,
+      "checkpoint_events": 8
+    },
+    "high": {
+      "sha256": "d03ef3d41002ff0b87ca22845a125da29f96624d05f31aa54dbdcc446d7b84e4",
+      "original_score": 70.0,
+      "original_level": "high",
+      "original_status": "completed",
+      "original_coverage": "sampled",
+      "run_id": "9d1e7a1e-5380-5065-afe7-0b93e267b239",
+      "finding_ids": [
+        "80bb7999-d8d7-578d-a485-099c9448fcbd"
+      ],
+      "receipt_ids": [],
+      "checks": [
+        {
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bed8c87cfa61765579512ae7da39e1c3bb5cecd981880377d0752a5cfadb919b",
+          "status": "completed",
+          "outcome": "confirmed",
+          "requests_attempted": 20,
+          "responses_evaluated": 20
+        }
+      ],
+      "http_requests": 20,
+      "get_requests": 20,
+      "post_requests": 0,
+      "checkpoint_events": 5
+    },
+    "partial": {
+      "sha256": "6f076effbd3d7623e0762d09758f45824abda1a8f9cee6284a81ed90279e5386",
+      "original_score": 70.0,
+      "original_level": "high",
+      "original_status": "partial",
+      "original_coverage": "partial",
+      "run_id": "c7eb35ee-fda1-5187-9e25-2074f896b54f",
+      "finding_ids": [
+        "beee6af6-9f4a-520e-8998-02dc60f2856b"
+      ],
+      "receipt_ids": [],
+      "checks": [
+        {
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bed8c87cfa61765579512ae7da39e1c3bb5cecd981880377d0752a5cfadb919b",
+          "status": "failed",
+          "outcome": "confirmed",
+          "requests_attempted": 20,
+          "responses_evaluated": 3
+        }
+      ],
+      "http_requests": 20,
+      "get_requests": 20,
+      "post_requests": 0,
+      "checkpoint_events": 5
+    },
+    "mixed": {
+      "sha256": "1f8e7387f2c53ef336346fdbeaddc6734bbfb5a4685354a61d532253f1e1e30d",
+      "original_score": 90.0,
+      "original_level": "critical",
+      "original_status": "completed",
+      "original_coverage": "sampled",
+      "run_id": "3438802d-3a86-5d9f-95e0-ea3479dde1e2",
+      "finding_ids": [
+        "1d4bcf1f-7cde-5107-9db8-6d3496a86aaa",
+        "137811f0-0de2-5843-abb1-b0f9c2985507",
+        "bd20c576-42d8-5dd0-b591-268d77b044de",
+        "1b043600-b19d-5cf3-97e4-7ab8cff802ab",
+        "a5b6307b-8463-54c6-9ae8-f20b8b54296c",
+        "66d2de5a-ddee-5a7b-abab-65a430a0f4e8"
+      ],
+      "receipt_ids": [
+        "d4c1812b-71d9-52ae-b9f8-f50fdb905064",
+        "c0c6fd98-bbd5-57fa-89b6-9d9078f018ee",
+        "cad31905-570a-57e3-a7fc-6169bca7280c",
+        "95e538b6-4b8f-58cf-ac15-a1e35d5e646a",
+        "1f7f29a6-309c-5111-869c-0340f9b4754c",
+        "2e1cf44a-e273-5214-8e4f-9f027f49344b"
+      ],
+      "checks": [
+        {
+          "rule_id": "prompt_injection.system_prompt_extraction",
+          "probe_id": "prompt_injection.system_prompt_extraction.sample",
+          "probe_version": "1:af3ea7067adf74e3f47d77cff86101060e730e55b621328b8f44a6cc73873c10",
+          "status": "completed",
+          "outcome": "confirmed",
+          "requests_attempted": 5,
+          "responses_evaluated": 5
+        },
+        {
+          "rule_id": "authentication_bypass",
+          "probe_id": "authentication_bypass.sample",
+          "probe_version": "1:bed8c87cfa61765579512ae7da39e1c3bb5cecd981880377d0752a5cfadb919b",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 20,
+          "responses_evaluated": 20
+        },
+        {
+          "rule_id": "weak_credentials",
+          "probe_id": "weak_credentials.sample",
+          "probe_version": "1:8e6a179b87e8ca16a76ff737d07509677b769116a0a55f0227eff07396585be4",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 7,
+          "responses_evaluated": 7
+        },
+        {
+          "rule_id": "weak_api_key",
+          "probe_id": "weak_api_key.sample",
+          "probe_version": "1:4dc764677d1975c536ea08ab929a32456b4692b9d6f2ab13f3177f20b5fc57cc",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 32,
+          "responses_evaluated": 32
+        },
+        {
+          "rule_id": "authorization_bypass",
+          "probe_id": "authorization_bypass.sample",
+          "probe_version": "1:cafba51b8599965f9b2200cae698367b9fcb9fc64e384a72c3c1074c1efed40f",
+          "status": "completed",
+          "outcome": "passed",
+          "requests_attempted": 3,
+          "responses_evaluated": 3
+        },
+        {
+          "rule_id": "tenant_isolation_violation",
+          "probe_id": "tenant_isolation_violation.sample",
+          "probe_version": "1:1a8f8a57f1c1c2a26e22fb782402b5befa30640747699afc1f056acc50d25f10",
+          "status": "completed",
+          "outcome": "confirmed",
+          "requests_attempted": 8,
+          "responses_evaluated": 8
+        }
+      ],
+      "http_requests": 75,
+      "get_requests": 62,
+      "post_requests": 13,
+      "checkpoint_events": 21
+    }
+  }
+}

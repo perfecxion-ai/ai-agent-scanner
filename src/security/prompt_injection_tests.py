@@ -158,7 +158,7 @@ class PromptInjectionTester:
                 return []
             validate_prompt_suite_agents([agent])
         
-        self.logger.info(f"Testing agent {agent.get('name', 'unknown')} for prompt injection vulnerabilities")
+        self.logger.info('Testing prompt injection checks')
         
         # Test each category of injection attacks
         for category, payloads in self.injection_payloads.items():
