@@ -877,6 +877,119 @@ repeat. R1.4a observation traversal is accepted within this fixture scope;
 distinct-asset identity and indexed risk materialization remain open. R1.5a
 build/producer identity proceeds locally before tenant/access receipt retention.
 
+### Supplied native tenant interruption acceptance
+
+Two independent read-only reviews accept the supplied scoped gate at
+`6af7fa2cd6d2a2b1e3ff67a12ff348df092f7413`. This reviews operator-supplied
+captures rather than independently rerunning cloud targets. Captures record
+Python 3.11.2 and SQLite 3.40.1; setup attests Debian 12. Private artifacts,
+drivers, infrastructure identifiers and input values remain outside Git.
+
+All four original reports pass trusted scan/evidence validation and canonical
+risk projection. Their producer identities and bundled-catalog fingerprints
+match the pinned CLI source. Offline SARIF preserves receipt/finding links and
+marks incomplete execution unsuccessful. Report bytes remain unchanged. All
+66 captured expectation records agree with the reports and real exits.
+
+| Case | CLI exit/status | Tenant evidence | Canonical risk |
+| --- | --- | --- | --- |
+| Subject leak then stall | 1 / failed | One receipt at ordinal 2 with counters 3/3; unfinished check | 90/critical, partial |
+| Attack leak then stall | 1 / failed | One receipt at ordinal 4, attack index 0, counters 4/4; unfinished check | 90/critical, partial |
+| Held leak with contaminated denied control | 1 / partial | No receipt/finding; failed check, 3 attempted and 2 evaluated | Null/unknown |
+| Defended | 0 / completed | No receipt/finding; completed inconclusive check, 8/8 | Null/unknown |
+
+Both stalled cases reach the intended later tenant request before their outer
+deadline; captured elapsed times are 181 and 180 seconds. Each retains exactly
+one linked original finding and receipt under ledger `2.0` and checkpoint `3.0`,
+with `checks_unfinished: 1` and no invented terminal tenant check. Control proofs
+carry ordinals `[1, 2, 3]` and statuses `[200, 200, 403]`. In the held-rejected
+case the tested control actually returns both records before a marker-bearing
+denial prevents promotion. No tenant check passes, and no negative outcome
+acquires a numeric assessment.
+
+The secret-free fixture counters reconcile 45/46/55/60 POST arrivals: ordinary
+POSTs plus the intended 4/5/3/8 tenant requests. They deliberately exclude the
+ordinary GET probes visible in check accounting. Four CLI cases use two-principal
+deterministic HTTPS fixtures with configured private-CA trust and hostname
+verification. TLS 1.3 verification is captured. This tests the ordinary CLI
+workflow rather than seeding scanner reports or database findings.
+
+The native recovery capture records two passing tests with warnings as errors
+and exit zero; the outer job exits zero too. Detailed SIGKILL, committed receipt,
+single recovery event, no-replay and authenticated API assertions follow the
+pinned repository test source. Those tests use owned loopback HTTP library
+workers, despite the supplied narrative calling that request HTTPS. Their
+transport is separate from the four external CLI HTTPS cases. They do not admit
+private tenant input through the server API or establish CLI crash-file recovery.
+
+Acceptance qualifications:
+
+- The privacy capture covers 23 files, while the final bundle has 33 substantive
+  files plus 37 AppleDouble sidecars. Eight JSON files include four scan reports
+  and four auxiliary captures. The supplied helpers themselves contain configured
+  synthetic labels and environment-reference names; a claim that every returned
+  file omits those values is unsupported.
+- The supplied sweep checks 15 available values and known encoded forms, but
+  omits generated invalid credentials, environment-reference names and the native
+  recovery fixture's private basis. Actual ephemeral values are unavailable for
+  an independent repeat sweep. Logs are sanitized before checking. This supports
+  the recorded capture sweep rather than general secret absence or a privacy
+  certification. Native owner/tested keys and markers are fixed public test
+  constants; they are distinct from the CLI job's generated values.
+- The sweep skips unreadable files and missing environment values and tolerates
+  invalid JSON. It runs before final wrappers, helper sources and the narrative
+  are added. Some setup, copy, sanitizer and cleanup failures are unchecked or
+  suppressed; no universal failure-propagation claim is justified. Trust-store
+  and hosts cleanup completion remains operator attestation.
+- Scanner JSON outputs have captured mode 0600. The original wrapper listing
+  shows an output directory at 0755 and a job log at 0644, even though copies in
+  the supplied archive are private. Do not infer uniformly owner-only original
+  wrapper surfaces from the delivered copies or local extraction modes.
+- Fixture seeding, authorization relationships, source checkout cleanliness and
+  exact helper execution remain partly operator attestations. Deterministic
+  fixture correctness is not model sensitivity, target provenance, deployed
+  durability, or enterprise readiness. Counters log intended responses even if
+  socket writes fail; they are not independent packet-delivery records. Raw logs
+  and an independent before/after report hash chain are unavailable.
+
+No scanner blocker was found in this gate. The qualifications need no broad
+repeat. R1.2c tenant retention is accepted within this scope; protected-access
+provenance/receipts, private server tenant admission and CLI crash files remain
+separate work. No supplied driver was executed during review, and no operator
+database, registry or cloud target was accessed.
+
+### Protected-access request-provenance prerequisite
+
+Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose
+a prerequisite before access observations become durable. No operator database,
+registry, external target or supplied private driver was used.
+
+In one fixture no protected record exists: the target echoes request headers,
+while a fresh invalid credential receives 403. A lower-level client hook adds
+the configured synthetic marker after planned-request preflight. In another
+fixture an extra wire header carries the issued credential, silently authorizing
+the purported anonymous/malformed probes. Both actual `SafeSession` pipelines
+make 20 GETs and produce 18 confirmed authentication-bypass findings with
+canonical 70/high, under current ledger `2.0` and checkpoint `3.0`. The first
+mistakes request reflection for protected data; the second mistakes credentialed
+access for bypass. Current access checks do not validate the actual captured
+request before accepting response evidence.
+
+A separate genuinely protected fixture passes authorized/denied controls,
+discloses its independently seeded record on the first anonymous probe, then
+stalls request 4. Cancellation inside that same check retains zero findings and
+null risk, because results remain in its local list until completion. This
+confirms the later receipt requirement but does not justify preserving the
+false-confirmation paths above.
+
+Close actual-request provenance first: pin private inputs before controls,
+verify complete live GET captures and selected credential roles, exclude marker
+transmission and extra issued credentials, and refuse missing or contaminated
+provenance. Keep existing protocols, frozen samples and budgets. Tightened
+semantics require explicit versioning, conservative historical risk/resolution
+eligibility and transactional scalar-cache reconciliation; original archives
+remain unchanged. Protected-access receipts remain a separate increment.
+
 ### Tenant observation retention local acceptance
 
 R1.2c extends normal CLI/Python tenant checks with mixed observation ledger `2.0`

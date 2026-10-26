@@ -165,15 +165,27 @@ SQLite dispatcher-kill recovery and authenticated recovered-result reads pass.
 The combined local coverage gate passes 4,366 cases with warnings as errors;
 95 focused cases cover the final literal adapter-declaration hardening. See
 [acceptance and limits](VALIDATION.md#tenant-observation-retention-local-acceptance).
-Required delivery CI is recorded on the implementation PR.
-
-The next external gate is the scoped
-[tenant interruption retest](tenant-progress-retest.md), pinned to the merged
-revision after delivery checks pass. Use the existing HTTPS lab for leak-then-stall,
-held-candidate rejection and defended nondisclosure; no broad model/cohort rerun
-is needed. Private server tenant admission, protected-access observation receipts,
+PR #77 merged as `6af7fa2` with all eight PR and post-merge checks passing.
+The supplied native tenant interruption retest now passes scoped acceptance:
+both stalled CLI cases retain 90/critical partial evidence, a contaminated denied
+control withholds the held candidate, defended nondisclosure stays null, and both
+native dispatcher recovery tests pass. All 66 captured expectations agree with
+the four original reports and real exits. Privacy, cleanup, original wrapper
+modes and native HTTP/HTTPS claims have explicit qualifications. See
+[native acceptance](VALIDATION.md#supplied-native-tenant-interruption-acceptance).
+No broad repeat is needed. Private server tenant admission, protected-access observation receipts,
 CLI process-crash files, distinct-asset inventory and later roadmap slices remain
 open. Do not treat this fixture acceptance as enterprise readiness.
+
+The next protected-access audit reproduces a prerequisite before durable access
+observations: a transport-added marker reflected by a record-free fixture, or an
+extra issued credential silently authorizing nominally anonymous probes, each
+produces 18 confirmed findings and canonical 70/high over 20 actual GETs at
+`6af7fa2`. Access checks inspect planned material rather than the complete actual
+capture. A separate genuine leak-then-stall case also loses the first finding
+inside its unfinished check. Fix provenance first with versioned semantics and
+explicit historical scalar-cache reconciliation, then add access receipts as a
+separate slice. See [audit evidence](VALIDATION.md#protected-access-request-provenance-prerequisite).
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned

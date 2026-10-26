@@ -39,7 +39,7 @@ proposed calls and observed actions are distinct outcomes.
 | Slice | Finding and work | Required acceptance | State |
 | --- | --- | --- | --- |
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Merged in PR #64; local, independent, and all eight PR/post-merge CI gates passed |
-| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence and prompt receipts merged in PRs #65/#67. R1.2c tenant receipts pass local HTTP/HTTPS, CLI export, dispatcher-kill and recovered-API gates; delivery CI is recorded on its PR. Scoped native HTTPS interruption acceptance is next. Protected-access receipts and CLI crash recovery remain separate gates |
+| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence, prompt receipts and tenant receipts merged in PRs #65/#67/#77. R1.2c passes local, independent, all eight PR/post-merge CI checks and qualified native CLI HTTPS interruption and HTTP library recovery acceptance. Protected-access provenance/receipts and CLI crash recovery remain separate gates |
 | R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Merged in PR #72 with all local, independent, and eight PR/post-merge CI gates passed; scoped native reconstructed-fixture upgrade/restart accepted with recorded qualifications |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a merged in PR #74 with local/independent/CI acceptance and a qualified native Python 3.11.2/SQLite 3.40.1 traversal/upgrade retest. Distinct-asset identity and source-bound risk indexes remain open |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | R1.5a development/content identity passes local and independent gates; required delivery CI is recorded on its PR. Release checksums, SBOM, dependency/build attestation and deployed upgrade acceptance remain open |
@@ -181,10 +181,22 @@ focused cases cover literal adapter-declaration hardening. Actual HTTPS/CLI
 interruption and library dispatcher recovery retain genuine 90/critical partial
 evidence without replay or secret retention. See
 [acceptance](VALIDATION.md#tenant-observation-retention-local-acceptance) and the
-[scoped native gate](tenant-progress-retest.md). Delivery CI is recorded on its
-PR. Protected-access receipts, private server tenant profiles and CLI crash files
-remain separate increments. Do not expand the native gate into another cohort
-accuracy claim.
+[scoped native gate](tenant-progress-retest.md). PR #77 merged as `6af7fa2` with
+all eight PR and post-merge checks passing. The supplied four-case native gate
+and two recovery tests now pass with recorded harness/privacy qualifications;
+see [native acceptance](VALIDATION.md#supplied-native-tenant-interruption-acceptance).
+Protected-access provenance/receipts, private server tenant profiles and CLI
+crash files remain separate increments. Do not expand the native gate into
+another cohort accuracy claim.
+Before protected-access receipts, close the independently reproduced actual-request
+provenance gap: a transport-added marker or issued credential can make current
+access probes falsely confirm an unauthorized read. Static planned-request checks
+do not establish what was transmitted. Pin controls privately, verify complete
+actual GET provenance and selected credential roles, and issue new evidence
+semantics. Preserve raw historical reports while withholding unsupported current
+risk/resolution; reconcile older SQL caches explicitly under the supported schema
+upgrade path. This prerequisite does not add receipts, new GET protocols or server
+admission. See [reproduction](VALIDATION.md#protected-access-request-provenance-prerequisite).
 The prompt audit also reproduces false confirmations from case-changed outbound
 values and transport-added headers. PR #67 now requires a complete private
 request snapshot to exclude these marker sources before confirmation and receipt
