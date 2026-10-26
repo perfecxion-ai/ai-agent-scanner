@@ -41,7 +41,7 @@ The supported model adapters require JSON containing nonempty generated text.
 HTTP success with an HTML login page, empty model output, or an error envelope
 does not establish a passed check. Intentional HTTP 401/403 responses in access
 probes count as evaluated denials, rather than failed model calls, only when
-their response bodies do not contain the configured protected marker. A
+their bounded bodies and headers satisfy the current marker-absence guard. A
 denied control leaking the marker invalidates the negative oracle.
 
 Probe versions contain a SHA-256 digest of the selected public samples,
@@ -94,11 +94,14 @@ model is distinct from missing context. Current confirmations require matching
 control provenance, response status, and covered resource in addition to the
 matching check. Failed checks may retain genuine findings despite cleanup errors;
 their recorded interaction counters are not guaranteed wire-request totals.
-New findings carry integer `protected_control_version: 2` so the fixed control
+New findings require integer `protected_control_version: 3` so the fixed control
 description remains verifiable when a known candidate credential redacts part of
 that description. The reference requires a recognized probe and compatible literal
-redaction, not arbitrary text. Existing exact control descriptions remain valid
-without this additive field; altered descriptions without it stay unverified.
+redaction, not arbitrary text. Missing, obsolete, Boolean and floating-point tags
+cannot establish current confirmation. Old v2 claims remain structurally readable
+with their original archived values; current risk and resolution require v3
+semantics. Unsupported old positives leave their asset's current risk unknown;
+old passes alone do not erase independent supported prompt/tenant evidence.
 New authorization findings include a nonsecret `protected_path_index` into the
 frozen eight-path sample. The recognized probe version binds the catalog and
 selected subset. This reference preserves resource identity when privacy filtering
@@ -174,7 +177,7 @@ Existing saved reports and exported copies are not retroactively sanitized.
 
 ## Scalar cache storage
 
-SQLite schemas 4 and 5 store unknown scan and snapshot scores as SQL NULL, with no zero
+SQLite schemas 4 through 6 store unknown scan and snapshot scores as SQL NULL, with no zero
 default. Supported assessed zero remains 0.0. New checkpoint and terminal writers
 derive these scalar caches from the same canonical report projection used by API
 reads. Recognized layouts predating schema 4 migrate the caches transactionally while
@@ -185,6 +188,11 @@ Cache interpretation also applies byte, UTF-8, and depth limits. Rejected
 material leaves unknown scalar values while API reads continue to project the
 saved report. Scalar caches alone cannot establish a finding or exhaustive filter.
 See [schema and rollback boundaries](jobs.md#schema-upgrades).
+Schema 6 explicitly reconciles older access-policy caches. It changes only
+necessary scalar risk/level values and the version stamp; existing observation
+triggers naturally invalidate affected owners' cursor generations. Reports,
+metadata, IDs and unrelated rows remain exact. Restarting recognized schema 6
+does not run another cache reconciliation or repair arbitrary direct writes.
 
 ## Inventory observations
 

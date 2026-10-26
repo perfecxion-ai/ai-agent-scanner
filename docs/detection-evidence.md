@@ -66,7 +66,7 @@ evaluated. [Finalized-check checkpoints](jobs.md#finalized-check-checkpoints)
 retain earlier checks through later termination. Findings still inside the
 unfinished check are not covered by that persistence contract.
 
-V2 access markers must use exactly `[A-Za-z0-9_.~-]{16,128}`. No trimming,
+V3 access markers must use exactly `[A-Za-z0-9_.~-]{16,128}`. No trimming,
 decoding, case conversion, or other normalization is used for response matching.
 Previously accepted arbitrary strings outside this grammar are now refused
 before requests. The restriction excludes header and JSON fragments that could
@@ -76,11 +76,25 @@ Protected-access URLs must be HTTP(S) without user information, query parameters
 fragments, or percent escapes. Markers must not overlap public target fields,
 credential values, normalized URLs, or probe material, including fixed client
 headers and rendered request lines. Collision checks also reject case variants
-of that public/request material. Reflected request content is not protected
-evidence. Baseline text and issued credentials are never finding
+of that public/request material. V3 additionally verifies the complete actual
+GET while its response is live: exact resource, empty body, Host, selected
+credential header and bounded expected headers. Unknown or incomplete captures,
+cookies, extra credentials and reflected markers cannot confirm or pass. Marker
+transmission in an earlier scan request taints later controls. Issued keys,
+markers and references are pinned before the first checkpoint; environment
+changes during a scan do not silently change the tested principal.
+Reflected request content is not protected evidence. Baseline text and issued credentials are never finding
 fields. Configure opaque synthetic markers separately from credentials.
 
-The `authorized-and-denied-resource-controls-v2` definition changes probe
+Denied controls and decisive denied probes must exclude the marker from their
+bounded bodies and headers. Case variants and decoded JSON are checked
+conservatively for absence; positive matching remains exact. Malformed,
+duplicate-key, nonfinite, over-depth or oversized JSON, invalid text encodings
+and binary denials cannot establish absence. The JSON bound is 16 containers and
+8,192 visited nodes. These finite samples do not prove absence under arbitrary
+content transformations.
+
+The `authorized-and-denied-resource-controls-v3` definition changes probe
 versions for all four check groups. Records using earlier control definitions
 remain readable but cannot establish current risk or verified resolution, even
 when both compared records share an obsolete version. Current projections require
@@ -88,6 +102,7 @@ recognized control semantics, matching asset context, and valid sample accountin
 Custom protected-access sample catalogs are unverified until supported by this
 contract; their archived observations are not deleted. See
 [historical evidence handling](result-contracts.md) for mixed-evidence limits.
+Schema 6 reconciles obsolete scalar caches without rewriting those reports.
 Keep the public `evidence_context_id` stable only while the tested resource,
 authorization policy, and protected fixture remain the same.
 
