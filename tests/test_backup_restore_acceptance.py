@@ -51,7 +51,7 @@ def test_snapshot_quotes_hostile_fixture_identifiers():
         assert rows['audit_event'] == [(1,)]
 
 
-@pytest.mark.parametrize('version', [1, 2, 3, 4])
+@pytest.mark.parametrize('version', [1, 2, 3, 4, 5])
 def test_historical_seed_never_reads_live_orm_metadata(version):
     class UnavailableLiveMetadata:
         @property
@@ -64,11 +64,13 @@ def test_historical_seed_never_reads_live_orm_metadata(version):
             acceptance.seed(server, engine, version)
             with engine.connect() as connection:
                 assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == version
-                assert connection.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='trigger'").all() == []
-                assert 'inventory_generation' not in inspect(connection).get_table_names()
+                triggers = dict(connection.exec_driver_sql(
+                    "SELECT name,sql FROM sqlite_master WHERE type='trigger'").all())
+                assert triggers == (TRIGGER_DEFINITIONS if version == 5 else {})
+                assert ('inventory_generation' in inspect(connection).get_table_names()) is (version == 5)
                 for table, name in [('scan_session', 'overall_risk_score'), ('discovered_agent', 'risk_score')]:
                     column = next(value for value in inspect(connection).get_columns(table) if value['name'] == name)
-                    assert column['nullable'] is (version == 4) and column['default'] is None
+                    assert column['nullable'] is (version >= 4) and column['default'] is None
         finally:
             engine.dispose()
 
@@ -83,13 +85,13 @@ def test_current_seed_uses_initializer_and_installs_recognized_triggers(monkeypa
         initialized.append(candidate)
         return original(engine, candidate)
     monkeypatch.setattr(schema, 'initialize_schema', initialize)
-    with owned_directory('v5') as directory:
+    with owned_directory('v6') as directory:
         engine = create_engine('sqlite:///' + str(directory / 'source.sqlite'))
         try:
-            acceptance.seed(server, engine, 5)
+            acceptance.seed(server, engine, 6)
             assert initialized == [metadata]
             with engine.connect() as connection:
-                assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == 5
+                assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == schema.SCHEMA_VERSION
                 assert dict(connection.exec_driver_sql(
                     "SELECT name,sql FROM sqlite_master WHERE type='trigger'").all()) == TRIGGER_DEFINITIONS
                 values = connection.exec_driver_sql('SELECT organization_id,generation FROM inventory_generation').all()

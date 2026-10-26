@@ -14,7 +14,7 @@ from src.core.inventory_generation import (
 )
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 BASE_TABLES = frozenset({"scan_session", "discovered_agent"})
 LEGACY_LAYOUTS = (BASE_TABLES, BASE_TABLES | {"scan_result"},
                   BASE_TABLES | {"scan_result", "scan_job"})
@@ -23,6 +23,7 @@ VERSION_TWO_TABLES = VERSION_ONE_TABLES | {"scan_template"}
 VERSION_THREE_TABLES = VERSION_TWO_TABLES | {"scan_schedule", "scan_occurrence"}
 VERSION_FOUR_TABLES = VERSION_THREE_TABLES
 VERSION_FIVE_TABLES = VERSION_FOUR_TABLES | {INVENTORY_GENERATION_TABLE}
+VERSION_SIX_TABLES = VERSION_FIVE_TABLES
 _NULLABLE_SCORES = {("scan_session", "overall_risk_score"), ("discovered_agent", "risk_score")}
 _INVALID_JSON = object()
 _DDL_QUOTES = re.compile(r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^\]]*\]|--[^\r\n]*|/\*[\s\S]*?\*/")
@@ -271,8 +272,8 @@ def _migrate_risk_values(connection, metadata):
     with connection.execute(statement) as rows:
         for identifier, raw in rows:
             summary, _ = project_stored_risk(_decode(raw))
-            connection.execute(update(scans).where(scans.c.id == identifier).values(
-                overall_risk_score=summary["overall_risk_score"]))
+            _update_changed_cache(connection, scans, identifier, {
+                "overall_risk_score": summary["overall_risk_score"]})
     current_scan, projected = object(), {}
     statement = select(snapshots.c.id, snapshots.c.scan_id, _bounded_blob(snapshots.c.metadata)).order_by(
         snapshots.c.scan_id, snapshots.c.id)
@@ -284,8 +285,19 @@ def _migrate_risk_values(connection, metadata):
             stored = _decode(raw)
             score, level = ((None, "unknown") if stored is _INVALID_JSON else
                             snapshot_stored_risk(projected, identifier, stored))
-            connection.execute(update(snapshots).where(snapshots.c.id == identifier).values(
-                risk_score=score, risk_level=level))
+            _update_changed_cache(connection, snapshots, identifier, {
+                "risk_score": score, "risk_level": level})
+
+
+def _update_changed_cache(connection, table, identifier, values):
+    # Read only Boolean comparisons, so malformed oversized scalar values do not
+    # become Python allocations. SQLite IS NOT handles nullable caches exactly.
+    changes = connection.execute(select(*(
+        table.c[name].is_distinct_from(value) for name, value in values.items()
+    )).where(table.c.id == identifier)).one()
+    changed = {name: value for (name, value), differs in zip(values.items(), changes, strict=True) if differs}
+    if changed:
+        connection.execute(update(table).where(table.c.id == identifier).values(**changed))
 
 
 def initialize_schema(engine, metadata):
@@ -293,7 +305,7 @@ def initialize_schema(engine, metadata):
     if engine.dialect.name != "sqlite":
         raise SchemaError("Schema initialization currently supports SQLite only")
     _validate_metadata(metadata, engine.dialect)
-    expected = VERSION_FIVE_TABLES
+    expected = VERSION_SIX_TABLES
     with engine.connect() as connection:
         connection.exec_driver_sql("BEGIN IMMEDIATE")
         try:
@@ -305,11 +317,12 @@ def initialize_schema(engine, metadata):
             if "schema_version" in names:
                 _validate_tables(connection, {"schema_version"}, 3)
                 rows = connection.execute(select(metadata.tables["schema_version"])).all()
-                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, 2, 3, 4, 5):
+                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, 2, 3, 4, 5, 6):
                     raise SchemaError("Unsupported database schema version")
                 version = rows[0][1]
                 layouts = {1: VERSION_ONE_TABLES, 2: VERSION_TWO_TABLES,
-                           3: VERSION_THREE_TABLES, 4: VERSION_FOUR_TABLES, 5: VERSION_FIVE_TABLES}
+                           3: VERSION_THREE_TABLES, 4: VERSION_FOUR_TABLES,
+                           5: VERSION_FIVE_TABLES, 6: VERSION_SIX_TABLES}
                 if names != layouts[version]:
                     raise SchemaError("Versioned database has missing or unexpected tables")
                 _validate_tables(connection, names, version)
@@ -325,6 +338,12 @@ def initialize_schema(engine, metadata):
                     _migrate_risk_values(connection, metadata)
                 if version < 5:
                     install_inventory_generation(connection, metadata)
+                if version in (4, 5):
+                    # Policy-only refresh: archives and recognized schema 5 DDL
+                    # stay unchanged. Existing observation triggers invalidate
+                    # only owners whose snapshot caches actually change.
+                    _migrate_risk_values(connection, metadata)
+                if version < SCHEMA_VERSION:
                     connection.execute(update(metadata.tables["schema_version"]).where(
                         metadata.tables["schema_version"].c.id == 1).values(version=SCHEMA_VERSION))
             else:
