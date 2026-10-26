@@ -7,9 +7,9 @@ import json
 from types import MappingProxyType
 
 
-ACCESS_CONTROL_VERSION = 'authorized-and-denied-resource-controls-v2'
+ACCESS_CONTROL_VERSION = 'authorized-and-denied-resource-controls-v3'
 ACCESS_CONTROL_STATUS = 'authorized_marker_verified_and_invalid_credential_denied'
-PROTECTED_CONTROL_VERSION = 2
+PROTECTED_CONTROL_VERSION = 3
 PUBLIC_ACCESS_FIELDS = ('protected_control_version', 'protected_path_index')
 PROTECTED_ACCESS_RULES = frozenset({
     'authentication_bypass', 'weak_credentials', 'weak_api_key', 'authorization_bypass',
@@ -167,9 +167,7 @@ def _protected_path_matches(finding, current):
 
 def _protected_controls_match(finding):
     status = finding.get('control_status')
-    if 'protected_control_version' not in finding:
-        return status == ACCESS_CONTROL_STATUS
-    version = finding['protected_control_version']
+    version = finding.get('protected_control_version')
     return (type(version) is int and version == PROTECTED_CONTROL_VERSION
             and _literal_redaction_matches(status, ACCESS_CONTROL_STATUS))
 

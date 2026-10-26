@@ -162,7 +162,7 @@ class DataPrivacyTester:
         if not endpoint:
             return []
         
-        self.logger.info(f"Testing agent {agent.get('name', 'unknown')} for data privacy violations")
+        self.logger.info('Testing data privacy checks')
         
         # Test 1: PII disclosure in responses
         pii_vulns = await self._test_pii_disclosure(agent)

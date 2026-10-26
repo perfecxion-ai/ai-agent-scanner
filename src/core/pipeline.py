@@ -14,6 +14,7 @@ from src.core.transport import current_budget, scan_transport, ScanBudget
 from src.core.redaction import collect_secrets, redact_secrets
 from src.core.risk_projection import project_agent_risk
 from src.core.access_probe_policy import PUBLIC_ACCESS_FIELDS
+from src.core.access_evidence import access_evidence_context, access_secrets
 from src.core.prompt_evidence_policy import PUBLIC_EVIDENCE_FIELDS, has_evidence_contract
 from src.core.tenant_evidence import tenant_evidence_context, tenant_secrets
 from src.core.tenant_probe_policy import PUBLIC_TENANT_KEYS
@@ -100,7 +101,9 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
         if early_agent_validator:
             early_agent_validator(observations)
         preparation.enter_context(tenant_evidence_context(observations))
+        preparation.enter_context(access_evidence_context(observations))
         secrets.update(tenant_secrets())
+        secrets.update(access_secrets())
         # Validators may attach protected evidence or resolve model configuration.
         secrets.update(collect_secrets(observations))
         secrets.update(key for agent in observations if (key := resolve_api_key(agent)))

@@ -8,6 +8,7 @@ from yarl import URL
 from src.core.redaction import contains_literal
 from src.core.request_provenance import known_request_excludes_canary
 from src.core.tenant_evidence import get_tenant_evidence
+from src.core.access_evidence import get_access_evidence
 
 
 SUPPORTED_PROVIDERS = {'openai', 'openai-compatible', 'vllm', 'ollama', 'anthropic', 'google', 'gemini'}
@@ -26,6 +27,9 @@ def resolve_api_key(agent):
         return context.tested_api_key
     if 'tenant_evidence' in agent:
         return None
+    access = get_access_evidence(agent)
+    if access is not None and access.reference is not None:
+        return access.issued_key
     endpoint = urlsplit(agent.get('endpoint') or '')
     reference = agent.get('api_key_env')
     if reference:
