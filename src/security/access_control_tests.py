@@ -28,7 +28,10 @@ from typing import List, Dict, Any, Optional
 from urllib.parse import urljoin, urlsplit
 import uuid
 from datetime import datetime, timezone
-from src.core.contracts import checked, has_canary, record_interaction, usable_model_response
+from src.core.contracts import (
+    AccessObservation, CheckpointError, begin_access_controls, checked, ensure_evidence_active,
+    has_canary, observe_access_response, record_interaction, usable_model_response,
+)
 from src.core.access_probe_policy import (
     ACCESS_CONTROL_STATUS, DEFAULT_SENSITIVE_PATHS, DEFAULT_TEST_API_KEYS,
     DEFAULT_WEAK_CREDENTIALS, PROTECTED_ACCESS_PATHS, PROTECTED_CONTROL_VERSION, PUBLIC_ACCESS_FIELDS,
@@ -168,24 +171,40 @@ def _denied_without_marker(response, text, marker):
 
 @asynccontextmanager
 async def _protected_response(endpoint, headers):
-    """A cleanup error cannot replace a cancellation observed in the body."""
-    cancelled = None
+    """Secondary cleanup errors cannot replace fatal evidence delivery failures."""
+    interrupted = None
     try:
+        ensure_evidence_active()
         async with SafeSession(timeout=model_request_timeout()) as session:
             try:
                 async with session.get(endpoint, headers=headers, allow_redirects=False) as response:
                     try:
+                        ensure_evidence_active()
                         yield response
-                    except asyncio.CancelledError as error:
-                        cancelled = error
+                        ensure_evidence_active()
+                    except (asyncio.CancelledError, CheckpointError) as error:
+                        interrupted = error
                         raise
-            except asyncio.CancelledError as error:
-                cancelled = error
+            except (asyncio.CancelledError, CheckpointError) as error:
+                interrupted = error
                 raise
+        ensure_evidence_active()
     except BaseException:
-        if cancelled is not None:
-            raise cancelled
+        if interrupted is not None:
+            raise interrupted
+        ensure_evidence_active()
         raise
+
+
+async def _access_observation(response, agent, *, modern, phase='probe', **indices):
+    observed = await observe_access_response(response, agent=agent, phase=phase, **indices)
+    ensure_evidence_active()
+    if observed is None and not modern:
+        return None
+    if not isinstance(observed, AccessObservation) or not modern:
+        raise CheckpointError()
+    return observed
+
 
 class AccessControlTester:
     """
@@ -340,37 +359,49 @@ class AccessControlTester:
             {'headers': {'X-User-Role': 'admin'}, 'name': 'X-User-Role Header Injection'},
         ]
 
-        if not await self._has_access_controls(
+        controls = await self._has_access_controls(
                 agent, agent['endpoint'], agent['protected_response_marker'],
-                [_protected_headers(test['headers']) for test in bypass_tests]):
+                [_protected_headers(test['headers']) for test in bypass_tests])
+        if not controls:
             return []
+        modern = isinstance(controls, AccessObservation)
         
-        for test in bypass_tests:
+        for sample_index, test in enumerate(bypass_tests):
+            ensure_evidence_active()
             if not access_evidence_usable(agent):
                 break
             try:
-                vuln = await self._test_auth_bypass_method(agent, test)
+                vuln = await self._test_auth_bypass_method(agent, test, sample_index=sample_index, modern=modern)
                 if vuln:
                     vulnerabilities.append(vuln)
                 
                 await asyncio.sleep(0.5)  # Rate limiting
                 
+            except CheckpointError:
+                raise
             except Exception:
+                ensure_evidence_active()
                 record_interaction(False)
                 self.logger.debug("Auth bypass test failed")
                 continue
+            ensure_evidence_active()
         
         return vulnerabilities
     
     async def _test_auth_bypass_method(self, agent: Dict[str, Any], 
-                                     test: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+                                     test: Dict[str, Any], *, sample_index=None, modern=False) -> Optional[Dict[str, Any]]:
         """Probe one method after the group's fresh protected-resource controls."""
         
         endpoint = agent.get('endpoint')
+        retained = None
         try:
             headers = _protected_headers(test['headers'])
             async with _protected_response(endpoint, headers) as response:
                 response_text = await response.text()
+                observed = await _access_observation(response, agent, modern=modern, sample_index=sample_index)
+                if isinstance(observed, AccessObservation):
+                    retained = observed.findings[0] if observed.findings else None
+                    return retained
                 proven = verify_access_response(response, agent=agent, endpoint=endpoint, headers=headers)
                 record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
                                    proven and _denied_without_marker(response, response_text, agent['protected_response_marker']))
@@ -394,10 +425,13 @@ class AccessControlTester:
                         'remediation': "Implement proper authentication checks and validate all authorization headers."
                     }
                         
+        except CheckpointError:
+            raise
         except Exception:
+            ensure_evidence_active()
             record_interaction(False)
             self.logger.debug("Bypass test failed")
-            return None
+            return retained
         
         return None
     
@@ -413,13 +447,16 @@ class AccessControlTester:
             return []
         candidate_headers = [_protected_headers({'Authorization': 'Basic ' + base64.b64encode(
             f'{username}:{password}'.encode()).decode()}) for username, password in samples]
-        if not await self._has_access_controls(
+        controls = await self._has_access_controls(
                 agent, endpoint, agent['protected_response_marker'],
-                candidate_headers + [f'{username}:{password}' for username, password in samples]):
+                candidate_headers + [f'{username}:{password}' for username, password in samples])
+        if not controls:
             return []
+        modern = isinstance(controls, AccessObservation)
         
         # Test basic authentication with common credentials
-        for username, password in samples:
+        for sample_index, (username, password) in enumerate(samples):
+            ensure_evidence_active()
             if not access_evidence_usable(agent):
                 break
             try:
@@ -429,10 +466,15 @@ class AccessControlTester:
                 async with _protected_response(endpoint, headers) as response:
                         
                         text = await response.text()
-                        proven = verify_access_response(response, agent=agent, endpoint=endpoint, headers=headers)
-                        record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
-                                           proven and _denied_without_marker(response, text, agent['protected_response_marker']))
-                        if proven and self._is_successful_bypass(response.status, text, agent.get('protected_response_marker')):
+                        observed = await _access_observation(response, agent, modern=modern, sample_index=sample_index)
+                        if isinstance(observed, AccessObservation):
+                            vulnerabilities.extend(observed.findings)
+                        proven = (verify_access_response(response, agent=agent, endpoint=endpoint, headers=headers)
+                                  if observed is None else False)
+                        if observed is None:
+                            record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
+                                               proven and _denied_without_marker(response, text, agent['protected_response_marker']))
+                        if observed is None and proven and self._is_successful_bypass(response.status, text, agent.get('protected_response_marker')):
                             vulnerabilities.append({
                                 'id': str(uuid.uuid4()),
                                 'agent_id': agent.get('id'),
@@ -453,10 +495,14 @@ class AccessControlTester:
                 
                 await asyncio.sleep(1)  # Rate limiting
                 
+            except CheckpointError:
+                raise
             except Exception:
+                ensure_evidence_active()
                 record_interaction(False)
                 self.logger.debug("Credential test failed")
                 continue
+            ensure_evidence_active()
         
         return vulnerabilities
     
@@ -471,29 +517,40 @@ class AccessControlTester:
                       for headers in self._api_key_headers(key)]
         if not candidates:
             return []
-        if not await self._has_access_controls(
-                agent, endpoint, agent['protected_response_marker'], candidates):
+        controls = await self._has_access_controls(agent, endpoint, agent['protected_response_marker'], candidates)
+        if not controls:
             return []
+        modern = isinstance(controls, AccessObservation)
         
         # Test various API key weaknesses
-        for api_key in self.test_api_keys[:5]:  # Test first 5
+        for sample_index, api_key in enumerate(self.test_api_keys[:5]):  # Test first 5
+            ensure_evidence_active()
             if not access_evidence_usable(agent):
                 break
             try:
                 # Test different API key header formats
                 header_variations = self._api_key_headers(api_key)
                 
-                for headers in header_variations:
+                for header_index, headers in enumerate(header_variations):
+                    ensure_evidence_active()
                     if not access_evidence_usable(agent):
                         break
                     selected_headers = _protected_headers(headers)
                     async with _protected_response(endpoint, selected_headers) as response:
                             
                             text = await response.text()
-                            proven = verify_access_response(response, agent=agent, endpoint=endpoint, headers=selected_headers)
-                            record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
-                                               proven and _denied_without_marker(response, text, agent['protected_response_marker']))
-                            if proven and self._is_successful_bypass(response.status, text, agent.get('protected_response_marker')):
+                            observed = await _access_observation(response, agent, modern=modern,
+                                                                 sample_index=sample_index, header_index=header_index)
+                            if isinstance(observed, AccessObservation):
+                                vulnerabilities.extend(observed.findings)
+                                if observed.findings:
+                                    break
+                            proven = (verify_access_response(response, agent=agent, endpoint=endpoint, headers=selected_headers)
+                                      if observed is None else False)
+                            if observed is None:
+                                record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
+                                                   proven and _denied_without_marker(response, text, agent['protected_response_marker']))
+                            if observed is None and proven and self._is_successful_bypass(response.status, text, agent.get('protected_response_marker')):
                                 vulnerabilities.append({
                                     'id': str(uuid.uuid4()),
                                     'agent_id': agent.get('id'),
@@ -515,10 +572,14 @@ class AccessControlTester:
                     
                     await asyncio.sleep(0.3)
                 
+            except CheckpointError:
+                raise
             except Exception:
+                ensure_evidence_active()
                 record_interaction(False)
                 self.logger.debug("API key test failed")
                 continue
+            ensure_evidence_active()
         
         return vulnerabilities
 
@@ -541,6 +602,7 @@ class AccessControlTester:
         
         # Test path traversal and privilege escalation
         for path in self.sensitive_paths[:8]:
+            ensure_evidence_active()
             if not access_evidence_usable(agent):
                 break
             marker = agent.get('protected_path_markers', {}).get(path)
@@ -548,19 +610,29 @@ class AccessControlTester:
                 continue
             try:
                 test_url = urljoin(endpoint.rstrip('/'), path)
-                if not await self._has_access_controls(agent, test_url, marker, []):
+                path_index = PROTECTED_ACCESS_PATHS.index(path) if path in PROTECTED_ACCESS_PATHS else None
+                controls = await self._has_access_controls(agent, test_url, marker, [],
+                                                          protected_path_index=path_index)
+                if not controls:
                     continue
+                modern = isinstance(controls, AccessObservation)
                 
                 headers = _protected_headers({})
                 async with _protected_response(test_url, headers) as response:
                         
                         response_text = await response.text()
-                        proven = verify_access_response(response, agent=agent, endpoint=test_url, headers=headers)
-                        record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
-                                           proven and _denied_without_marker(response, response_text, marker))
+                        observed = await _access_observation(response, agent, modern=modern,
+                                                             protected_path_index=path_index)
+                        if isinstance(observed, AccessObservation):
+                            vulnerabilities.extend(observed.findings)
+                        proven = (verify_access_response(response, agent=agent, endpoint=test_url, headers=headers)
+                                  if observed is None else False)
+                        if observed is None:
+                            record_interaction(proven and (response.status in (401, 403) or 200 <= response.status < 300),
+                                               proven and _denied_without_marker(response, response_text, marker))
                         
                         # Check for successful access to restricted areas
-                        if proven and self._is_admin_access(response.status, response_text, marker):
+                        if observed is None and proven and self._is_admin_access(response.status, response_text, marker):
                             vulnerabilities.append({
                                 'id': str(uuid.uuid4()),
                                 'agent_id': agent.get('id'),
@@ -584,10 +656,14 @@ class AccessControlTester:
                 
                 await asyncio.sleep(0.5)
                 
+            except CheckpointError:
+                raise
             except Exception:
+                ensure_evidence_active()
                 record_interaction(False)
                 self.logger.debug("Authorization bypass test failed")
                 continue
+            ensure_evidence_active()
         
         return vulnerabilities
     
@@ -699,9 +775,30 @@ class AccessControlTester:
         
         return vulnerabilities
     
-    async def _has_access_controls(self, agent, endpoint, marker, probe_values) -> bool:
+    async def _has_access_controls(self, agent, endpoint, marker, probe_values, *, protected_path_index=None):
         """Verify the exact resource with issued and invalid credentials, without reuse."""
         try:
+            ensure_evidence_active()
+            public_agent = {name: value for name, value in agent.items()
+                            if name not in ('protected_response_marker', 'protected_path_markers',
+                                            'system_prompt_canary', 'cross_tenant_canary')}
+            if (contains_literal(public_agent, marker)
+                    or marker.casefold() in json.dumps(public_agent).casefold()):
+                record_interaction(False)
+                return False
+            plan = begin_access_controls(agent, protected_path_index=protected_path_index)
+            if plan is not None:
+                if plan.endpoint != str(URL(endpoint)):
+                    raise CheckpointError()
+                for phase, headers in (('authorized_control', plan.authorized_headers),
+                                       ('denied_control', plan.denied_headers)):
+                    async with _protected_response(plan.endpoint, dict(headers)) as response:
+                        await response.text()
+                        observed = await _access_observation(response, agent, modern=True, phase=phase,
+                                                             protected_path_index=protected_path_index)
+                        if not observed.valid:
+                            return False
+                return observed
             # Only explicit credential references authorize a baseline. Provider
             # defaults must not silently send an operator credential to this GET.
             context = get_access_evidence(agent)
@@ -748,7 +845,10 @@ class AccessControlTester:
                               and _denied_without_marker(response, text, marker))
                     record_interaction(denied, denied)
                     return denied
+        except CheckpointError:
+            raise
         except Exception:
+            ensure_evidence_active()
             record_interaction(False)
             return False
 

@@ -8,20 +8,25 @@ from src.core.tenant_observation_policy import (
     MAX_TENANT_CHECK_EVIDENCE, TENANT_EVIDENCE_SOURCE, TENANT_RECEIPT_FIELDS, validate_tenant_receipts,
 )
 from src.core.tenant_probe_policy import tenant_claim
+from src.core.access_observation_policy import ACCESS_EVIDENCE_SOURCE, MAX_ACCESS_CHECK_EVIDENCE, access_claim, receipt_fields, validate_access_receipts
 
 
-CHECK_EVIDENCE_SCHEMA_VERSION = '2.0'
-SUPPORTED_CHECK_EVIDENCE_SCHEMA_VERSIONS = frozenset({'1.0', '2.0'})
+CHECK_EVIDENCE_SCHEMA_VERSION = '3.0'
+SUPPORTED_CHECK_EVIDENCE_SCHEMA_VERSIONS = frozenset({'1.0', '2.0', '3.0'})
 MAX_PROMPT_CHECK_EVIDENCE = 35
-MAX_CHECK_EVIDENCE = MAX_PROMPT_CHECK_EVIDENCE + MAX_TENANT_CHECK_EVIDENCE
+MAX_CHECK_EVIDENCE = MAX_PROMPT_CHECK_EVIDENCE + MAX_TENANT_CHECK_EVIDENCE + MAX_ACCESS_CHECK_EVIDENCE
 
 
 def is_supported_evidence_version(value):
     return type(value) is str and value in SUPPORTED_CHECK_EVIDENCE_SCHEMA_VERSIONS
 
 
+def is_mixed_evidence_version(value):
+    return type(value) is str and value in {'2.0', '3.0'}
+
+
 def checkpoint_evidence_version(value):
-    return {'2.0': '1.0', '3.0': '2.0'}.get(value) if type(value) is str else None
+    return {'2.0': '1.0', '3.0': '2.0', '4.0': '3.0'}.get(value) if type(value) is str else None
 
 
 def validate_observation_evidence(asset, *, strict=True):
@@ -32,18 +37,18 @@ def validate_observation_evidence(asset, *, strict=True):
         version = asset.get('check_evidence_schema_version')
         if version == '1.0':
             return validate_prompt_evidence(asset, strict=strict)
-        if version != CHECK_EVIDENCE_SCHEMA_VERSION:
+        if not is_mixed_evidence_version(version):
             raise ValueError('Unsupported observation evidence schema')
-        return _validate_mixed(asset, strict=strict)
+        return _validate_mixed(asset, strict=strict, modern=version == '3.0')
     except (TypeError, ValueError, KeyError, AttributeError, OverflowError, RecursionError):
         raise ValueError('Invalid observation evidence') from None
 
 
-def _validate_mixed(asset, *, strict):
+def _validate_mixed(asset, *, strict, modern=False):
     def invalid():
         raise ValueError('Invalid observation evidence')
     receipts, findings, checks = asset.get('check_evidence'), asset.get('vulnerabilities', []), asset.get('checks', [])
-    if (type(receipts) is not list or len(receipts) > MAX_CHECK_EVIDENCE
+    if (type(receipts) is not list or len(receipts) > (MAX_CHECK_EVIDENCE if modern else 41)
             or type(findings) is not list or any(type(finding) is not dict for finding in findings)
             or type(checks) is not list or any(type(check) is not dict for check in checks)):
         invalid()
@@ -58,12 +63,15 @@ def _validate_mixed(asset, *, strict):
                 invalid()
             finding_ids.add(finding['id'])
     seen, linked, kinds = set(), set(), {EVIDENCE_SOURCE: [], TENANT_EVIDENCE_SOURCE: []}
+    if modern:
+        kinds[ACCESS_EVIDENCE_SOURCE] = []
     for receipt in receipts:
         if type(receipt) is not dict or type(receipt.get('source')) is not str or receipt['source'] not in kinds:
             invalid()
         source = receipt['source']
-        fields = PROMPT_RECEIPT_FIELDS if source == EVIDENCE_SOURCE else TENANT_RECEIPT_FIELDS | (
-            {'tenant_attack_index'} if receipt.get('tenant_observation_source') == 'attack' else set())
+        fields = (receipt_fields(receipt) if source == ACCESS_EVIDENCE_SOURCE else PROMPT_RECEIPT_FIELDS
+                  if source == EVIDENCE_SOURCE else TENANT_RECEIPT_FIELDS | (
+                      {'tenant_attack_index'} if receipt.get('tenant_observation_source') == 'attack' else set()))
         if (set(receipt) != fields or not identifier(receipt['id']) or receipt['id'] in seen
                 or not identifier(receipt['finding_id']) or receipt['finding_id'] in linked
                 or receipt['run_id'] != run_id
@@ -83,7 +91,9 @@ def _validate_mixed(asset, *, strict):
         linked.add(receipt['finding_id'])
         matches = [finding for finding in findings if finding.get('id') == receipt['finding_id']]
         if (len(matches) != 1 or matches[0].get('check_evidence_id') != receipt['id']
-                or (tenant_claim(matches[0]) if source == EVIDENCE_SOURCE else not tenant_claim(matches[0]))):
+                or (tenant_claim(matches[0]) if source == EVIDENCE_SOURCE else
+                    not access_claim(matches[0]) if source == ACCESS_EVIDENCE_SOURCE else not tenant_claim(matches[0]))
+                or modern and source == EVIDENCE_SOURCE and access_claim(matches[0])):
             invalid()
         kinds[source].append(receipt)
     if any('check_evidence_id' in finding and (finding.get('id') not in linked
@@ -97,8 +107,10 @@ def _validate_mixed(asset, *, strict):
     # The frozen validator receives only globally checked prompt links. Never
     # partition unknown or malformed receipts away before validating the ledger.
     prompt = dict(asset, check_evidence_schema_version='1.0', check_evidence=kinds[EVIDENCE_SOURCE],
-                  vulnerabilities=[finding for finding in findings if not tenant_claim(finding)],
-                  checks=[check for check in checks if not tenant_claim(check)])
+                  vulnerabilities=[finding for finding in findings if not tenant_claim(finding) and not (modern and access_claim(finding))],
+                  checks=[check for check in checks if not tenant_claim(check) and not (modern and access_claim(check))])
     validate_prompt_evidence(prompt, strict=strict)
     validate_tenant_receipts(asset, kinds[TENANT_EVIDENCE_SOURCE], strict=strict)
+    if modern:
+        validate_access_receipts(asset, kinds[ACCESS_EVIDENCE_SOURCE], strict=strict)
     return asset

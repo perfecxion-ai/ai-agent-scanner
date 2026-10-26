@@ -7,7 +7,7 @@ from math import isfinite
 from src.core.contracts import (
     CHECK_SCHEMA_VERSION, confirmed_findings,
     risk_assessment_eligible, validate_scan_result, is_supported_evidence_version,
-    has_evidence_contract, tenant_evidence_views_match,
+    has_evidence_contract, tenant_evidence_views_match, access_evidence_views_match,
 )
 from src.risk.risk_assessor import SEVERITY_SCORES, risk_level_for_score
 
@@ -99,7 +99,7 @@ def project_report_risk(report):
         source = sources.get(agent['id'])
         if not source or source.get('status') != agent.get('security_status'):
             return False
-        if not tenant_evidence_views_match(agent, source):
+        if not tenant_evidence_views_match(agent, source) or not access_evidence_views_match(agent, source):
             return False
         shared = ('check_evidence_schema_version', 'check_evidence_run_id', 'provider', 'model')
         arrays = ('check_evidence', 'checks', 'vulnerabilities', 'observations')

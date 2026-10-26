@@ -11,6 +11,7 @@ from src.core.redaction import contains_literal, sensitive_key
 from src.core.contracts import PLANNED_RULES
 from src.core.prompt_catalog import candidate_payloads as frozen_candidate_payloads
 from src.core.prompt_evidence_policy import PUBLIC_EVIDENCE_FIELDS
+from src.core.access_probe_policy import ACCESS_CONTROL_VERSION, PUBLIC_ACCESS_FIELDS
 from src.core.tenant_probe_policy import PUBLIC_TENANT_FIELDS
 from src.utils.request_builder import construct_agent_request, resolve_api_key
 
@@ -24,6 +25,9 @@ _SEMANTICS = 'nondisclosure-inconclusive-v2'
 # keys or tuples, which ordinary value redaction intentionally does not rewrite.
 _PUBLIC_DESCRIPTOR = (
     *PUBLIC_EVIDENCE_FIELDS,
+    *PUBLIC_ACCESS_FIELDS,
+    ACCESS_CONTROL_VERSION, '0123456789abcdef',
+    *(rule + '.sample' for rule in PLANNED_RULES),
     *PUBLIC_TENANT_FIELDS,
     '18-header-variations-denied-control-v1', '18-header-variations',
     'authorized-and-denied-resource-controls-v2',

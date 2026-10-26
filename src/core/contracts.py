@@ -16,7 +16,11 @@ from src.core.transport import current_budget
 from src.utils.request_builder import extract_response_text
 from src.core.access_probe_policy import (
     PROTECTED_ACCESS_RULES, protected_access_pass, protected_access_confirmation,
+    ACCESS_CONTROL_STATUS, ACCESS_EVIDENCE_SOURCE, AUTHENTICATION_SAMPLES,
+    PROTECTED_ACCESS_PATHS, PROTECTED_CONTROL_VERSION, modern_access_definition,
 )
+from src.core.access_observation_policy import MAX_ACCESS_CHECK_EVIDENCE, access_claim, access_target
+from src.core.access_observations import AccessObservation, AccessWitnessState
 from src.core.tenant_probe_policy import (
     TENANT_CONTROL_STATUS, TENANT_CONTROL_VERSION, TENANT_FINDING_DESCRIPTION, TENANT_FINDING_TITLE,
     TENANT_REMEDIATION, TENANT_RULE, tenant_claim, tenant_confirmation, tenant_target,
@@ -27,7 +31,7 @@ from src.core.prompt_evidence_policy import (
 from src.core.observation_evidence_policy import (
     CHECK_EVIDENCE_SCHEMA_VERSION, MAX_CHECK_EVIDENCE, MAX_PROMPT_CHECK_EVIDENCE,
     SUPPORTED_CHECK_EVIDENCE_SCHEMA_VERSIONS as SUPPORTED_CHECK_EVIDENCE_SCHEMA_VERSIONS,
-    checkpoint_evidence_version, is_supported_evidence_version,
+    checkpoint_evidence_version, is_supported_evidence_version, is_mixed_evidence_version,
     validate_observation_evidence,
 )
 from src.core.tenant_observation_policy import TENANT_EVIDENCE_SOURCE, MAX_TENANT_CHECK_EVIDENCE
@@ -147,6 +151,7 @@ class _Execution:
     trace: RequestTrace | None = None
     findings: list = field(default_factory=list)
     tenant_state: object = None
+    access_state: object = None
 
 
 _records = ContextVar("security_check_records", default=None)
@@ -308,7 +313,7 @@ async def observe_tenant_response(response, *, agent, phase, attack_index=None):
         return None
     ensure_evidence_active()
     execution, trace = _execution.get(), current_trace()
-    if (state.schema_version != CHECK_EVIDENCE_SCHEMA_VERSION or execution is None or trace is None
+    if (not is_mixed_evidence_version(state.schema_version) or execution is None or trace is None
             or state.task is not asyncio.current_task() or execution.trace is not trace
             or type(trace.identity) is not tuple or len(trace.identity) != 4
             or trace.identity[0] != TENANT_RULE or state.agent != agent):
@@ -378,6 +383,99 @@ async def observe_tenant_response(response, *, agent, phase, attack_index=None):
         raise CheckpointError() from None
 
 
+def begin_access_controls(agent, *, protected_path_index=None):
+    state = _evidence.get()
+    if state is None or type(state.schema_version) is str and state.schema_version in {'1.0', '2.0'}:
+        return None
+    ensure_evidence_active()
+    execution, trace = _execution.get(), current_trace()
+    try:
+        if (state.schema_version != '3.0' or execution is None or trace is None
+                or state.task is not asyncio.current_task() or execution.trace is not trace
+                or state.agent != agent):
+            raise ValueError('Invalid protected access execution')
+        if execution.access_state is None:
+            execution.access_state = AccessWitnessState(agent, state, trace)
+        return execution.access_state.begin(agent, state, protected_path_index)
+    except (TypeError, ValueError, KeyError, AttributeError, UnicodeError, OverflowError, RecursionError):
+        raise CheckpointError() from None
+
+
+async def observe_access_response(response, *, agent, phase, sample_index=None, header_index=None,
+                                  protected_path_index=None):
+    state = _evidence.get()
+    if state is None or type(state.schema_version) is str and state.schema_version in {'1.0', '2.0'}:
+        return None
+    ensure_evidence_active()
+    execution, trace = _execution.get(), current_trace()
+    if (state.schema_version != '3.0' or execution is None or trace is None
+            or state.task is not asyncio.current_task() or execution.trace is not trace
+            or execution.access_state is None or state.agent != agent):
+        if execution is not None:
+            execution.failed = True
+        fail_request()
+        return AccessObservation(False, ())
+    try:
+        valid, decisive, facts = execution.access_state.observe(response, agent, state, phase, sample_index,
+                                                                header_index, protected_path_index)
+        execution.decisive &= decisive
+        if facts is None:
+            return AccessObservation(valid, ())
+        identity = trace.identity
+        rule = identity[0]
+        if len(state.receipts) >= MAX_CHECK_EVIDENCE or sum(
+                item['source'] == ACCESS_EVIDENCE_SOURCE for item in state.receipts) >= MAX_ACCESS_CHECK_EVIDENCE:
+            raise CheckpointError()
+        finding_id, receipt_id = str(uuid.uuid4()), str(uuid.uuid4())
+        finding = dict(id=finding_id, agent_id=agent['id'], vulnerability_type=rule,
+                       severity='critical' if rule == 'weak_credentials' else 'high', evidence_status='confirmed',
+                       control_status=ACCESS_CONTROL_STATUS, protected_control_version=PROTECTED_CONTROL_VERSION,
+                       title='Protected Resource Access Confirmed',
+                       description='A configured protected record was returned after successful authorized and denied controls.',
+                       timestamp=datetime.now(timezone.utc).isoformat(), response_excerpt='[RESPONSE_TEXT_OMITTED]',
+                       remediation='Enforce the configured authentication and authorization boundary.',
+                       rule_id=identity[0], probe_id=identity[1], probe_version=identity[2],
+                       evidence_context_id=identity[3], check_evidence_id=receipt_id,
+                       access_target=facts['access_target'], status_code=facts['status_code'])
+        receipt = dict(id=receipt_id, run_id=state.run_id, agent_id=agent['id'], rule_id=identity[0],
+                       probe_id=identity[1], probe_version=identity[2], evidence_context_id=identity[3],
+                       finding_id=finding_id, sequence=len(execution.findings) + 1,
+                       request_ordinal=trace.requests, requests_attempted=trace.requests,
+                       responses_evaluated=trace.evaluated, source=ACCESS_EVIDENCE_SOURCE, source_version='1.0',
+                       access_target=facts['access_target'], control_proof=facts['control_proof'])
+        if protected_path_index is not None:
+            finding['protected_path_index'] = receipt['protected_path_index'] = protected_path_index
+            finding['path'] = PROTECTED_ACCESS_PATHS[protected_path_index]
+        else:
+            finding['sample_index'] = receipt['sample_index'] = sample_index
+            if rule == 'weak_api_key':
+                finding['header_index'] = receipt['header_index'] = header_index
+            elif rule == 'authentication_bypass':
+                finding['method'] = AUTHENTICATION_SAMPLES[sample_index][0]
+        candidate = dict(state.agent, check_evidence_schema_version=state.schema_version,
+                         check_evidence_run_id=state.run_id, check_evidence=[*state.receipts, receipt],
+                         vulnerabilities=[*state.findings, finding], checks=[])
+        validate_check_evidence(candidate)
+        state.receipts.append(deepcopy(receipt))
+        state.findings.append(deepcopy(finding))
+        execution.findings.append(deepcopy(finding))
+        if state.observer is not None:
+            execution_token, evidence_token = _execution.set(None), _evidence.set(None)
+            try:
+                with trace_requests(None):
+                    await state.observer(deepcopy(receipt), deepcopy(finding))
+            finally:
+                _evidence.reset(evidence_token)
+                _execution.reset(execution_token)
+        return AccessObservation(valid, (deepcopy(finding),))
+    except asyncio.CancelledError:
+        state.cancelled = True
+        raise
+    except Exception:
+        state.sink_failed = True
+        raise CheckpointError() from None
+
+
 class CheckpointError(RuntimeError):
     """Checkpoint failure stops further probes without exposing private details."""
 
@@ -437,6 +535,11 @@ def checked(rule, spec, prerequisite=None, oracle=None, coverage=None, absence_r
         async def wrapped(self, agent, *args, **kwargs):
             rule_id = rule(self, *args, **kwargs) if callable(rule) else rule
             definition = spec(self, *args, **kwargs) if callable(spec) else spec
+            evidence_state = _evidence.get()
+            modern_access = (evidence_state is not None and evidence_state.schema_version == '3.0'
+                             and rule_id in PROTECTED_ACCESS_RULES)
+            if modern_access:
+                definition = modern_access_definition(definition)
             # Bind the selected protocol/model and public probe definition.
             # Protected canaries and actual credentials are excluded.
             identity = [definition, agent.get("provider"), agent.get("model")]
@@ -446,8 +549,7 @@ def checked(rule, spec, prerequisite=None, oracle=None, coverage=None, absence_r
             probe_id = rule_id + ".sample"
             reason = prerequisite(agent) if prerequisite else None
             execution = _Execution()
-            evidence_state = _evidence.get()
-            if evidence_state is not None and (rule_id.startswith('prompt_injection.') or rule_id == TENANT_RULE):
+            if evidence_state is not None and (rule_id.startswith('prompt_injection.') or rule_id == TENANT_RULE or modern_access):
                 if evidence_state.task is not asyncio.current_task():
                     raise CheckpointError()
                 execution.trace = RequestTrace(asyncio.current_task(), (
@@ -564,7 +666,7 @@ def _supported_confirmation(check, finding, asset):
     if prompt_claim(check) or prompt_claim(finding):
         return False
     if tenant_claim(check) or tenant_claim(finding):
-        if asset.get('check_evidence_schema_version') == CHECK_EVIDENCE_SCHEMA_VERSION:
+        if is_mixed_evidence_version(asset.get('check_evidence_schema_version')):
             return False
         context = _access_context(asset)
         return context is not None and tenant_confirmation(
@@ -582,6 +684,14 @@ def _unsupported_access_confirmation(result):
     findings = result.get('vulnerabilities', [])
     if not isinstance(findings, list) or any(not isinstance(finding, dict) for finding in findings):
         return True
+    if result.get('check_evidence_schema_version') == '3.0':
+        observed = [finding for finding in evidence_findings(result) if access_claim(finding)]
+        identifiers = {finding.get('id') for finding in observed}
+        keys = ('rule_id', 'probe_id', 'probe_version', 'evidence_context_id')
+        return (any(access_claim(value) and value.get('evidence_status') == 'confirmed' and value.get('id') not in identifiers for value in findings)
+                or any(access_claim(check) and check.get('outcome') == 'confirmed' and not any(
+                    tuple(check.get(key) for key in keys) == tuple(value.get(key) for key in keys)
+                    for value in observed) for check in checks))
     for finding in findings:
         if _protected_access_claim(finding) and finding.get('evidence_status') == 'confirmed':
             if not any(_supported_confirmation(check, finding, result) for check in checks):
@@ -596,7 +706,7 @@ def _unsupported_access_confirmation(result):
 def _unsupported_tenant_confirmation(result):
     """Old or unbound tenant positives cannot expose a companion assessed zero."""
     checks, findings = result.get('checks', []), result.get('vulnerabilities', [])
-    if result.get('check_evidence_schema_version') == CHECK_EVIDENCE_SCHEMA_VERSION:
+    if is_mixed_evidence_version(result.get('check_evidence_schema_version')):
         observed = evidence_findings(result)
         identifiers = {finding.get('id') for finding in observed}
         keys = ('rule_id', 'probe_id', 'probe_version', 'evidence_context_id')
@@ -674,15 +784,16 @@ def proves_absence(check, finding, *, asset=None, previous_asset=None):
     if _protected_access_claim(check) or _protected_access_claim(finding):
         current_context, previous_context = _access_context(asset), _access_context(previous_asset)
         if (current_context is None or previous_context != current_context
-                or not protected_access_pass(check, **current_context)):
+                or not protected_access_pass(check, evidence_schema_version=asset.get('check_evidence_schema_version'), **current_context)):
             return False
         previous_checks = previous_asset.get('checks', [])
         try:
             validate_checks(previous_checks)
         except (TypeError, ValueError):
             return False
-        if not any(protected_access_confirmation(previous, finding, **previous_context)
-                   for previous in previous_checks):
+        observed = evidence_findings(previous_asset)
+        if (not any(protected_access_confirmation(previous, finding, **previous_context) for previous in previous_checks)
+                and not any(value == finding for value in observed)):
             return False
     return (safe_context and context == finding.get("evidence_context_id")
             and record.status == "completed" and record.outcome == "passed"
@@ -709,7 +820,8 @@ def risk_assessment_eligible(result):
     return result.get("status") == "completed" and any(
         check.get("status") == "completed" and check.get("outcome") == "passed"
         and _protected_access_claim(check)
-        and _access_context(result) is not None and protected_access_pass(check, **_access_context(result))
+        and _access_context(result) is not None and protected_access_pass(
+            check, evidence_schema_version=result.get('check_evidence_schema_version'), **_access_context(result))
         for check in result.get("checks", []))
 
 
@@ -722,9 +834,9 @@ def preserves_observation_eligibility(previous, current):
     """
     if not isinstance(previous, dict) or not isinstance(current, dict):
         return False
-    if previous.get('check_evidence_schema_version') != CHECK_EVIDENCE_SCHEMA_VERSION:
+    if not is_mixed_evidence_version(previous.get('check_evidence_schema_version')):
         return True
-    if current.get('check_evidence_schema_version') != CHECK_EVIDENCE_SCHEMA_VERSION:
+    if current.get('check_evidence_schema_version') != previous.get('check_evidence_schema_version'):
         return False
     def execution(value):
         return dict(value, status=value.get('security_status', value.get('status')),
@@ -771,6 +883,20 @@ def tenant_evidence_views_match(agent, security):
         return False
 
 
+def access_evidence_views_match(agent, security):
+    """Modern access verdicts bind both public views to the same resource context."""
+    if agent.get('check_evidence_schema_version') != '3.0':
+        return True
+    try:
+        values = [*agent.get('vulnerabilities', []), *agent.get('checks', []),
+                  *security.get('vulnerabilities', []), *security.get('checks', [])]
+        assessed = any(access_claim(value) and (value.get('evidence_status') == 'confirmed'
+                                                or value.get('outcome') in {'confirmed', 'passed'}) for value in values)
+        return not assessed or access_target(agent, strict=False) == access_target(security, strict=False)
+    except (TypeError, ValueError, KeyError, AttributeError, UnicodeError, OverflowError, RecursionError):
+        return False
+
+
 def _validate_evidence_views(result):
     """New writes preserve one canonical evidence ledger across both public views."""
     agents, security_results = result['agents'], result.get('security_results', [])
@@ -801,6 +927,8 @@ def _validate_evidence_views(result):
             raise ValueError('Observation evidence views disagree')
         if not tenant_evidence_views_match(agent, security):
             raise ValueError('Observation tenant target bindings disagree')
+        if not access_evidence_views_match(agent, security):
+            raise ValueError('Observation access target bindings disagree')
         if agent.get('security_status') != security.get('status'):
             raise ValueError('Observation execution views disagree')
     for identity, agent in snapshots.items():

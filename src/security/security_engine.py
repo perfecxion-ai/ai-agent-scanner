@@ -3,7 +3,7 @@ from copy import deepcopy
 from typing import List, Dict, Any, Optional, Callable
 import logging
 from src.core.transport import current_budget
-from src.core.access_evidence import access_evidence_context, access_secrets
+from src.core.access_evidence import access_evidence_context, access_secrets, get_access_evidence
 from src.core.tenant_evidence import get_tenant_evidence, tenant_evidence_context, tenant_secrets
 from src.utils.request_builder import construct_agent_request, missing_credential_reason
 from src.core.contracts import (
@@ -112,7 +112,7 @@ class SecurityTestEngine:
                             'Authentication checks require explicit issued credentials, a protected response marker, and successful authorized/denied controls.'],
             'overall_risk_score': None
         }
-        if get_tenant_evidence(agent) is not None:
+        if get_tenant_evidence(agent) is not None or get_access_evidence(agent) is not None:
             test_results['endpoint'] = agent['endpoint']
             test_results['evidence_context_id'] = agent['evidence_context_id']
         test_results['check_schema_version'] = CHECK_SCHEMA_VERSION

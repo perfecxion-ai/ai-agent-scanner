@@ -43,13 +43,13 @@ async def test_normal_writer_uses_mixed_schema_before_its_first_checkpoint():
     result = await execute(SecurityTestEngine(), saved, [])
     assert saved
     for value, encoded in [*saved, (result, json.dumps(result, sort_keys=True))]:
-        assert value['check_evidence_schema_version'] == '2.0'
-        assert value['checkpoint']['version'] == '3.0'
+        assert value['check_evidence_schema_version'] == '3.0'
+        assert value['checkpoint']['version'] == '4.0'
         assert json.dumps(value, sort_keys=True) == encoded
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('version,checkpoint', [('1.0', '2.0'), ('2.0', '3.0')])
+@pytest.mark.parametrize('version,checkpoint', [('1.0', '2.0'), ('2.0', '3.0'), ('3.0', '4.0')])
 async def test_declared_adapter_preserves_one_supported_version(version, checkpoint):
     adapter = SimpleNamespace(check_evidence_schema_version=version,
                               test_agents=AsyncMock(return_value=[evidence(version)]))
@@ -63,7 +63,9 @@ async def test_declared_adapter_preserves_one_supported_version(version, checkpo
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('declared,returned', [('1.0', '2.0'), ('2.0', '1.0')])
+@pytest.mark.parametrize('declared,returned', [
+    ('1.0', '2.0'), ('2.0', '1.0'), ('1.0', '3.0'), ('3.0', '1.0'), ('2.0', '3.0'), ('3.0', '2.0'),
+])
 async def test_declared_adapter_cannot_switch_versions_after_baseline(declared, returned):
     adapter = SimpleNamespace(check_evidence_schema_version=declared,
                               test_agents=AsyncMock(return_value=[evidence(returned)]))
@@ -102,8 +104,9 @@ async def test_adapter_declaration_is_literal_and_cannot_execute_a_descriptor():
 
 
 @pytest.mark.asyncio
-async def test_undeclared_mixed_adapter_cannot_upgrade_an_acknowledged_baseline():
-    adapter = SimpleNamespace(test_agents=AsyncMock(return_value=[evidence('2.0')]))
+@pytest.mark.parametrize('version', ['2.0', '3.0'])
+async def test_undeclared_mixed_adapter_cannot_upgrade_an_acknowledged_baseline(version):
+    adapter = SimpleNamespace(test_agents=AsyncMock(return_value=[evidence(version)]))
     saved = []
     with pytest.raises(ValueError, match='require an explicit declaration'):
         await execute(adapter, saved)
@@ -124,17 +127,19 @@ async def test_legacy_adapter_keeps_its_existing_empty_baseline_negotiation():
 
 
 @pytest.mark.asyncio
-async def test_noncheckpoint_forwarding_can_infer_one_supported_version():
-    adapter = SimpleNamespace(test_agents=AsyncMock(return_value=[evidence('2.0')]))
+@pytest.mark.parametrize('version', ['2.0', '3.0'])
+async def test_noncheckpoint_forwarding_can_infer_one_supported_version(version):
+    adapter = SimpleNamespace(test_agents=AsyncMock(return_value=[evidence(version)]))
     result = await execute(adapter)
-    assert result['check_evidence_schema_version'] == '2.0'
+    assert result['check_evidence_schema_version'] == version
     assert 'checkpoint' not in result
 
 
 @pytest.mark.asyncio
-async def test_noncheckpoint_adapter_cannot_mix_old_and_new_assets():
+@pytest.mark.parametrize('first,second', [('1.0', '2.0'), ('2.0', '3.0'), ('3.0', '2.0')])
+async def test_noncheckpoint_adapter_cannot_mix_old_and_new_assets(first, second):
     adapter = SimpleNamespace(test_agents=AsyncMock(side_effect=[
-        [evidence('1.0', 'first')], [evidence('2.0', 'second')]]))
+        [evidence(first, 'first')], [evidence(second, 'second')]]))
     with pytest.raises(ValueError, match='Mixed evidence versions'):
         await execute(adapter, agents=[asset('first'), asset('second')])
 
@@ -184,7 +189,7 @@ async def test_live_mixed_tenant_views_require_the_same_target_binding(field, va
         with scan_transport(ScanBudget(allow_loopback=True, max_requests=8)):
             report = await run_pipeline(None, unfinished_tenant_engine(), RiskAssessment(), None,
                                         'security_only', agents=[agent])
-    assert report['check_evidence_schema_version'] == '2.0'
+    assert report['check_evidence_schema_version'] == '3.0'
     assert project_report_risk(report)[0]['overall_risk_score'] == 90
     report['security_results'][0][field] = value
     summary, agents = project_report_risk(report)

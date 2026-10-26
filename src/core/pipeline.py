@@ -177,7 +177,7 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
                 if evidence_version is not None and supplied_version != evidence_version:
                     raise ValueError('Mixed evidence versions are not supported')
                 if (checkpoint is not None and not normal_engine and declared is undeclared
-                        and supplied_version == CHECK_EVIDENCE_SCHEMA_VERSION):
+                        and supplied_version in {'2.0', '3.0'}):
                     raise ValueError('Checkpointed current-evidence adapters require an explicit declaration')
                 evidence_version = supplied_version
             elif adapter_supplied and not normal_engine and declared is not undeclared:
@@ -445,7 +445,7 @@ class _CheckpointState:
             unchanged &= merged == result[key]
             result[key] = merged
         if self.evidence_enabled:
-            validate_check_evidence(result, strict=(self.evidence_schema_version == '2.0'
+            validate_check_evidence(result, strict=(self.evidence_schema_version in {'2.0', '3.0'}
                                                    and bool(result.get('check_evidence'))))
             if not preserves_observation_eligibility(self.results[index], result):
                 raise CheckpointError()
@@ -505,7 +505,7 @@ class _CheckpointState:
                 merged['check_evidence_run_id'] = old_run or new_run
             merged['check_evidence'] = self._merge_receipts(
                 previous.get('check_evidence', []), result.get('check_evidence', []))
-            validate_check_evidence(merged, strict=(self.evidence_schema_version == '2.0'
+            validate_check_evidence(merged, strict=(self.evidence_schema_version in {'2.0', '3.0'}
                                                    and bool(merged.get('check_evidence'))))
             if not preserves_observation_eligibility(previous, merged):
                 raise CheckpointError()
@@ -614,7 +614,7 @@ class _CheckpointState:
                 raise CheckpointError()
             report = self._report(incomplete=True)
             report["checkpoint"] = {
-                "version": ({'1.0': '2.0', '2.0': '3.0'}[self.evidence_schema_version]
+                "version": ({'1.0': '2.0', '2.0': '3.0', '3.0': '4.0'}[self.evidence_schema_version]
                             if self.evidence_enabled else "1.0"), "sequence": self.sequence + 1,
                 "coverage": "confirmed_observations_and_finalized_checks" if self.evidence_enabled
                 else "finalized_checks_only"}

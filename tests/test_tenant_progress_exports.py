@@ -48,8 +48,8 @@ async def test_cli_exports_acknowledged_tenant_receipt_before_check_return(
     document = json.loads(encoded)
     if fmt == 'json':
         assert document['status'] == ('failed' if interruption == 'deadline' else 'cancelled')
-        assert document['checkpoint']['version'] == '3.0'
-        assert document['check_evidence_schema_version'] == '2.0'
+        assert document['checkpoint']['version'] == '4.0'
+        assert document['check_evidence_schema_version'] == '3.0'
         assert document['summary']['checks_unfinished'] == 1
         assert document['summary']['checks_completed'] == 0
         asset = document['agents'][0]
@@ -66,8 +66,8 @@ async def test_cli_exports_acknowledged_tenant_receipt_before_check_return(
     else:
         run = document['runs'][0]
         assert not run['invocations'][0]['executionSuccessful']
-        assert run['properties']['checkpoint']['version'] == '3.0'
-        assert run['properties']['check_evidence_schema_version'] == '2.0'
+        assert run['properties']['checkpoint']['version'] == '4.0'
+        assert run['properties']['check_evidence_schema_version'] == '3.0'
         assert run['properties']['summary']['overall_risk_score'] == 90
         assert run['properties']['summary']['checks_unfinished'] == 1
         assert run['properties']['summary']['checks_completed'] == 0

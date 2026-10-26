@@ -56,7 +56,7 @@ def _evidence_extension(previous, output):
             return False
         if old_producer != new_producer:
             return False
-    versions = {'1.0': 1, '2.0': 2, '3.0': 3}
+    versions = {'1.0': 1, '2.0': 2, '3.0': 3, '4.0': 4}
     if versions.get(output.get('checkpoint', {}).get('version'), 0) < versions.get(
             previous.get('checkpoint', {}).get('version'), 0):
         return False

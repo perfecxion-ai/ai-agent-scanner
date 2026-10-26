@@ -501,7 +501,9 @@ def test_public_cache_is_bounded_and_immutable():
     info = policy._authorization_probes.cache_info()
     assert info.currsize == info.maxsize == 128
     versions = policy._authorization_probes(PROVIDER, MODEL)
-    assert len(versions) == 255
+    assert len(versions) == 510
+    assert sum(value.requires_receipt for value in versions.values()) == 255
+    assert sum(not value.requires_receipt for value in versions.values()) == 255
     with pytest.raises(TypeError):
         versions['new'] = None
     policy._authorization_probes.cache_clear()
