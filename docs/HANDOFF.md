@@ -203,12 +203,22 @@ restoring its owned stale fixture caches for traversal and restart.
 Local coverage passes 4,694 cases, followed by 838 focused cases covering the
 final static phase-log privacy fix and 24 trusted HTTPS CLI cases. See
 [acceptance](VALIDATION.md#protected-access-v3-and-cache-policy-local-acceptance).
-Delivery CI is recorded on the implementation PR. The next external gate is
-the [self-contained native access/cache retest](access-provenance-retest.md),
-pinned to the merged revision after delivery checks pass. No private target
-configuration or broad tenant/model cohort rerun is required. Protected-access
-within-check receipts remain open; this prerequisite does not retain a finding
-from an interrupted unfinished access check.
+PR #79 merged as `a9b2718` after all eight PR and post-merge checks passed;
+all five full suites passed 4,721 tests. The supplied native access/cache retest
+now passes scoped acceptance on Python 3.11.2/SQLite 3.40.1: 337 targeted tests,
+both thirteen-case backup modes and both inventory modes pass, with all 109
+captured expectations reconciled. The CLI source identity and inventory runtime
+hashes match the pinned checkout. See
+[native acceptance and qualifications](VALIDATION.md#supplied-native-access-and-cache-policy-acceptance).
+The private wrapper has narrower failure-propagation, privacy-sweep and file-mode
+evidence than its narrative claims. These limits need no broad repeat and do not
+establish an operator migration or model sensitivity.
+
+Protected-access within-check receipts are next. This accepted provenance
+prerequisite does not retain a finding from an interrupted unfinished access
+check. Preserve frozen v3 finalized-check eligibility and raw archives while
+defining new receipt semantics; private server tenant inputs and CLI process-crash
+files remain separate work.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned

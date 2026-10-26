@@ -1063,6 +1063,91 @@ was used. The next external gate is the scoped
 within-check receipts, server private tenant inputs and CLI crash files remain
 separate work. Cross-platform delivery checks are recorded on the implementation PR.
 
+### Supplied native access and cache-policy acceptance
+
+The supplied `aiscan-access-a9b2718.tar.gz` pins merged revision
+`a9b27189296b55a114ccedb4638518d221be8b3c`. Its SHA-256 is
+`786295f52ae6b0bf1b773165b7ba43795c64c0812142f9c09a8827cfcea8e8ac`.
+Read-only results and static-harness reviews plus an independent offline
+reconciliation accept the bounded [native gate](access-provenance-retest.md).
+No supplied driver was executed during review, and no operator database,
+registry or cloud target was accessed.
+
+Captured runtime is Python 3.11.2, SQLite 3.40.1, SQLAlchemy 2.1.6 and Gunicorn
+26.2.0; Debian 12 is operator-attested. The CLI build identity matches the pinned
+checkout exactly, including its 71-file source digest
+`0cb86e6d21de6a77357a191bdc5adeb92c2896b3f6f3c4ef034e9c8ee91e1581`.
+Inventory driver, app, hooks and projection-policy hashes match that source.
+Captured revision and clean-status files agree. These are bounded source
+identity checks and checkout attestations, not independent execution attestation.
+
+The five required files pass 337 tests in 20.94 seconds with warnings as errors.
+The pytest exit, four acceptance-command exits and driver exit are all zero;
+the outer job also records zero. All 109 unique captured assertion-table checks
+agree with the available outputs and pinned source requirements.
+
+Both normal and optimized backup runs accept the exact thirteen cases: versions
+1 through 6, rollback 1/2/3/5, future, incomplete and lock. Their assertion
+identities agree with the pinned public driver. These include archive-preserving
+cache reconciliation, genuine current zero/high/partial and independent tenant
+risk, unsupported historical access scores becoming NULL, recovery, rejection
+and restart. Detailed schema/row/hash preservation follows those internal
+assertions; original fixture databases and intermediate scan reports were not
+returned for independent reconstruction.
+
+Both inventory runs return `inventory-acceptance-v2`, schema 4 to 6, all thirteen
+required identities, 12 reconciled scan caches and 10,000 observation caches,
+followed by explicit restoration of their own original stale caches. Traversal
+totals are 3,336/3,332/3,332 observations across the three fixture tenants;
+high and minimal totals are each 834/833/833 and unknown totals are
+1,668/1,666/1,666. Critical filters are empty. Each mode records 656 checked HTTP
+responses, seven required private values across five surfaces, and initial plus
+restart server exits of zero. Both normal/optimized JSON pairs are byte-identical.
+Actual pages, process listings and database copies are not separately captured;
+detailed traversal, rollback, cleanup and preservation rely on the public gate's
+assertions. The 10,000 rows are repeated observations of twelve synthetic assets,
+not distinct deployments or an operator database migration.
+
+Privacy and wrapper qualifications:
+
+- The bundle contains 32 substantive text files and 36 AppleDouble sidecars.
+  Twenty-six substantive files are evidence, excluding five drivers and the
+  report; the narrative's count of 27 evidence files is inaccurate. All
+  substantive files are readable UTF-8. Public fixture constants coexist with
+  generated values, so the narrative's random-only description is too broad.
+- The on-runner privacy sweep lists 23 files at that moment. Its seven available
+  values include three static PII patterns; missing environment values are not
+  swept. It receives no private-prefix arguments. It precedes its own output,
+  final job-log append and job exit file. A later strict sweep is claimed but
+  has no separate captured receipt. Returned drivers contain expected public
+  test constants and generic work paths. Deleted runtime secrets cannot be
+  independently re-swept from this bundle.
+- Human-readable logs were sanitized; raw originals and before/after hashes are
+  absent. The available pytest log is dots plus its pass count, and all four
+  acceptance stderr captures are empty. JSON preservation is an attestation
+  supported by source shape and the cross-mode byte comparison, not a separate
+  pre-sanitization hash chain.
+- The wrapper uses incomplete failure propagation. Setup, sanitizer, copy,
+  permission and cleanup commands have unchecked statuses and no cleanup trap;
+  its universal cleanup-failure claim is unsupported. Critical test/acceptance
+  commands do preserve their recorded exits and the assertion/privacy scripts
+  affect the wrapper's failure flag. The wrapper also sources lab configuration
+  for its sweep and inherits that environment; the scanner's absent profile-file
+  override and owned public fixtures provide narrower isolation.
+- The native listing shows scanner capture files at 0600 but the outer output
+  directory at 0755 and job log at 0644. Delivered archive modes and private
+  review extraction modes do not certify original wrapper permissions. The
+  report's comparison against earlier local interpreter versions also disagrees
+  with repository records; the captured native versions are the relevant facts.
+
+No new scanner blocker was found. These qualifications need no broad repeat.
+This accepts synthetic native access/cache, backup and inventory correctness;
+it does not establish model sensitivity, independent target provenance, deployed
+upgrade/durability, enterprise readiness or unfinished access-check retention.
+PR #79 and its merge pass all eight CI jobs; the five PR full suites each pass
+4,721 tests. Protected-access observation receipts are next; private server
+tenant admission and CLI crash files remain separate gates.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose
