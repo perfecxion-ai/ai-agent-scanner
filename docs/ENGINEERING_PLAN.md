@@ -39,7 +39,7 @@ proposed calls and observed actions are distinct outcomes.
 | Slice | Finding and work | Required acceptance | State |
 | --- | --- | --- | --- |
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Initial controls merged in PR #64. V3 actual-request provenance/denial correction and schema-6 historical cache reconciliation merged in PR #79 with all eight PR/post-merge checks. Scoped native Python 3.11.2/SQLite 3.40.1 access, backup and inventory acceptance passes with recorded private-harness qualifications |
-| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence, prompt receipts and tenant receipts merged in PRs #65/#67/#77. R1.2c passes local, independent, all eight PR/post-merge CI checks and qualified native CLI HTTPS interruption and HTTP library recovery acceptance. Protected-access receipts and CLI crash recovery remain separate gates |
+| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence, prompt receipts and tenant receipts merged in PRs #65/#67/#77 with qualified native acceptance. R1.2d protected-access receipts pass 4,983 local coverage cases and independent review; required delivery CI and scoped native acceptance remain. CLI process-crash files remain separate work |
 | R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Merged in PR #72 with all local, independent, and eight PR/post-merge CI gates passed; scoped native reconstructed-fixture upgrade/restart accepted with recorded qualifications |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a merged in PR #74 with local/independent/CI acceptance and a qualified native Python 3.11.2/SQLite 3.40.1 traversal/upgrade retest. Distinct-asset identity and source-bound risk indexes remain open |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | R1.5a development/content identity passes local and independent gates; required delivery CI is recorded on its PR. Release checksums, SBOM, dependency/build attestation and deployed upgrade acceptance remain open |
@@ -214,6 +214,16 @@ schema-4 to 6 inventory runs; all 109 captured expectations reconcile. This is
 synthetic platform correctness, with documented wrapper/privacy limits, not an
 operator upgrade or sensitivity gate. See
 [qualified acceptance](VALIDATION.md#supplied-native-access-and-cache-policy-acceptance).
+
+R1.2d adds protected-access observations using ledger 3/checkpoint 4, without
+changing the frozen readers, GET samples, request budgets or schema 6. Each
+modern confirmation requires live private request/response capability, successful
+issued/invalid controls and an immutable receipt before the next cleanup or
+request. Numeric selectors preserve exact catalog identity without exporting
+credential values. Frozen finalized-v3 archives remain supported; stripped modern
+envelopes cannot gain their fallback. Local and independent gates precede delivery
+and the [scoped native retention gate](access-retention-retest.md). This does not
+add private API inputs or CLI process-crash recovery.
 The prompt audit also reproduces false confirmations from case-changed outbound
 values and transport-added headers. PR #67 now requires a complete private
 request snapshot to exclude these marker sources before confirmation and receipt

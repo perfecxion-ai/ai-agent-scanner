@@ -539,7 +539,7 @@ def test_public_redaction_preserves_archive_but_not_current_eligibility():
     assert not risk_assessment_eligible(asset) and not evidence_findings(asset)
 
 
-@pytest.mark.parametrize('version', [None, '3.0', False])
+@pytest.mark.parametrize('version', [None, '4.0', False])
 def test_explicit_unknown_contract_never_downgrades_to_legacy(version):
     asset = valid_asset()
     asset['check_evidence_schema_version'] = version

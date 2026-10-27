@@ -458,8 +458,8 @@ async def test_bad_tenant_append_leaves_acknowledged_prompt_state_unchanged(tena
             await run_pipeline(None, security, RiskAssessment(), None, 'security_only',
                                agents=[item], checkpoint_callback=save)
     assert injections == [True] and len(target['calls']) == 8
-    assert saved[-1]['check_evidence_schema_version'] == '2.0'
-    assert saved[-1]['checkpoint']['version'] == '3.0'
+    assert saved[-1]['check_evidence_schema_version'] == '3.0'
+    assert saved[-1]['checkpoint']['version'] == '4.0'
     assert len(saved[-1]['agents'][0]['check_evidence']) == 5
     assert all(r['source'] == 'protected_system_canary_match' for r in saved[-1]['agents'][0]['check_evidence'])
 

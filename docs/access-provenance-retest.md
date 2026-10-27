@@ -1,5 +1,9 @@
 # Scoped access provenance and cache upgrade retest
 
+This historical gate targets PR #79 at `a9b2718`. For subsequent within-check
+access retention, use the [retention gate](access-retention-retest.md) and its
+separately supplied revision.
+
 Run the exact merged revision supplied with the handoff on the existing lab
 runner. This gate needs no model services, private configurations, tenant records,
 operator databases or deployment changes. It creates its own synthetic HTTP/HTTPS

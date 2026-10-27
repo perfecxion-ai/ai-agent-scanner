@@ -82,7 +82,8 @@ had not reached a persistence boundary cannot be reconstructed after a crash.
 ## Finalized-check checkpoints
 
 The worker saves redacted inventory, finalized check/finding pairs, and supported
-prompt-disclosure and configured tenant receipts while the scan remains running.
+prompt-disclosure, configured tenant and protected-access receipts while the scan
+remains running.
 Each checkpoint atomically updates the versioned report,
 agent snapshots, and summary counts. A write must match the current claim owner
 and advance the scan-local sequence; it cannot clear a cancellation request,
@@ -105,15 +106,20 @@ and retains any earlier committed checkpoint. These are execution limits, not a
 guarantee that every inventory fits. Duplicate or redaction-colliding source IDs
 are rejected before evidence can be associated with an ambiguous asset.
 
-Prompt and tenant receipts preserve controlled confirmations before their
+Prompt, tenant and protected-access receipts preserve controlled confirmations before their
 category finishes, without inventing a completed check. Their acknowledged ledger
 prefix and execution identity cannot be removed or rewritten by a later checkpoint
 or final result. The new checkpoint version cannot downgrade to finalized-only
-coverage. See the [prompt](result-contracts.md#prompt-observation-receipts) and
-[tenant](result-contracts.md#tenant-observation-receipts) contracts. Tenant private
+coverage. Checkpoint 4 carries ledger 3; older checkpoint 2/3 and ledger 1/2
+meanings remain unchanged. See the [prompt](result-contracts.md#prompt-observation-receipts),
+[tenant](result-contracts.md#tenant-observation-receipts) and
+[access](result-contracts.md#protected-access-observation-receipts) contracts. Tenant private
 input remains rejected by the server API; its persistence tests exercise a
-library worker with explicitly prepared fixture configuration. Other unfinished
-checks still need separate observation contracts. Process
+library worker with explicitly prepared fixture configuration. These three
+observation families have explicit contracts; other checks do not acquire them
+automatically. Access retention likewise adds no new API evidence inputs; its
+recovery gate uses an owned library worker with explicit fixture configuration.
+Process
 termination before an acknowledged commit can lose that observation. This is server-process recovery on the
 supported local SQLite deployment, not power-loss or storage-hardware validation.
 The CLI retains the same public reports in memory and exports on orderly timeout

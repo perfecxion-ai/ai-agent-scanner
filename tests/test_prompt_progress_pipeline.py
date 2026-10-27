@@ -141,7 +141,7 @@ async def test_first_confirmation_is_durable_before_next_await(monkeypatch, stag
     with pytest.raises(asyncio.CancelledError):
         await task
     report = saved[-1]
-    assert report['checkpoint']['version'] == '3.0'
+    assert report['checkpoint']['version'] == '4.0'
     assert report['checkpoint']['coverage'] == 'confirmed_observations_and_finalized_checks'
     assert report['status'] == 'partial'
     assert report['summary']['overall_risk_score'] == 70

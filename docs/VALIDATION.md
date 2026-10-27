@@ -1148,6 +1148,106 @@ PR #79 and its merge pass all eight CI jobs; the five PR full suites each pass
 4,721 tests. Protected-access observation receipts are next; private server
 tenant admission and CLI crash files remain separate gates.
 
+### Protected-access observation retention local acceptance
+
+R1.2d adds protected-resource response observations for the four existing GET
+families. Normal writers select ledger `3.0` and checkpoint `4.0` before the
+first checkpoint. Readers for ledger 1/2 and checkpoint 1/2/3 retain their frozen
+meanings. The v3 control tag, default samples, delays, provider headers, request
+budgets and response limits are unchanged. Modern probe hashes additionally bind
+`protected-access-response-observations-v1`; stripping their ledger or links cannot
+gain legacy finalized-check eligibility.
+
+Private plans derive the selected request from pinned evidence and the frozen
+catalog. Two actual issued/invalid controls establish the resource before a probe
+can disclose its marker. Every observation requires a live response capability,
+matching immutable body/request capture, exact selected headers and target,
+original task/run/check identity and exactly-once evaluation. Publication occurs
+before response/session cleanup, pacing or another request. Finalized checks and
+receipt-backed unfinished checks remain distinct; no interruption invents a pass.
+
+Public evidence binds the original base endpoint/provider/model/context, actual
+control ordinals/statuses and numeric sample/header/path selectors. Joining an
+admin path happens privately and is verified against the actual capture. This
+avoids losing target eligibility when the known default credential `admin` is
+redacted from displayed paths, without exempting it or accepting wildcard target
+matches. A valid already-redacted initial report can remain structurally readable
+with unknown risk. Strict minting/scoring still requires recognized metadata;
+even the public read shape must match its corresponding target fields. Malformed
+extensions cannot erase acknowledged eligible evidence or expose a companion zero.
+
+Four original v3 archives were captured from actual owned HTTP and the pinned
+`a9b2718` normal wrappers, engine, pipeline, scorer and checkpoints before source
+changes. UUID/time controls were installed before production, with no report
+restamping afterward. Fixed hashes bind all four archives and nine original
+source files. Zero uses 62 GETs, high and later-503 partial use twenty each, and
+mixed uses 62 GETs plus thirteen POSTs with five prompt and one tenant receipt.
+Original IDs, bytes and canonical 0/70/partial/90 results remain exact.
+Recognized schema-5 upgrade performs only the existing version stamp when those
+caches already agree; schema-6 initialization performs no DML. There is no SQL schema
+bump or additional historical cache reclassification.
+
+Producer acceptance passes 98 actual-HTTP cases on Python 3.10.20 and 3.13.15,
+plus the three existing fresh-CLI logging cases. Defended full samples retain
+20/7/32 requests and three requests per configured admin path. Vulnerable weak-key
+samples retain their existing per-key early break. All four vulnerable groups
+produce 36 access observations over 58 actual GETs with eight declared paths.
+Provider headers, explicit native model/context None, intentionally issued weak
+candidates, per-path fresh controls, body/header disclosures, injected credentials,
+pinned keys and failures before reservation are covered. Public-agent marker
+preflight still preserves its earlier zero-request/null-risk behavior.
+
+Core acceptance passes 54 cases on both interpreters for complete-ledger shape,
+typed counters, proof order, aliases, missing/stripped links, frozen readers,
+unknown public contexts, private capability misuse and sink/cancellation handling.
+Six additional compatibility cases validate the original v3 reports and exact
+schema/cache preservation. The combined cap is 77 receipts: 35 prompt, six tenant
+and 36 access. These counts describe bounded correctness fixtures, not measured
+detection sensitivity.
+
+Independent acceptance passes 72 cases, including forty real trusted HTTPS CLI
+JSON/SARIF cases across genuine zero, 70/high, 90/critical, later 503, deadline
+and cancellation. Two process fixtures wait for acknowledged SQLite evidence and
+a genuine fourth-request stall, then kill the actual dispatcher. A fresh owner
+recovers the exact saved report and snapshots without replay; authenticated API
+reads retain the same evidence and partial risk. A malformed append submitted by
+the actual live owner is rejected without changing report/snapshots/audit/caches.
+Tests also cover closed-token reuse, later request contamination, raw/encoded
+privacy, owner-only state/report files and clean fixture-process shutdown.
+
+The final combined independent Python 3.13 gate passes 1,052 overlapping cases
+with coverage and warnings as errors: core/producer/independent/compatibility,
+existing policy, and prompt/tenant checkpoint/export/recovery regressions. A
+further 421-case gate verifies adapter version negotiation and the direct
+experimental-suite descriptor guard. New public fields, control version and
+existing probe-ID labels are reserved before candidate I/O. Frozen prompt catalog
+bytes, suite semantics and pin remain unchanged.
+
+The first full run passes 4,946 and exposes five failures: four old writer/future
+version assumptions and the missing new descriptors in that direct suite guard.
+After correcting those expectations and sharing the complete descriptor basis,
+the final source/server/CLI coverage run passes all 4,983 cases with warnings as
+errors and 93 percent coverage on Python 3.10.20. Ruff and the configured Bandit
+gate pass. Required cross-platform checks are recorded on the implementation PR.
+
+Both public backup commands exit zero and accept all thirteen cases; both normal
+and optimized inventory commands exit zero with all thirteen identities, schema
+4 to 6 and 10,000 observations. Their stderr captures are empty. Both distribution
+formats build and pass metadata checks. An isolated installed-wheel smoke passes
+dependency consistency, CLI commands and exact build identity; all 73 packaged
+Python source files match the checkout. Neither distribution contains local
+assistant instructions or SQLite database files. The native guide passes Bash
+syntax and private mock-only setup/command failure-propagation checks.
+
+These are owned synthetic correctness gates, not independent target-side seeding,
+real-model yield, deployed upgrade/power-loss durability or enterprise readiness.
+No private supplied driver, cloud target, operator database or registry was used.
+Public API private-evidence admission and CLI process-crash files are unchanged;
+the recovery fixtures use an explicitly configured owned library worker. No
+package was published or service deployed. The next external gate is the
+[scoped native access-retention retest](access-retention-retest.md), pinned to
+the merged revision after delivery checks pass.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose

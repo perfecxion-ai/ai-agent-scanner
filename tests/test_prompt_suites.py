@@ -178,6 +178,8 @@ def test_descriptor_guard_audits_current_output_source_constants():
     # Runtime validation is pure. This maintenance audit reads only checked-in
     # source to flag newly introduced long opaque field keys and fixed labels.
     paths = ('src/core/contracts.py', 'src/core/pipeline.py', 'src/security/security_engine.py',
+             'src/core/access_probe_policy.py', 'src/core/access_observation_policy.py',
+             'src/core/access_observations.py', 'src/core/observation_evidence_policy.py',
              'src/security/prompt_injection_tests.py', 'src/security/access_control_tests.py',
              'src/security/data_privacy_tests.py', 'src/risk/risk_assessor.py',
              'src/reporting/sarif_output.py', 'src/frameworks/owasp_llm_top10.py',

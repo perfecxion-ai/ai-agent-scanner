@@ -13,6 +13,7 @@ from yarl import URL
 from src.core.contracts import collect_checks
 from src.core.transport import BoundedResponse, ScanBudget, current_budget, scan_transport
 from src.core.request_provenance import RequestCapture
+from src.core.request_evidence import close_request, reserved_request
 from src.core.access_evidence import guard_access_request, observe_access_request
 from src.security.access_control_tests import AccessControlTester
 
@@ -55,6 +56,7 @@ def transport(*, disclose=False):
         async def __aenter__(self):
             guard_access_request('GET', self.url, {'headers': self.headers}, {})
             current_budget().reserve(self.url)
+            self.token = reserved_request()
             credential = next((value for key, value in self.headers.items()
                                if key.lower() in {'authorization', 'x-api-key', 'x-goog-api-key'}), '')
             if credential in {ISSUED, 'Bearer ' + ISSUED}:
@@ -70,11 +72,12 @@ def transport(*, disclose=False):
             capture.sent_headers('GET', url, headers)
             evidence = capture.seal(response)
             observe_access_request(evidence)
-            self.response = BoundedResponse(response, current_budget(), request_evidence=evidence)
+            self.response = BoundedResponse(response, current_budget(), self.token, request_evidence=evidence)
             return self.response
 
         async def __aexit__(self, *args):
             self.response._request_active = False
+            close_request(self.token)
             return False
 
     class Session:

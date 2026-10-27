@@ -181,8 +181,18 @@ async def test_trusted_https_access_cli_workflow(
         finding = asset['vulnerabilities'][0]
         assert finding['vulnerability_type'] == rule and finding['evidence_status'] == 'confirmed'
         assert finding['protected_control_version'] == 3
-    # These completed-category findings have no within-check durable receipts.
-    assert asset['check_evidence'] == []
+    assert result['check_evidence_schema_version'] == asset['check_evidence_schema_version'] == '3.0'
+    assert all(checkpoint['checkpoint']['version'] == '4.0' for checkpoint in checkpoints)
+    assert len(asset['check_evidence']) == len(asset['vulnerabilities'])
+    if asset['check_evidence']:
+        receipt = asset['check_evidence'][0]
+        assert receipt['source'] == 'controlled_access_response' and receipt['source_version'] == '1.0'
+        assert receipt['request_ordinal'] == receipt['requests_attempted'] == receipt['responses_evaluated'] == 3
+        assert receipt['control_proof'] == {'request_ordinals': [1, 2], 'status_codes': [200, 403]}
+        assert receipt['finding_id'] == asset['vulnerabilities'][0]['id']
+        assert receipt['access_target']['endpoint'] == agent['endpoint']
+        if rule == 'authorization_bypass':
+            assert receipt['protected_path_index'] == 0
     identity = result['producer_identity']
     assert saved_identity(identity) == identity and identity['component'] == 'cli'
     assert all(checkpoint['producer_identity'] == identity for checkpoint in checkpoints)
@@ -203,7 +213,7 @@ async def test_trusted_https_access_cli_workflow(
         assert len(run['results']) == len(asset['vulnerabilities'])
         assert {item['properties']['vulnerability_id'] for item in run['results']} == {
             finding['id'] for finding in asset['vulnerabilities']}
-        assert run['properties']['check_evidence'][0]['check_evidence'] == []
+        assert run['properties']['check_evidence'][0]['check_evidence'] == asset['check_evidence']
 
     captured = capsys.readouterr()
     private = {_MARKER, _ISSUED, _REFERENCE}

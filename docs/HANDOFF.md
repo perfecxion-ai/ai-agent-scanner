@@ -220,6 +220,29 @@ check. Preserve frozen v3 finalized-check eligibility and raw archives while
 defining new receipt semantics; private server tenant inputs and CLI process-crash
 files remain separate work.
 
+R1.2d now implements protected-access observations under ledger `3.0` and
+checkpoint `4.0`. All four existing GET families publish actual control-backed
+findings before cleanup, pacing or another request. Private task-bound witnesses
+verify exact transmitted requests and selected roles. Public base-target binding
+plus numeric path indices preserves admin-resource identity through redaction.
+Malformed extensions cannot erase acknowledged evidence or expose a companion zero.
+
+Frozen ledger 1/2 readers and finalized-v3 eligibility remain supported; modern
+probe hashes cannot downgrade to legacy confirmation by stripping their ledger.
+Four genuine original v3 reports retain exact bytes and canonical 0/70/partial/90
+results. Schema 6 and existing caches need no new reclassification. CLI forced
+process-crash files and private API admission remain outside this slice.
+
+Independent review passes 1,052 combined cases on Python 3.13.15, followed by
+421 descriptor/version cases after extending the direct experimental-suite
+privacy guard. Catalog bytes, suite semantics/pin and request behavior remain
+unchanged. The full coverage gate passes 4,983 tests with warnings as errors;
+delivery CI is required before merge. See
+[local acceptance](VALIDATION.md#protected-access-observation-retention-local-acceptance).
+The next
+external gate is the [scoped access-retention retest](access-retention-retest.md),
+pinned to the eventual merged revision; no broad model cohort is required.
+
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
 operator retest only when a merged runtime change needs real-service validation,

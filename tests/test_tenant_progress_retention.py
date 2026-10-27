@@ -37,9 +37,9 @@ async def stalled(state, task):
 def assert_prefix(saved, final=None):
     values = saved + ([final] if final is not None else [])
     for report in values:
-        assert report['checkpoint']['version'] == '3.0'
-        assert report['check_evidence_schema_version'] == '2.0'
-        assert report['agents'][0]['check_evidence_schema_version'] == '2.0'
+        assert report['checkpoint']['version'] == '4.0'
+        assert report['check_evidence_schema_version'] == '3.0'
+        assert report['agents'][0]['check_evidence_schema_version'] == '3.0'
         assert report['producer_identity'] == values[0]['producer_identity']
     observed = [report for report in values if report['agents'][0]['check_evidence']]
     assert observed
@@ -68,7 +68,7 @@ def assert_partial_risk(report, state):
     sarif = to_sarif(report)['runs'][0]
     assert sarif['invocations'][0]['executionSuccessful'] is False
     assert sarif['properties']['summary']['overall_risk_score'] == 90
-    assert sarif['properties']['check_evidence_schema_version'] == '2.0'
+    assert sarif['properties']['check_evidence_schema_version'] == '3.0'
     assert sarif['properties']['check_evidence'][0]['check_evidence'] == item['check_evidence']
     assert len(sarif['results']) == len(item['vulnerabilities']) == 1
     assert sarif['results'][0]['level'] == 'error'

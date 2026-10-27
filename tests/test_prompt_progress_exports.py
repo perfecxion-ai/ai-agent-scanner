@@ -67,7 +67,7 @@ async def test_cli_retains_actual_disclosure_inside_unfinished_category(
         assert len(run['results']) == 1
         assert run['properties']['summary']['overall_risk_score'] == 70
         assert run['properties']['summary']['checks_unfinished'] == 1
-        assert run['properties']['check_evidence_schema_version'] == '2.0'
+        assert run['properties']['check_evidence_schema_version'] == '3.0'
         assert len(run['properties']['check_evidence']) == 1
         ledger = run['properties']['check_evidence'][0]
         assert len(ledger['check_evidence']) == 1

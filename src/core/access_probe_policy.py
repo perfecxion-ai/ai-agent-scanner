@@ -10,7 +10,13 @@ from types import MappingProxyType
 ACCESS_CONTROL_VERSION = 'authorized-and-denied-resource-controls-v3'
 ACCESS_CONTROL_STATUS = 'authorized_marker_verified_and_invalid_credential_denied'
 PROTECTED_CONTROL_VERSION = 3
-PUBLIC_ACCESS_FIELDS = ('protected_control_version', 'protected_path_index')
+ACCESS_OBSERVATION_CONTRACT = 'protected-access-response-observations-v1'
+ACCESS_EVIDENCE_SOURCE = 'controlled_access_response'
+PUBLIC_ACCESS_FIELDS = (
+    'protected_control_version', 'protected_path_index', 'access_target', 'sample_index', 'header_index',
+    'control_proof', 'request_ordinals', 'status_codes', 'authorized_control', 'denied_control', 'probe',
+    ACCESS_OBSERVATION_CONTRACT, ACCESS_EVIDENCE_SOURCE, '1.0', '3.0', '4.0',
+)
 PROTECTED_ACCESS_RULES = frozenset({
     'authentication_bypass', 'weak_credentials', 'weak_api_key', 'authorization_bypass',
 })
@@ -29,6 +35,58 @@ DEFAULT_SENSITIVE_PATHS = (
     '/../admin', '/./admin', '/%2e%2e/admin', '/admin%00', '/admin.php', '/admin.json',
 )
 PROTECTED_ACCESS_PATHS = DEFAULT_SENSITIVE_PATHS[:8]
+AUTHENTICATION_SAMPLES = (
+    ('No Authentication', ()),
+    ('Empty Authorization Header', (('Authorization', ''),)),
+    ('Empty Bearer Token', (('Authorization', 'Bearer '),)),
+    ('Null Bearer Token', (('Authorization', 'Bearer null'),)),
+    ('Undefined Bearer Token', (('Authorization', 'Bearer undefined'),)),
+    ('Empty Basic Auth', (('Authorization', 'Basic '),)),
+    ('Invalid Basic Auth', (('Authorization', 'Basic invalid'),)),
+    ('Invalid Auth Scheme', (('Authorization', 'InvalidScheme token'),)),
+    ('SQL Injection in Bearer Token', (('Authorization', "Bearer ' OR '1'='1"),)),
+    ('SQL Injection in Basic Auth', (('Authorization', "Basic ' OR '1'='1"),)),
+    ('Empty API Key', (('x-api-key', ''),)),
+    ('Null API Key', (('x-api-key', 'null'),)),
+    ('Empty api-key Header', (('api-key', ''),)),
+    ('X-Forwarded-For Bypass', (('X-Forwarded-For', '127.0.0.1'),)),
+    ('X-Real-IP Bypass', (('X-Real-IP', '127.0.0.1'),)),
+    ('X-Originating-IP Bypass', (('X-Originating-IP', '127.0.0.1'),)),
+    ('X-Admin Header Injection', (('X-Admin', 'true'),)),
+    ('X-User-Role Header Injection', (('X-User-Role', 'admin'),)),
+)
+
+
+def modern_access_definition(definition):
+    return [definition, ACCESS_OBSERVATION_CONTRACT]
+
+
+def protected_get_headers(headers):
+    return {'User-Agent': 'ai-agent-scanner', 'Accept': '*/*', 'Accept-Encoding': 'identity', **headers}
+
+
+def access_key_headers(key):
+    return [{'x-api-key': key}, {'api-key': key}, {'apikey': key}, {'X-API-KEY': key},
+            {'Authorization': 'Bearer ' + key}, {'Authorization': 'ApiKey ' + key}]
+
+
+def access_sample_headers(rule, sample_index=None, header_index=None):
+    import base64
+    if rule == 'authorization_bypass' and sample_index is None and header_index is None:
+        return protected_get_headers({})
+    maximum = 18 if rule == 'authentication_bypass' else 5
+    if type(sample_index) is not int or not 0 <= sample_index < maximum:
+        raise ValueError('Invalid access sample')
+    if rule == 'authentication_bypass' and header_index is None:
+        headers = dict(AUTHENTICATION_SAMPLES[sample_index][1])
+    elif rule == 'weak_credentials' and header_index is None:
+        username, password = DEFAULT_WEAK_CREDENTIALS[sample_index]
+        headers = {'Authorization': 'Basic ' + base64.b64encode(f'{username}:{password}'.encode()).decode()}
+    elif rule == 'weak_api_key' and type(header_index) is int and 0 <= header_index < 6:
+        headers = access_key_headers(DEFAULT_TEST_API_KEYS[sample_index])[header_index]
+    else:
+        raise ValueError('Invalid access sample')
+    return protected_get_headers(headers)
 
 
 def access_probe_definition(rule_id, *, sample=None):
@@ -56,6 +114,7 @@ class SupportedAccessProbe:
     protected_paths: tuple[str, ...]
     expected_pass_responses: int
     max_requests: int
+    requires_receipt: bool = False
 
 
 def _public_text(value, maximum):
@@ -64,8 +123,9 @@ def _public_text(value, maximum):
             and not any(ord(char) < 32 or ord(char) == 127 for char in value))
 
 
-def _version(rule, provider, model, paths=()):
-    identity = [access_probe_definition(rule), provider, model]
+def _version(rule, provider, model, paths=(), *, modern=False):
+    definition = access_probe_definition(rule)
+    identity = [modern_access_definition(definition) if modern else definition, provider, model]
     if rule == 'authorization_bypass':
         identity.append(list(paths))
     return '1:' + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
@@ -73,13 +133,16 @@ def _version(rule, provider, model, paths=()):
 
 @lru_cache(maxsize=128)
 def _authorization_probes(provider, model):
-    """At most 255 ordered subsets per bounded public provider/model pair."""
+    """Two bounded hash families for the 255 ordered admin-path subsets."""
     probes = {}
     for mask in range(1, 1 << len(PROTECTED_ACCESS_PATHS)):
         paths = tuple(path for index, path in enumerate(PROTECTED_ACCESS_PATHS) if mask & (1 << index))
         version = _version('authorization_bypass', provider, model, paths)
         probes[version] = SupportedAccessProbe('authorization_bypass', 'authorization_bypass.sample',
                                                version, paths, 3 * len(paths), 4 * len(paths))
+        version = _version('authorization_bypass', provider, model, paths, modern=True)
+        probes[version] = SupportedAccessProbe('authorization_bypass', 'authorization_bypass.sample',
+                                               version, paths, 3 * len(paths), 3 * len(paths), True)
     return MappingProxyType(probes)
 
 
@@ -99,13 +162,14 @@ def protected_access_probe(check, *, provider, model):
         return None
     if rule == 'authorization_bypass':
         return _authorization_probes(provider, model).get(version)
-    if version != _version(rule, provider, model):
+    modern = version == _version(rule, provider, model, modern=True)
+    if not modern and version != _version(rule, provider, model):
         return None
     # Cleanup errors can be recorded after a response was already evaluated.
     # These are conservative legacy accounting bounds, not wire-request totals.
     count, maximum = {'authentication_bypass': (20, 56), 'weak_credentials': (7, 12),
                       'weak_api_key': (32, 37)}[rule]
-    return SupportedAccessProbe(rule, probe, version, (), count, maximum)
+    return SupportedAccessProbe(rule, probe, version, (), count, count if modern else maximum, modern)
 
 
 def _counters(check):
@@ -122,10 +186,11 @@ def _context(check):
                      and '[' not in check['evidence_context_id'] and ']' not in check['evidence_context_id'])))
 
 
-def protected_access_pass(check, *, provider, model):
+def protected_access_pass(check, *, provider, model, evidence_schema_version=None):
     """Only a full current controlled sample can establish a sampled pass."""
     current = protected_access_probe(check, provider=provider, model=model)
-    if current is None or not _context(check):
+    if (current is None or not _context(check)
+            or current.requires_receipt and evidence_schema_version != '3.0'):
         return False
     return (check.get('status') == 'completed' and check.get('outcome') == 'passed'
             and check.get('reason') is None
@@ -175,7 +240,7 @@ def _protected_controls_match(finding):
 def protected_access_confirmation(check, finding, *, provider, model):
     """Keep genuine partial confirmations, never old or unsupported semantics."""
     current = protected_access_probe(check, provider=provider, model=model)
-    if (current is None or not isinstance(finding, dict) or not _context(check) or not _context(finding)
+    if (current is None or current.requires_receipt or not isinstance(finding, dict) or not _context(check) or not _context(finding)
             or check.get('outcome') != 'confirmed' or finding.get('evidence_status') != 'confirmed'
             or finding.get('vulnerability_type') != current.rule_id
             or not _protected_controls_match(finding)

@@ -319,8 +319,8 @@ def test_sigkill_retains_actual_tenant_receipt_and_recovers_once_without_probe_r
                 assert connection.scalar(select(store.jobs.c.status)) == 'running'
                 assert connection.scalar(select(store.scans.c.overall_risk_score)) == 90
             assert before['checkpoint']['sequence'] == sequence
-            assert before['checkpoint']['version'] == '3.0'
-            assert before['check_evidence_schema_version'] == '2.0'
+            assert before['checkpoint']['version'] == '4.0'
+            assert before['check_evidence_schema_version'] == '3.0'
             assert before['summary']['overall_risk_score'] == 90
             assert before['summary']['vulnerabilities_found'] == 1
             assert before['summary']['checks_unfinished'] == 1
