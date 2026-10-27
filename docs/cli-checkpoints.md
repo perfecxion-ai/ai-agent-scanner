@@ -4,6 +4,8 @@ Use `--checkpoint-dir` on `scan` or `discover` to preserve public report
 checkpoints during that execution. The directory must be new; its parent must
 already exist. Keep ordinary output outside the checkpoint directory.
 Keep both reports and checkpoint directories outside public source checkouts.
+The immediate parent must not be group- or world-writable unless it has the
+sticky bit, as a normal system temporary directory does.
 
 ```bash
 ai-agent-scanner scan --config lab-targets.json \
