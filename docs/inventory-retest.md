@@ -4,7 +4,7 @@ Use the exact merged revision supplied with the handoff in a disposable clean
 checkout. Make that revision available through the normal code-transfer path.
 The public gate creates its own private schema-4 database, upgrades it through
 real single-worker Gunicorn, and exercises 10,000 observations across three
-synthetic organizations. Version 2 of the gate checks schema 4 to 6 cache
+synthetic organizations. Version 3 of the gate checks schema 4 to 7 cache
 reconciliation, then deliberately restores the owned fixture's stale caches
 before traversal. These are repeated observations of 12 synthetic assets,
 not 10,000 deployments or a model-sensitivity measurement.
@@ -62,11 +62,11 @@ root, revision = Path(sys.argv[1]), sys.argv[2]
 for mode in ('normal', 'optimized'):
     value = json.loads((root / ('inventory-' + mode + '.json')).read_text())
     valid = (value.get('accepted') is True
-             and value.get('format_version') == 'inventory-acceptance-v2'
+             and value.get('format_version') == 'inventory-acceptance-v3'
              and value.get('observation_count') == 10000
              and value.get('schema_before') == 4
-             and value.get('schema_after') == 6
-             and value.get('schema_target') == 6
+             and value.get('schema_after') == 7
+             and value.get('schema_target') == 7
              and value.get('runtime', {}).get('source_revision') == revision
              and value.get('runtime', {}).get('tracked_source_modified') is False
              and value.get('server_exits') == [
@@ -79,8 +79,8 @@ PY
 
 Also capture normal and optimized
 [backup/restore acceptance](jobs.md#disposable-backuprestore-acceptance) on this
-same revision. Both commands must accept all thirteen cases, including a frozen
-schema-5 source and a genuinely initialized schema-6 source.
+same revision. Both commands must accept all fourteen cases, including frozen
+schema-5 and schema-6 sources and a genuinely initialized schema-7 source.
 
 ## What the gate establishes
 

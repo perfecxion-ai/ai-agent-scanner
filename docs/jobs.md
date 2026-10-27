@@ -136,7 +136,7 @@ database URLs, or queue contents.
 ## Schema upgrades
 
 Stop the server and back up the SQLite database with a consistent SQLite backup
-operation before upgrading. Startup validates schema version 6 while holding the
+operation before upgrading. Startup validates schema version 7 while holding the
 dispatcher lock. An empty database is initialized automatically. Recognized
 unversioned layouts are the original `scan_session` and `discovered_agent` tables,
 those tables plus `scan_result`, or those tables plus `scan_result` and `scan_job`.
@@ -206,6 +206,15 @@ Cache changes and the version-6 stamp share the upgrade transaction; failure
 rolls them back. Recognized schema-6 restart validates definitions without another
 cache refresh. This is a versioned upgrade, not continuous cache repair.
 
+Schema 7 adds the derived public-target group index and publication tables, three
+indexes, and three cache invalidation triggers. The recognized partial unique
+group-head index is the only additional unique index allowed. A schema-6 upgrade
+does not reproject risk caches or rewrite source records. It preserves the nine
+source-generation triggers and existing indexes. The dispatcher builds the group
+projection during idle maintenance; GET requests only read a current publication.
+Unusable grouping evidence does not disable the scan queue. See
+[group semantics and limits](asset-groups.md).
+
 Unknown tables, views, additional or altered triggers, expression indexes, additional constraints or unique indexes,
 `WITHOUT ROWID`/`STRICT` table options, explicit column collations or conflict policies,
 database column defaults, changed columns,
@@ -235,7 +244,7 @@ parent bounds child output, kills/reaps timed-out children, and removes the
 temporary databases after success or failure. JSON includes `accepted`, each
 case's assertions, and bounded failure details; failure returns nonzero.
 
-All thirteen cases include frozen schema 1/2/3/4/5 fixtures and a schema-6 fixture
+All fourteen cases include frozen schema 1/2/3/4/5/6 fixtures and a schema-7 fixture
 created through the real initializer. They contain completed evidence, agent snapshots, audit
 history, queued work, and previously active work. Templates and schedules are
 seeded where supported. After stopping and disposing seed connections, a read-only

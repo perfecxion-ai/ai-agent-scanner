@@ -34,8 +34,8 @@ from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVATIONS = 10000
-FORMAT_VERSION = 'inventory-acceptance-v2'
-TARGET_SCHEMA_VERSION = 6
+FORMAT_VERSION = 'inventory-acceptance-v3'
+TARGET_SCHEMA_VERSION = 7
 ORGANIZATIONS = ('inventory-a', 'inventory-b', 'inventory-c')
 CATEGORIES = ('high', 'zero', 'unknown', 'historical')
 RISK_FIELDS = ('risk_score', 'risk_level', 'risk_coverage_status', 'risk_scoring_policy',
@@ -45,7 +45,7 @@ OPERATOR_INDEX = ('CREATE INDEX operator_inventory_fixture ON discovered_agent '
 REQUIRED_ASSERTIONS = (
     'private_environment_and_owned_schema4_fixture',
     'genuine_controlled_access_high_zero_and_unassessed_sources',
-    'native_schema4_to6_policy_reconciliation_generation_indexes_and_triggers',
+    'native_schema4_to7_policy_reconciliation_generation_indexes_and_triggers',
     'complete_ordered_inventory_and_canonical_filters',
     'signed_cursor_tenant_tampering_and_invalid_limits',
     'committed_source_writes_invalidate_cursors',
@@ -111,7 +111,8 @@ def archive(directory):
         require(database.execute('PRAGMA integrity_check').fetchall() == [('ok',)], 'sqlite_integrity_failed')
         names = [row[0] for row in database.execute(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-            if row[0] not in {'schema_version', 'inventory_generation', 'sqlite_sequence'}]
+            if row[0] not in {'schema_version', 'inventory_generation', 'sqlite_sequence',
+                              'asset_group_index', 'asset_group_publication'}]
         result = {}
         for name in names:
             require(re.fullmatch(r'[a-z_]+', name) is not None, 'unexpected_fixture_table')
@@ -150,13 +151,16 @@ def restore_stale_caches(directory, original):
 def verify_upgrade_and_restore(directory, original, original_definitions, expected):
     """Prove policy reconciliation before restoring stale caches for API traversal."""
     from src.core.inventory_generation import INDEX_DEFINITIONS, TRIGGER_DEFINITIONS
+    from src.core.asset_group_storage import INDEX_DEFINITIONS as group_indexes, TRIGGER_DEFINITIONS as group_triggers
     upgraded = archive(directory)
     require(without_caches(directory, upgraded) == without_caches(directory, original),
             'upgrade_changed_noncache_rows_or_archived_json')
     current_definitions = definitions(directory)
     require(original_definitions <= current_definitions, 'upgrade_changed_original_definitions')
-    allowed = set(INDEX_DEFINITIONS) | set(TRIGGER_DEFINITIONS) | {
-        'inventory_generation', 'sqlite_autoindex_inventory_generation_1'}
+    allowed = set(INDEX_DEFINITIONS) | set(TRIGGER_DEFINITIONS) | set(group_indexes) | set(group_triggers) | {
+        'inventory_generation', 'sqlite_autoindex_inventory_generation_1',
+        'asset_group_index', 'asset_group_publication',
+        'sqlite_autoindex_asset_group_index_1', 'sqlite_autoindex_asset_group_publication_1'}
     require({row[1] for row in current_definitions - original_definitions} == allowed,
             'upgrade_added_unexpected_definitions')
     expected_scans = {organization + '-' + category: descriptor(category)['risk_score']
@@ -420,6 +424,7 @@ class Server:
 
 def check_schema(directory):
     from src.core.inventory_generation import INDEX_DEFINITIONS, TRIGGER_DEFINITIONS
+    from src.core.asset_group_storage import INDEX_DEFINITIONS as group_indexes, TRIGGER_DEFINITIONS as group_triggers
     from src.core.schema import SCHEMA_VERSION
     require(SCHEMA_VERSION == TARGET_SCHEMA_VERSION, 'schema_policy_target_changed')
     with closing(connection(directory)) as database:
@@ -428,10 +433,12 @@ def check_schema(directory):
         require([row[1:] for row in database.execute('PRAGMA table_info(inventory_generation)')] == [
             ('organization_id', 'VARCHAR(64)', 1, None, 1), ('generation', 'VARCHAR(32)', 1, None, 0)],
             'generation_table_changed')
-        require(dict(database.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger'")) == TRIGGER_DEFINITIONS,
+        require(dict(database.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger'"))
+                == dict(TRIGGER_DEFINITIONS, **group_triggers),
                 'generation_triggers_changed')
         indexes = dict(database.execute("SELECT name,sql FROM sqlite_master WHERE type='index'"))
         require(all(indexes.get(name) == sql for name, sql in INDEX_DEFINITIONS.items()), 'candidate_indexes_changed')
+        require(all(indexes.get(name) == sql for name, sql in group_indexes.items()), 'group_indexes_changed')
         require(indexes.get('operator_inventory_fixture') == OPERATOR_INDEX, 'operator_index_changed')
         tokens = dict(database.execute('SELECT organization_id,generation FROM inventory_generation'))
         require(set(tokens) == set(ORGANIZATIONS) and all(re.fullmatch('[0-9a-f]{32}', value) for value in tokens.values()),

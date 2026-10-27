@@ -98,8 +98,13 @@ def validate_inventory_definitions(connection, version):
     if version < 5:
         if triggers:
             raise InventorySchemaError('Unknown database triggers; no automatic changes were made')
-    elif triggers != TRIGGER_DEFINITIONS:
-        raise InventorySchemaError('Missing or altered inventory generation triggers')
+    else:
+        expected = TRIGGER_DEFINITIONS
+        if version >= 7:
+            from src.core.asset_group_storage import TRIGGER_DEFINITIONS as group_triggers
+            expected = {**expected, **group_triggers}
+        if triggers != expected:
+            raise InventorySchemaError('Missing or altered inventory generation triggers')
     indexes = dict(connection.exec_driver_sql(
         "SELECT name, sql FROM sqlite_master WHERE type = 'index'").all())
     reserved = {name.casefold(): name for name in INDEX_DEFINITIONS}

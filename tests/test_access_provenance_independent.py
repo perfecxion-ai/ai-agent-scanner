@@ -346,7 +346,7 @@ async def test_pipeline_pins_issued_control_before_its_first_checkpoint(access_t
 
 
 @pytest.mark.parametrize('fail_at', [None, 'snapshot-update', 'version-update'])
-def test_schema6_refresh_preserves_archive_bytes_and_untouched_owner_tokens(api, tmp_path, fail_at):
+def test_policy_and_group_schema_upgrade_preserves_archive_bytes_and_untouched_owner_tokens(api, tmp_path, fail_at):
     from src.core.schema import initialize_schema
     from tests.historical_schema import historical_metadata
 
@@ -402,7 +402,9 @@ def test_schema6_refresh_preserves_archive_bytes_and_untouched_owner_tokens(api,
         if fail_at:
             assert injected == [True] and after == before
             return
-        assert after['version'] == 6 and after['ddl'] == before['ddl']
+        from tests.asset_group_schema_assertions import assert_group_extension
+        assert after['version'] == 7
+        assert_group_extension(before['ddl'], after['ddl'])
         assert dict(after['reports']) == {key: raw.decode() for key, raw in archived.items()}
         for table, caches in [('scans', {'overall_risk_score'}), ('agents', {'risk_score', 'risk_level'})]:
             assert [{key: value for key, value in row._mapping.items() if key not in caches}

@@ -41,7 +41,7 @@ proposed calls and observed actions are distinct outcomes.
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Initial controls merged in PR #64. V3 actual-request provenance/denial correction and schema-6 historical cache reconciliation merged in PR #79 with all eight PR/post-merge checks. Scoped native Python 3.11.2/SQLite 3.40.1 access, backup and inventory acceptance passes with recorded private-harness qualifications |
 | R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check and prompt/tenant/access receipts have qualified native acceptance. R1.2e CLI crash files merged in PR #83; PR #84 manual CI and current main pass all eight checks. Scoped native Python 3.11.2 acceptance passes 119 cases, packaging and installed recovery with recorded harness/privacy limits; future families and private API inputs remain separate |
 | R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Merged in PR #72 with all local, independent, and eight PR/post-merge CI gates passed; scoped native reconstructed-fixture upgrade/restart accepted with recorded qualifications |
-| R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a exhaustive traversal has qualified native acceptance. R1.4b1 conservative observation groups and latest-versus-prior-confirmed history are next under design; R1.4b2 authoritative source-bound indexes are separate and remain open |
+| R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a exhaustive traversal has qualified native acceptance. R1.4b1 public-target groups and original occurrence history have focused and real-server gates; complete coverage and delivery checks are tracked in PR #86. Scoped native schema/API retest and R1.4b2 authoritative risk indexes remain open |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | R1.5a development/content identity passes local and independent gates; required delivery CI is recorded on its PR. Release checksums, SBOM, dependency/build attestation and deployed upgrade acceptance remain open |
 | R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
 | R2.2 | Advanced model/evidence/suite setup depends on manual identifiers and JSON | Guided discovery-to-assessment flow and CLI setup/diagnostics/preview expose ready, unsupported, missing, and inapplicable prerequisites; secret references never become ordinary saved values | Planned |
@@ -165,11 +165,16 @@ and the [accepted native gate](VALIDATION.md#supplied-native-inventory-traversal
 This does not provide a deduplicated current-asset view or an authoritative
 indexed risk cache.
 R1.5a producer/build identity and tenant/access receipts are now delivered below.
-The next local design is R1.4b1 conservative observation grouping. Keep the latest
-observation distinct from prior confirmed history; missing or quiet evidence must
-not resolve an earlier confirmation. R1.4b2 authoritative source-bound risk indexes
-need separate semantics and acceptance. Neither grouping nor those indexes are
-implemented yet. Metadata correctness does not require another cloud run.
+R1.4b1 now implements conservative public-target groups with latest canonical risk
+separate from original finding history. Missing or quiet evidence does not resolve
+an earlier confirmation. Schema 7 derives bounded, sealed publications from saved
+sources while preserving schema-6 rows and caches. Focused tests and normal and
+optimized real-server gates traverse 10,000 observations across three organizations.
+See [contract](asset-groups.md), [local evidence](VALIDATION.md#public-target-grouping-local-acceptance)
+and the [pending native retest](asset-groups-retest.md). R1.4b2 authoritative
+source-bound risk indexes, dashboard group views and logical-finding consolidation
+need separate semantics and acceptance. Group IDs do not establish credential or
+principal equivalence; history counts occurrences rather than unique vulnerabilities.
 Keep release publication, artifact attestations and the rest of R1.5 separate.
 R1.5a uses canonical `1.2.0.dev0`, scoped deterministic source/catalog hashes,
 immutable new-run producer stamps and distinct exporter identity. Historical raw

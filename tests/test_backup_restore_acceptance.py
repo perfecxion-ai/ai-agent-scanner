@@ -21,6 +21,7 @@ from sqlalchemy.pool import StaticPool
 
 from src.core import schema
 from src.core.inventory_generation import TRIGGER_DEFINITIONS, register_inventory_metadata
+from src.core.asset_group_storage import TRIGGER_DEFINITIONS as group_triggers, register_asset_group_metadata
 from tests.historical_schema import historical_metadata
 
 
@@ -51,7 +52,7 @@ def test_snapshot_quotes_hostile_fixture_identifiers():
         assert rows['audit_event'] == [(1,)]
 
 
-@pytest.mark.parametrize('version', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('version', [1, 2, 3, 4, 5, 6])
 def test_historical_seed_never_reads_live_orm_metadata(version):
     class UnavailableLiveMetadata:
         @property
@@ -66,8 +67,8 @@ def test_historical_seed_never_reads_live_orm_metadata(version):
                 assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == version
                 triggers = dict(connection.exec_driver_sql(
                     "SELECT name,sql FROM sqlite_master WHERE type='trigger'").all())
-                assert triggers == (TRIGGER_DEFINITIONS if version == 5 else {})
-                assert ('inventory_generation' in inspect(connection).get_table_names()) is (version == 5)
+                assert triggers == (TRIGGER_DEFINITIONS if version >= 5 else {})
+                assert ('inventory_generation' in inspect(connection).get_table_names()) is (version >= 5)
                 for table, name in [('scan_session', 'overall_risk_score'), ('discovered_agent', 'risk_score')]:
                     column = next(value for value in inspect(connection).get_columns(table) if value['name'] == name)
                     assert column['nullable'] is (version >= 4) and column['default'] is None
@@ -78,6 +79,7 @@ def test_historical_seed_never_reads_live_orm_metadata(version):
 def test_current_seed_uses_initializer_and_installs_recognized_triggers(monkeypatch):
     metadata = historical_metadata(version=4)
     register_inventory_metadata(metadata)
+    register_asset_group_metadata(metadata)
     server = SimpleNamespace(db=SimpleNamespace(metadata=metadata))
     initialized = []
     original = schema.initialize_schema
@@ -85,15 +87,15 @@ def test_current_seed_uses_initializer_and_installs_recognized_triggers(monkeypa
         initialized.append(candidate)
         return original(engine, candidate)
     monkeypatch.setattr(schema, 'initialize_schema', initialize)
-    with owned_directory('v6') as directory:
+    with owned_directory('v7') as directory:
         engine = create_engine('sqlite:///' + str(directory / 'source.sqlite'))
         try:
-            acceptance.seed(server, engine, 6)
+            acceptance.seed(server, engine, 7)
             assert initialized == [metadata]
             with engine.connect() as connection:
                 assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == schema.SCHEMA_VERSION
                 assert dict(connection.exec_driver_sql(
-                    "SELECT name,sql FROM sqlite_master WHERE type='trigger'").all()) == TRIGGER_DEFINITIONS
+                    "SELECT name,sql FROM sqlite_master WHERE type='trigger'").all()) == dict(TRIGGER_DEFINITIONS, **group_triggers)
                 values = connection.exec_driver_sql('SELECT organization_id,generation FROM inventory_generation').all()
                 assert len(values) == 1 and values[0][0] == 'backup-fixture' and len(values[0][1]) == 32
         finally:

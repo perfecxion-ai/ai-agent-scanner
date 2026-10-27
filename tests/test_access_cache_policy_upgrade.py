@@ -11,6 +11,7 @@ from src.core.inventory_generation import TRIGGER_DEFINITIONS
 from src.core.risk_projection import project_report_risk
 from src.core.stored_risk import MAX_STORED_RISK_BYTES
 from tests.historical_schema import SCHEMA_FIVE_TRIGGERS, historical_metadata
+from tests.asset_group_schema_assertions import assert_group_extension, without_group_rows
 from tests.legacy_access_fixtures import legacy_access_archive, legacy_access_report
 from tests.legacy_observation_fixtures import legacy_archive, legacy_report
 from tests.test_api_auth import api as api
@@ -117,8 +118,8 @@ def test_policy_refresh_preserves_old_archives_and_supported_current_caches(data
         event.remove(engine, 'before_cursor_execute', observe)
     definitions, rows = state(engine)
     scan_scores, asset_scores, generations = caches(engine)
-    assert definitions == prior_definitions
-    assert without_cache_rows(rows, metadata) == without_cache_rows(prior_rows, metadata)
+    assert_group_extension(prior_definitions, definitions)
+    assert without_cache_rows(without_group_rows(rows), metadata) == without_cache_rows(prior_rows, metadata)
     assert rows['schema_version'] == [(1, schema.SCHEMA_VERSION)]
     assert scan_scores == {name: value[0] for name, value in expected.items()}
     assert asset_scores == {'snapshot-' + name: value for name, value in expected.items()}

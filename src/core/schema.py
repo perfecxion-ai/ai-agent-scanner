@@ -12,9 +12,15 @@ from src.core.inventory_generation import (
     TABLE_NAME as INVENTORY_GENERATION_TABLE, InventorySchemaError,
     install_inventory_generation, validate_inventory_definitions,
 )
+from src.core.asset_group_storage import (
+    COLUMNS as ASSET_GROUP_COLUMNS, PRIMARY_KEYS as ASSET_GROUP_PRIMARY_KEYS,
+    TABLE_NAMES as ASSET_GROUP_TABLES, UNIQUE_HEAD_INDEX,
+    INDEX_DEFINITIONS as ASSET_GROUP_INDEXES, AssetGroupSchemaError,
+    install_asset_group_storage, validate_asset_group_definitions,
+)
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 BASE_TABLES = frozenset({"scan_session", "discovered_agent"})
 LEGACY_LAYOUTS = (BASE_TABLES, BASE_TABLES | {"scan_result"},
                   BASE_TABLES | {"scan_result", "scan_job"})
@@ -24,6 +30,7 @@ VERSION_THREE_TABLES = VERSION_TWO_TABLES | {"scan_schedule", "scan_occurrence"}
 VERSION_FOUR_TABLES = VERSION_THREE_TABLES
 VERSION_FIVE_TABLES = VERSION_FOUR_TABLES | {INVENTORY_GENERATION_TABLE}
 VERSION_SIX_TABLES = VERSION_FIVE_TABLES
+VERSION_SEVEN_TABLES = VERSION_SIX_TABLES | ASSET_GROUP_TABLES
 _NULLABLE_SCORES = {("scan_session", "overall_risk_score"), ("discovered_agent", "risk_score")}
 _INVALID_JSON = object()
 _DDL_QUOTES = re.compile(r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^\]]*\]|--[^\r\n]*|/\*[\s\S]*?\*/")
@@ -140,22 +147,25 @@ _HISTORICAL = {
     ),
 }
 _PRIMARY = {'audit_event':['id'],'discovered_agent':['id'],'scan_job':['scan_id'],'scan_occurrence':['id'],'scan_result':['scan_id'],'scan_schedule':['id'],'scan_session':['id'],'scan_template':['id'],'schema_version':['id'],'inventory_generation':['organization_id']}
+_PRIMARY.update({name: list(columns) for name, columns in ASSET_GROUP_PRIMARY_KEYS.items()})
 
 
 def _columns(name, version):
+    if name in ASSET_GROUP_COLUMNS and version >= 7:
+        return {column: (kind, nullable) for column, kind, nullable in ASSET_GROUP_COLUMNS[name]}
     return {column: (kind, True if version >= 4 and (name, column) in _NULLABLE_SCORES else nullable)
             for column, kind, nullable in _HISTORICAL[name]}
 
 
 def _validate_metadata(metadata, dialect):
-    if set(metadata.tables) != VERSION_FIVE_TABLES:
+    if set(metadata.tables) != VERSION_SEVEN_TABLES:
         raise SchemaError("Unsupported application metadata")
     for name, table in metadata.tables.items():
         options = table.dialect_options['sqlite']
         if (options.get('with_rowid', True) is not True or options.get('strict', False) is not False
                 or options.get('autoincrement', False) is not False):
             raise SchemaError("Unsupported application metadata")
-        expected = _columns(name, 5)
+        expected = _columns(name, SCHEMA_VERSION)
         if set(table.columns.keys()) != set(expected):
             raise SchemaError("Unsupported application metadata")
         for column in table.columns:
@@ -172,7 +182,11 @@ def _validate_indexes(connection, name):
     for index in connection.exec_driver_sql("PRAGMA index_list(" + quoted + ")").mappings():
         if index["origin"] == "pk":
             continue
-        if index["unique"]:
+        recognized_head = (name == 'asset_group_index' and index['name'] == UNIQUE_HEAD_INDEX
+                           and connection.exec_driver_sql(
+                               "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
+                               (UNIQUE_HEAD_INDEX,)).scalar_one() == ASSET_GROUP_INDEXES[UNIQUE_HEAD_INDEX])
+        if index["unique"] and not recognized_head:
             raise SchemaError("Unsupported unique index in " + name)
         index_name = connection.dialect.identifier_preparer.quote(index["name"])
         for column in connection.exec_driver_sql("PRAGMA index_xinfo(" + index_name + ")").mappings():
@@ -305,7 +319,7 @@ def initialize_schema(engine, metadata):
     if engine.dialect.name != "sqlite":
         raise SchemaError("Schema initialization currently supports SQLite only")
     _validate_metadata(metadata, engine.dialect)
-    expected = VERSION_SIX_TABLES
+    expected = VERSION_SEVEN_TABLES
     with engine.connect() as connection:
         connection.exec_driver_sql("BEGIN IMMEDIATE")
         try:
@@ -317,16 +331,17 @@ def initialize_schema(engine, metadata):
             if "schema_version" in names:
                 _validate_tables(connection, {"schema_version"}, 3)
                 rows = connection.execute(select(metadata.tables["schema_version"])).all()
-                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, 2, 3, 4, 5, 6):
+                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, 2, 3, 4, 5, 6, 7):
                     raise SchemaError("Unsupported database schema version")
                 version = rows[0][1]
                 layouts = {1: VERSION_ONE_TABLES, 2: VERSION_TWO_TABLES,
                            3: VERSION_THREE_TABLES, 4: VERSION_FOUR_TABLES,
-                           5: VERSION_FIVE_TABLES, 6: VERSION_SIX_TABLES}
+                           5: VERSION_FIVE_TABLES, 6: VERSION_SIX_TABLES, 7: VERSION_SEVEN_TABLES}
                 if names != layouts[version]:
                     raise SchemaError("Versioned database has missing or unexpected tables")
                 _validate_tables(connection, names, version)
                 validate_inventory_definitions(connection, version)
+                validate_asset_group_definitions(connection, version)
                 if version < 4:
                     if version == 1:
                         metadata.tables["scan_template"].create(connection)
@@ -343,6 +358,8 @@ def initialize_schema(engine, metadata):
                     # stay unchanged. Existing observation triggers invalidate
                     # only owners whose snapshot caches actually change.
                     _migrate_risk_values(connection, metadata)
+                if version < 7:
+                    install_asset_group_storage(connection, metadata)
                 if version < SCHEMA_VERSION:
                     connection.execute(update(metadata.tables["schema_version"]).where(
                         metadata.tables["schema_version"].c.id == 1).values(version=SCHEMA_VERSION))
@@ -351,18 +368,21 @@ def initialize_schema(engine, metadata):
                     raise SchemaError("Unrecognized legacy database layout")
                 _validate_tables(connection, names, 3)
                 validate_inventory_definitions(connection, 0)
+                validate_asset_group_definitions(connection, 0)
                 metadata.create_all(connection)
                 if names:
                     for name in sorted(BASE_TABLES):
                         _rebuild_score_table(connection, metadata, name)
                     _migrate_risk_values(connection, metadata)
                 install_inventory_generation(connection, metadata)
+                install_asset_group_storage(connection, metadata)
                 connection.execute(insert(metadata.tables["schema_version"]).values(
                     id=1, version=SCHEMA_VERSION))
-            _validate_tables(connection, expected, 5)
-            validate_inventory_definitions(connection, 5)
+            _validate_tables(connection, expected, SCHEMA_VERSION)
+            validate_inventory_definitions(connection, SCHEMA_VERSION)
+            validate_asset_group_definitions(connection, SCHEMA_VERSION)
             connection.commit()
-        except InventorySchemaError as exc:
+        except (InventorySchemaError, AssetGroupSchemaError) as exc:
             connection.rollback()
             raise SchemaError(str(exc)) from None
         except Exception:

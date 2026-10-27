@@ -180,7 +180,7 @@ Existing saved reports and exported copies are not retroactively sanitized.
 
 ## Scalar cache storage
 
-SQLite schemas 4 through 6 store unknown scan and snapshot scores as SQL NULL, with no zero
+SQLite schemas 4 through 7 store unknown scan and snapshot scores as SQL NULL, with no zero
 default. Supported assessed zero remains 0.0. New checkpoint and terminal writers
 derive these scalar caches from the same canonical report projection used by API
 reads. Recognized layouts predating schema 4 migrate the caches transactionally while
@@ -196,8 +196,15 @@ necessary scalar risk/level values and the version stamp; existing observation
 triggers naturally invalidate affected owners' cursor generations. Reports,
 metadata, IDs and unrelated rows remain exact. Restarting recognized schema 6
 does not run another cache reconciliation or repair arbitrary direct writes.
+Schema 7 adds derived grouping storage without another risk-cache reconciliation.
+It preserves the source records, archived evidence, and scalar values on a
+recognized schema-6 database.
 
 ## Inventory observations
+
+[Public target groups](asset-groups.md) provide a separate view of repeated
+observations. Their latest canonical risk and prior confirmed occurrences remain
+distinct. A later quiet or unassessed run does not resolve a prior confirmation.
 
 The global inventory endpoint lists saved observations. Snapshot IDs and
 scan-local asset aliases retain their meanings; repeated observations are not
@@ -390,7 +397,8 @@ including after a check finishes or if an envelope is stripped. Their sampled
 passes require ledger 3 and the complete successful sample. Frozen finalized
 v3 hashes remain supported under their existing controls and counters, and
 obsolete v2 claims remain unsupported. No archive, SQL schema or historical
-cache reclassification is needed for this additive contract; schema 6 remains.
+cache reclassification was needed for this additive contract. Schema 7 separately
+adds derived public-target grouping storage without changing these evidence rules.
 
 Malformed or unsupported public evidence can remain readable with unknown risk.
 It cannot invalidate an acknowledged eligible prefix or expose a companion zero.
