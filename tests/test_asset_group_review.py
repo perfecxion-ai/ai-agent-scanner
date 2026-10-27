@@ -140,3 +140,47 @@ def test_cloud_resource_identity_does_not_override_saved_endpoint_binding(review
     assert value.identity.status == 'unmerged'
     assert value.identity.reason == 'snapshot_target_mismatch'
     assert value.risk['risk_score'] is None
+
+
+@pytest.mark.parametrize('invalid_owner', ['', 'a' * 257, 'a' * 65, 'a\ninvalid', 'a[redacted]',
+                                         'http://user:password@example.test/'])
+def test_malformed_earlier_owner_cannot_starve_valid_organizations(review_database, invalid_owner):
+    engine, tables = review_database
+    seed_repeated_sources(engine, tables)
+    with engine.begin() as connection:
+        report = legacy_access_v3_report('high')
+        agent = report['agents'][0]
+        connection.execute(tables['scans'].insert().values(
+            id='bad-owner-scan', organization_id=invalid_owner, scan_name='Owned invalid namespace',
+            scan_type='security_only', status='completed', target_scope={}, scan_config={}))
+        connection.execute(tables['reports'].insert().values(scan_id='bad-owner-scan', result=report))
+        connection.execute(tables['observations'].insert().values(
+            id='bad-owner-observation', scan_id='bad-owner-scan', agent_name=agent['name'], agent_type=agent['type'],
+            provider=agent.get('provider'), model_name=agent.get('model'), endpoint_url=agent.get('endpoint'),
+            discovery_method='owned-review', metadata={'asset_id': agent['id']},
+            discovered_at=datetime(2026, 1, 1)))
+        # The normal source-write triggers create the malformed owner entry;
+        # no invalidation metadata is forged or rewritten by this fixture.
+        before = {name: connection.execute(select(tables[name]).order_by(tables[name].c.id
+                  if name != 'reports' else tables[name].c.scan_id)).all()
+                  for name in ('observations', 'scans', 'reports')}
+    projector, states = AssetGroupProjector(engine, tables), []
+    # Advance retry time without waiting for real backoff. This tests repeated
+    # eligible maintenance passes, not whether a configured throttle elapses.
+    for _ in range(20):
+        projector._next_poll = 0
+        progress = projector.step()
+        states.append(progress.state)
+        if progress.published and progress.organization_id == 'review-owner':
+            break
+    else:
+        pytest.fail('Malformed owner starved valid tenant: ' + repr(states))
+    with engine.connect() as connection:
+        assert connection.scalar(select(tables['publication'].c.active_build_id).where(
+            tables['publication'].c.organization_id == 'review-owner')) is not None
+        assert connection.execute(select(tables['generations'].c.organization_id).where(
+            tables['generations'].c.organization_id == invalid_owner)).scalar_one() == invalid_owner
+        after = {name: connection.execute(select(tables[name]).order_by(tables[name].c.id
+                 if name != 'reports' else tables[name].c.scan_id)).all()
+                 for name in ('observations', 'scans', 'reports')}
+        assert after == before

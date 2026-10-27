@@ -10,7 +10,7 @@ import time
 import uuid
 
 from itsdangerous import BadSignature, TimestampSigner
-from sqlalchemy import String, and_, case, delete, func, insert, or_, select, update
+from sqlalchemy import LargeBinary, String, and_, case, cast, delete, func, insert, or_, select, update
 from sqlalchemy.exc import OperationalError
 
 from src.core.asset_group_projection import (
@@ -421,16 +421,23 @@ class AssetGroupProjector:
                 connection.exec_driver_sql('BEGIN IMMEDIATE')
                 try:
                     g = self.tables['generations'].c
-                    statement = select(bounded_field(g.organization_id, 256)).order_by(g.organization_id).limit(MAX_ROWS)
+                    statement = select(bounded_field(g.organization_id, 256)).where(
+                        func.typeof(g.organization_id) == 'text', func.length(g.organization_id) >= 1,
+                        func.length(g.organization_id) <= 64,
+                        func.length(cast(g.organization_id, LargeBinary)) <= 256
+                    ).order_by(g.organization_id).limit(MAX_ROWS)
                     if self._after_organization is not None:
                         statement = statement.where(g.organization_id > self._after_organization)
                     organizations = connection.execute(statement).scalars().all()
                     blocked = None
                     for organization in organizations:
                         check_deadline(deadline, stop_event)
-                        if public_text(organization, 64, identifier=True) != organization:
-                            raise unavailable()
                         self._after_organization = organization
+                        try:
+                            if public_text(organization, 64, identifier=True) != organization:
+                                continue
+                        except InventoryError:
+                            continue
                         progress = self._organization(connection, organization, deadline, stop_event)
                         if progress.state == 'blocked':
                             blocked = progress
