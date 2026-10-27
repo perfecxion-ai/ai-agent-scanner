@@ -1539,6 +1539,82 @@ R1.4b1 conservative grouping of latest observations versus prior confirmed histo
 is next under design; R1.4b2 authoritative source-bound indexes remain separate.
 Neither is implemented by this acceptance.
 
+### Public target grouping local acceptance
+
+R1.4b1 adds authenticated public-target groups and original finding-occurrence
+history. The [API contract](asset-groups.md) keeps the latest observation's
+canonical risk separate from prior confirmations. A later zero, null, discovery,
+or inconclusive result does not establish remediation. Observation IDs, raw
+reports, existing API projections, score semantics, and evidence schema versions
+are preserved. Grouping does not establish credential or principal equivalence.
+
+The schema-6 to 7 transaction adds two derived tables, three indexes, and three
+cache invalidation triggers without changing existing rows, score caches,
+indexes, or the nine inventory source triggers. Older supported migrations keep
+their previous ordering and rollback checks. The idle dispatcher stages and
+seals bounded batches under exclusive ownership; active scan workers take
+priority. GET uses a read-only snapshot and checks source generation, projection
+policy, publication nonce, total/sealed/source row counts before selecting group
+heads. Unreadable or stale evidence produces an explicit unavailable view.
+
+Focused acceptance passes 114 identity/schema cases, 28 projector/history cases,
+24 API/ownership/stopped-backup cases, ten independent review regressions, and
+25 public-gate cases. Exact Python 3.13.15 independent checks cover the core and
+reader cases; the public-gate set completes in 138.88 seconds with coverage and
+warnings treated as errors. Its real normal and optimized Gunicorn cases take
+65.84 and 70.07 seconds on the final owner-isolation correction. Track the
+complete local coverage run and required delivery checks in
+[PR #86](https://github.com/perfecxion-ai/ai-agent-scanner/pull/86).
+
+The real-server gate uses 10,000 repeated observations from complete-capture
+transport test doubles without target sockets, across three synthetic
+organizations. It produces 24 groups, including deliberately separate redacted
+and ambiguous observations. Full ordered occurrence references, counts, safe
+public fields and per-organization view digests match the source oracle before
+mutations and after restart. Supported confirmations include genuine unscored
+pipeline receipts; newer zero and null results remain the latest risk.
+
+Review caught and corrected blocked-owner starvation, a history cursor that
+could repeat an exhausted large-source boundary, timestamp materialization
+before its byte limit, and cloud identity incorrectly standing in for endpoint
+binding. Four independent regressions pass on the corrected reader code. The
+malformed-source gate now waits for an actual current-generation
+`source_unavailable` build before checking refusal, with two negative controls;
+an immediate stale-generation 503 alone was insufficient proof. A coverage-only
+test failure also replaced a fixed call count with bounded eventual publication,
+retaining every batch limit and verifying a genuine private staged prefix. The
+old migration-index oracle now recognizes the five additional derived indexes
+while still requiring exact preservation of every existing index.
+
+A final owner-isolation review reproduced six malformed organization identifiers
+through normal source writes. A bad first generation owner could prevent later
+valid organizations from refreshing. The corrected selector bounds eligible
+text keys in SQL and advances its bookmark before rejecting a malformed key.
+All source rows remain unchanged; valid tenants publish independently. The full
+152-case identity/schema/reader/review set passes on Python 3.10 and exact 3.13.15,
+including the six added regressions and full source coverage on 3.13.
+
+Build, Twine, and installed-wheel CLI recovery smoke pass. Both distributions
+contain the same 78 byte-exact scanner/CLI sources and no assistant instructions,
+operator database or lab artifact. The wheel provides CLI/library code; server
+entrypoints remain checkout/container components. The scoped scanner source
+identity is `8231b08e19eea3a8154ba599feb747cafd89dbe715ce07f2a46cf4dc36bc5d2a`.
+Package publication, deployment, and release attestations remain separate.
+
+Both backup modes now contain fourteen cases, with a frozen schema-6 source and
+a current schema-7 source. A separate stopped-backup case preserves a populated
+sealed group cache and all source rows through restore and restart without
+rebuilding. Cache-tamper HTTP cases restore publication metadata after a changed
+sealed row, extra unsealed row, source-generation retarget, or policy retarget;
+each refuses the grouping view while the observation API remains usable.
+
+The [scoped native retest](asset-groups-retest.md) remains pending for the new
+schema and grouping API. It needs no model service, lab secret or operator data.
+These gates do not establish model sensitivity, target seeding, power-loss
+durability, credential equivalence, distributed operation or enterprise
+readiness. Private server inputs, dashboard grouping, authoritative risk indexes,
+and the remaining R2 through R4 work retain their own acceptance criteria.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose

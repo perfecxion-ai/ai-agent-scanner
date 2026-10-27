@@ -5,6 +5,10 @@ Risk belongs to each saved observation. Several observations can refer to the
 same target, including an earlier confirmation and a later inconclusive run.
 Snapshot `id` and scan-local `asset_id` retain their existing meanings.
 
+The separate [public target group API](asset-groups.md) links compatible public
+targets without changing these observation IDs or their risk semantics. It keeps
+latest risk separate from prior finding history.
+
 The endpoint reads current canonical risk from saved reports. Database score and
 level columns never exclude candidates. Unsupported historical evidence remains
 unknown, and supported assessed zero remains numeric zero.

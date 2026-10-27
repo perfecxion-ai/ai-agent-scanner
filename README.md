@@ -182,6 +182,10 @@ The [global inventory API](docs/inventory.md) traverses saved observations with
 canonical risk filters and bounded cursors. Follow every continuation to complete
 a search. A [public owned-fixture gate](docs/inventory-retest.md) checks a native
 schema upgrade and 10,000 observations without a model server or operator data.
+The [public target group API](docs/asset-groups.md) links repeated observations
+while keeping the latest canonical risk separate from earlier confirmations.
+It does not infer remediation from a later quiet or unassessed run. Group views
+are currently available through the API.
 The authenticated [template API](docs/scan-templates.md) saves existing scan
 definitions with revision checks and bounded tenant quotas. Manual runs share
 the scan queue and revalidate current scope and source prerequisites. Template

@@ -279,10 +279,21 @@ families on the supported POSIX/local-filesystem process-recovery boundary.
 Future evidence families, power loss, deployed storage, private API admission and
 enterprise acceptance remain separate gates.
 
-Next is the R1.4b1 design for conservative observation groups: show the latest
-observation separately from prior confirmed history, without treating a quiet or
-unknown run as resolution. R1.4b2 authoritative source-bound indexes are separate.
-Neither increment is implemented by this acceptance.
+R1.4b1 now implements authenticated public-target groups and occurrence history.
+Latest canonical risk remains separate from prior confirmations, including
+genuine supported receipts saved before scoring. Quiet or unknown later runs do
+not resolve earlier findings. Schema 7 adds a derived, sealed index without
+rewriting schema-6 reports, observations or score caches. Idle maintenance holds
+dispatcher ownership and yields to active scan workers; GET never repairs the
+index. Stale or unreadable sources return unavailable. See the
+[contract](asset-groups.md) and [local acceptance](VALIDATION.md#public-target-grouping-local-acceptance).
+
+The new [native grouping retest](asset-groups-retest.md) remains pending. It uses
+its own synthetic data and real loopback Gunicorn API, without lab services or
+operator secrets. R1.4b2 authoritative risk indexes, dashboard group views,
+credential/principal equivalence, logical-finding consolidation, and the remaining
+R2 through R4 work are separate. Group history counts occurrences, not independent
+vulnerabilities. No enterprise or release approval follows from these local gates.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
