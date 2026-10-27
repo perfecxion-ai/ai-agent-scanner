@@ -1427,6 +1427,13 @@ loss, network filesystems, private API admission or enterprise readiness. No
 operator configuration or database was accessed; no package was published or
 service deployed.
 
+The first final-head macOS job reached 97 percent of pytest with passing progress
+before its ten-minute workflow limit cancelled execution; backup acceptance was
+not reached. It is not accepted as a passed gate. The macOS job allowance is now
+fifteen minutes for the full suite and both existing backup commands. Scanner,
+request, fixture and backup deadlines and assertions are unchanged. The new head
+must pass all eight CI checks, including native completion and both backup modes.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose
