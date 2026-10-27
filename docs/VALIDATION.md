@@ -1566,6 +1566,13 @@ warnings treated as errors. Its real normal and optimized Gunicorn cases take
 complete local coverage run and required delivery checks in
 [PR #86](https://github.com/perfecxion-ai/ai-agent-scanner/pull/86).
 
+The initial final-head macOS CI run reached 97 percent with passing progress
+before its fifteen-minute job allowance cancelled it; backup commands had not
+run. That is not a passed gate. The job now allows twenty minutes for the full
+suite and both backup commands. Scanner, request, source, fixture and backup
+deadlines, test assertions and CI commands are unchanged. Required rerun results
+remain tracked on the implementation PR.
+
 The real-server gate uses 10,000 repeated observations from complete-capture
 transport test doubles without target sockets, across three synthetic
 organizations. It produces 24 groups, including deliberately separate redacted
