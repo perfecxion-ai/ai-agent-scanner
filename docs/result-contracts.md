@@ -240,7 +240,8 @@ Initial inventory alone is a valid checkpoint, not proof that any security check
 ran. Failed validation or persistence stops execution without weakening prior
 evidence. Missing or duplicate source IDs, including collisions after redaction,
 cannot be used to join security results to inventory. Historical reports are not
-rewritten to introduce this envelope. See [storage and recovery limits](jobs.md#finalized-check-checkpoints).
+rewritten to introduce this envelope. See [storage and recovery limits](jobs.md#finalized-check-checkpoints)
+and the opt-in [CLI checkpoint-file envelope](cli-checkpoints.md#storage-contract).
 
 ### Prompt observation receipts
 

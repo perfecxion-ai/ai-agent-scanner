@@ -123,8 +123,10 @@ Process
 termination before an acknowledged commit can lose that observation. This is server-process recovery on the
 supported local SQLite deployment, not power-loss or storage-hardware validation.
 The CLI retains the same public reports in memory and exports on orderly timeout
-or cancellation with a nonzero exit. It does not persist a restartable checkpoint
-file and cannot recover from a CLI process crash or forced termination.
+or cancellation with a nonzero exit. An opt-in fresh `--checkpoint-dir` also
+persists public snapshots for offline `recover` export after process termination.
+Recovery never resumes or replays a probe. See the separate
+[CLI file contract and limits](cli-checkpoints.md).
 
 `GET /health/live` (also `/health`) checks process liveness. `GET /health/ready`
 returns 200 only while the database schema is accessible and the dispatcher is

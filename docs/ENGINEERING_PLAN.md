@@ -39,7 +39,7 @@ proposed calls and observed actions are distinct outcomes.
 | Slice | Finding and work | Required acceptance | State |
 | --- | --- | --- | --- |
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Initial controls merged in PR #64. V3 actual-request provenance/denial correction and schema-6 historical cache reconciliation merged in PR #79 with all eight PR/post-merge checks. Scoped native Python 3.11.2/SQLite 3.40.1 access, backup and inventory acceptance passes with recorded private-harness qualifications |
-| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check persistence, prompt receipts and tenant receipts merged in PRs #65/#67/#77 with qualified native acceptance. R1.2d protected-access receipts merged in PR #81 with all eight PR and all eight post-merge checks passed; the scoped native 230-case retention, backup and inventory gate is accepted with recorded qualifications. CLI checkpoint files remain a contract under review |
+| R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check and prompt/tenant/access receipts are merged with qualified native acceptance. R1.2e opt-in CLI crash files and offline recovery pass 5,102 local coverage cases, 119 new cases and independent review. Delivery checks are tracked on PR #83; scoped native file acceptance remains pending |
 | R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Merged in PR #72 with all local, independent, and eight PR/post-merge CI gates passed; scoped native reconstructed-fixture upgrade/restart accepted with recorded qualifications |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a merged in PR #74 with local/independent/CI acceptance and a qualified native Python 3.11.2/SQLite 3.40.1 traversal/upgrade retest. Distinct-asset identity and source-bound risk indexes remain open |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | R1.5a development/content identity passes local and independent gates; required delivery CI is recorded on its PR. Release checksums, SBOM, dependency/build attestation and deployed upgrade acceptance remain open |
@@ -226,8 +226,18 @@ independent and all eight PR/post-merge checks passed. The supplied native gate
 accepts 230 targeted tests, both thirteen-case backups and both inventory modes,
 with 110 captured checks reconciled and documented private-harness limits. See
 [qualified acceptance](VALIDATION.md#supplied-native-protected-access-retention-acceptance).
-This does not add private API inputs or CLI process-crash recovery. The CLI
-checkpoint-file contract is next and remains under review.
+That increment does not add private API inputs or CLI process-crash files.
+R1.2e separately adds a fresh private `--checkpoint-dir` and offline `recover`.
+The shared public evidence is persisted before callback acknowledgement without
+resuming probes or storing private configuration. Nonterminal recovery remains
+partial; actual terminal status is preserved. The full local gate passes 5,102
+coverage tests, including 119 new cases and independent real CLI SIGKILL review.
+See [acceptance](VALIDATION.md#cli-process-crash-checkpoint-local-acceptance),
+[file contract](cli-checkpoints.md) and [scoped native gate](cli-checkpoint-retest.md).
+Delivery checks are tracked on [PR #83](https://github.com/perfecxion-ai/ai-agent-scanner/pull/83);
+native file acceptance remains before closing this gate.
+Private API admission, distinct-asset identity, source-bound risk indexes and
+later roadmap slices remain separate work.
 The prompt audit also reproduces false confirmations from case-changed outbound
 values and transport-added headers. PR #67 now requires a complete private
 request snapshot to exclude these marker sources before confirmation and receipt

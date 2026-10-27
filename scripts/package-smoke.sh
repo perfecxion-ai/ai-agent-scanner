@@ -44,6 +44,7 @@ print('Installed build identity matches checkout and distribution metadata')
 PY
 "$smoke_dir/venv/bin/ai-agent-scanner" --help
 "$smoke_dir/venv/bin/ai-agent-scanner" scan --help
+"$smoke_dir/venv/bin/ai-agent-scanner" recover --help
 "$smoke_dir/venv/bin/python" -c 'from click.testing import CliRunner; from scanner_cli import cli; runner = CliRunner(); assert "--prompt-suite" in runner.invoke(cli, ["scan", "--help"]).output; assert "--prompt-suite" not in runner.invoke(cli, ["discover", "--help"]).output; result = runner.invoke(cli, ["scan", "--prompt-suite", "unsupported-private-input-71403"]); assert result.exit_code == 2 and "unsupported-private-input-71403" not in result.output'
 "$smoke_dir/venv/bin/ai-agent-scanner" coverage
 "$smoke_dir/venv/bin/ai-agent-scanner" mcp --help
@@ -59,3 +60,24 @@ PY
 "$smoke_dir/venv/bin/ai-agent-scanner" triage --help
 "$smoke_dir/venv/bin/ai-agent-scanner" evaluate --output fixture-metrics.json
 "$smoke_dir/venv/bin/python" -c 'import json; result = json.load(open("fixture-metrics.json")); assert result["mode"] == "offline_replay"; assert result["metrics"]["case_count"] == 6'
+mkdir "$smoke_dir/fixture-source"
+printf '%s\n' 'from openai import OpenAI' 'client = OpenAI()' > "$smoke_dir/fixture-source/application.py"
+"$smoke_dir/venv/bin/ai-agent-scanner" discover --repository "$smoke_dir/fixture-source" --output fixture-discovery.json --checkpoint-dir "$smoke_dir/checkpoint"
+"$smoke_dir/venv/bin/ai-agent-scanner" recover --checkpoint-dir "$smoke_dir/checkpoint" --output fixture-recovered.json
+"$smoke_dir/venv/bin/python" - <<'PY'
+import json
+from pathlib import Path
+
+original = json.loads(Path('fixture-discovery.json').read_text())
+recovered = json.loads(Path('fixture-recovered.json').read_text())
+if original != recovered or recovered['status'] != 'completed':
+    raise SystemExit('Installed CLI checkpoint recovery changed the saved report')
+if recovered['summary']['overall_risk_score'] is not None:
+    raise SystemExit('Discovery checkpoint recovery invented a risk score')
+directory = Path('checkpoint')
+if directory.stat().st_mode & 0o777 != 0o700:
+    raise SystemExit('Installed CLI checkpoint directory is not private')
+if any(path.stat().st_mode & 0o777 != 0o600 for path in directory.iterdir()):
+    raise SystemExit('Installed CLI checkpoint files are not private')
+print('Installed CLI checkpoint recovery preserves completed discovery and unknown risk')
+PY

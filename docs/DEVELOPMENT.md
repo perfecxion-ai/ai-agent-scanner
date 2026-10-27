@@ -22,6 +22,8 @@ The smoke script installs a wheel into a temporary virtual environment, changes
 out of the checkout, and runs version, command help, static framework mapping,
 and offline evaluation checks. It also compares the installed CLI's structured
 source/catalog identity against the checkout and distribution metadata.
+An owned static-source fixture also exercises installed CLI checkpoint persistence
+and offline recovery, preserving completed discovery and unknown risk.
 It requires package index access to install dependencies.
 
 `src/_version.py` owns the development package version. Setuptools, CLI, server

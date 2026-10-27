@@ -101,6 +101,10 @@ ai-agent-scanner diff --before baseline.json --after results.json --output chang
 ai-agent-scanner triage --report results.json --policy suppressions.json --output triaged.json
 ```
 
+For CLI process-crash recovery, opt in with `--checkpoint-dir NEW_DIRECTORY` on
+`scan` or `discover`, then use `recover` to export saved evidence offline.
+See [checkpoint setup and limits](docs/cli-checkpoints.md).
+
 Scan configuration accepts `target_scope` for discovery or `agents` for direct
 security testing. For example, discovery configuration can contain:
 
