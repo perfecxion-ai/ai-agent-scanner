@@ -10,7 +10,7 @@ import time
 import uuid
 
 from itsdangerous import BadSignature, TimestampSigner
-from sqlalchemy import LargeBinary, String, and_, case, cast, delete, func, insert, or_, select, update
+from sqlalchemy import LargeBinary, String, and_, case, cast, delete, func, insert, or_, select, true, update
 from sqlalchemy.exc import OperationalError
 
 from src.core.asset_group_projection import (
@@ -246,7 +246,7 @@ def _ready(connection, organization, tables, publication=None):
     counts = connection.execute(select(func.count()).where(*scope)).scalar_one()
     sealed = connection.execute(select(func.count()).where(*_proof_conditions(
         c, organization, publication['active_build_id'], generation, publication['active_nonce']))).scalar_one()
-    heads = connection.execute(select(func.count()).where(*scope, c.is_latest.is_(True))).scalar_one()
+    heads = connection.execute(select(func.count()).where(*scope, c.is_latest == true())).scalar_one()
     if counts == sealed == publication['active_row_count'] == total and heads == publication['active_group_count']:
         return publication
     return None
@@ -291,7 +291,7 @@ class AssetGroupProjector:
             except PageBudget:
                 break
             head = connection.execute(select(table).where(c.organization_id == organization,
-                c.build_id == build, c.group_id == projected.identity.group_id, c.is_latest.is_(True))).mappings().first()
+                c.build_id == build, c.group_id == projected.identity.group_id, c.is_latest == true())).mappings().first()
             count = 1 + (head['group_observation_count'] if head else 0)
             complete = projected.history_complete and (head['group_history_complete'] if head else True)
             supported = projected.supported_count
@@ -349,7 +349,7 @@ class AssetGroupProjector:
         sealed = connection.execute(select(func.count()).where(*_proof_conditions(
             c, organization, build, generation, nonce))).scalar_one()
         heads = connection.execute(select(func.count(), func.coalesce(func.sum(c.group_observation_count), 0))
-            .where(*scope, c.is_latest.is_(True))).first()
+            .where(*scope, c.is_latest == true())).first()
         groups = connection.execute(select(func.count(func.distinct(c.group_id))).where(*scope)).scalar_one()
         if sealed != total or heads[0] != groups or heads[1] != total:
             raise unavailable()

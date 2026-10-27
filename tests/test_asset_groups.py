@@ -7,7 +7,7 @@ import threading
 import time
 
 import pytest
-from sqlalchemy import Column, DateTime, MetaData, String, Table, Text, create_engine, insert, select, update
+from sqlalchemy import Column, DateTime, MetaData, String, Table, Text, create_engine, event, insert, select, update
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import MultiDict
 
@@ -184,6 +184,50 @@ def test_new_reader_revalidates_changed_source_with_same_alias(database, monkeyp
         projected = fresh.observation(row, 'tenant-a')
         assert projected.supported_count == 0 and projected.risk['risk_score'] == 0
     assert calls == ['owned-access-v3', 'owned-access-v3']
+
+
+def test_production_stage_head_lookup_uses_exact_partial_unique_index(database):
+    seed(database, 'head-lookup', count=2)
+    engine, tables = database
+    statements, head_counts = [], []
+
+    def capture(connection, cursor, statement, parameters, context, executemany):
+        if statement.startswith('SELECT asset_group_index.') and 'asset_group_index.group_id = ?' in statement:
+            statements.append((statement, parameters))
+        elif statement.startswith('SELECT count(') and 'asset_group_index.is_latest ' in statement:
+            head_counts.append((statement, parameters))
+
+    event.listen(engine, 'before_cursor_execute', capture)
+    try:
+        publish(database)
+        groups = page(database)['asset_groups']
+    finally:
+        event.remove(engine, 'before_cursor_execute', capture)
+    assert len(statements) >= 2
+    assert len(head_counts) >= 2
+    assert any('sum(asset_group_index.group_observation_count)' in statement for statement, _ in head_counts)
+    assert any('sum(' not in statement for statement, _ in head_counts)
+    # Explain the executed second lookup, when the first observation is already
+    # the head. Reconstructing an ideal query would miss a production mismatch.
+    statement, parameters = statements[1]
+    with engine.connect() as connection:
+        plan = connection.exec_driver_sql('EXPLAIN QUERY PLAN ' + statement, parameters).all()
+    details = [row[3] for row in plan]
+    assert any('USING INDEX ux_asset_group_head (organization_id=? AND build_id=? AND group_id=?)' in item
+               for item in details), details
+    with engine.connect() as connection:
+        for statement, parameters in head_counts:
+            details = [row[3] for row in connection.exec_driver_sql('EXPLAIN QUERY PLAN ' + statement, parameters)]
+            assert 'asset_group_index.is_latest = 1' in statement
+            if 'sum(' not in statement:
+                assert any('INDEX ux_asset_group_head (organization_id=? AND build_id=?)' in item
+                           for item in details), details
+            # A sum needs row payloads, so SQLite can prefer another bounded
+            # index on tiny fixtures. Equality keeps the partial index eligible.
+            else:
+                assert any('SEARCH asset_group_index USING INDEX ' in item
+                           and '(organization_id=? AND build_id=?)' in item for item in details), details
+    assert groups[0]['observation_count'] == 2
 
 
 def test_latest_zero_is_separate_from_prior_confirmed_history(database):
