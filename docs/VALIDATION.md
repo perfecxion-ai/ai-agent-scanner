@@ -1248,6 +1248,95 @@ package was published or service deployed. The next external gate is the
 [scoped native access-retention retest](access-retention-retest.md), pinned to
 the merged revision after delivery checks pass.
 
+### Supplied native protected-access retention acceptance
+
+The supplied `aiscan-access-retention-0797857.tar.gz` pins merged revision
+`07978571ea99f778b6863a5be276fd512f6d2b99`. Its SHA-256 is
+`36b43b5a12511c24326fbf88418ae2096565b9183dfeabadacebe57f89b06723`.
+Read-only results and static-harness reviews accept the bounded
+[native retention gate](access-retention-retest.md). No supplied script was
+executed during review, and no operator database, registry or cloud target was
+accessed. PR #81 and its merge pass all eight CI jobs each.
+
+Captured runtime is Python 3.11.2, SQLite 3.40.1, SQLAlchemy 2.1.6 and Gunicorn
+26.2.0; Debian 12 is operator-attested. The CLI's 73-file source digest matches
+the pinned checkout:
+`44c80f74a86eabdbcd43bf45dab2d8ac23db9e723bcb7c31c26de57c880cd28e`.
+Inventory app, driver, hooks and projection-policy hashes match too. Revision
+and clean-status captures agree. These are source-identity checks and checkout
+attestations, not independent execution attestation.
+
+The five required test files pass 230 cases in 29.29 seconds with warnings as
+errors. Six captured step exits are zero: pytest, two backup modes, two inventory
+modes and the driver. The outer job also records zero. All 110 unique captured
+assertion-table checks reconcile with the available outputs and pinned source.
+
+The tested retention paths include forty verified HTTPS CLI JSON/SARIF cases
+and two owned dispatcher-process recovery cases. The latter wait for committed
+receipt acknowledgement and a later genuine request stall, reject a malformed
+append by the actual owner without changing SQL evidence, then kill and join
+the worker. A fresh owner recovers exact evidence and snapshots; authenticated
+API reads preserve 70/high or 90/critical with partial coverage and no probe
+replay. These are library-worker fixtures, not new API private-input admission
+or CLI process-crash files. Frozen finalized-v3 archives are read through the
+current canonical projection while their original bytes remain unchanged.
+
+Both normal and optimized backup runs accept all thirteen expected cases,
+including frozen layouts, current schema 6, rollback and ownership rejection.
+Both inventory runs return `inventory-acceptance-v2`, schema 4 to 6 and all
+thirteen required identities. Each reconciles 12 scan caches and 10,000
+observation caches, then explicitly restores its own stale fixture values before
+traversal and restart. Each records 656 checked HTTP responses, seven required
+private values across five surfaces and initial/restart server exits of zero.
+Both normal/optimized JSON pairs are byte-identical. The inventory rows are
+repeated observations of twelve synthetic assets, not distinct deployments.
+
+Detailed receipt/control, schema/row/hash, traversal and cleanup conclusions
+follow the reviewed public tests and gates. Raw fixture databases, intermediate
+scan reports, HTTP pages and process listings were not returned for independent
+reconstruction. The recovery cases assert owned-worker kill/join and lock
+reacquisition; process-group cleanup is asserted separately by the inventory
+gate. The supplied narrative conflates those scopes.
+
+Privacy and private-harness qualifications:
+
+- The returned tree contains 32 substantive UTF-8 text files, including 26
+  evidence files plus five drivers and the report. Fixed public fixture keys,
+  markers and references coexist with generated values; the random-only
+  narrative is too broad.
+- The on-runner privacy sweep lists 23 files at that time. Seven counted values
+  include three static PII patterns; missing or short environment values are
+  excluded. No private-prefix arguments were supplied. The sweep precedes its
+  own output, final job-log append and job exit file. A later strict sweep is
+  claimed without a separate captured receipt. Deleted runtime secrets cannot
+  be independently re-swept from this bundle.
+- Human-readable logs were sanitized; raw originals and before/after hashes are
+  absent. The available pytest log is dots and its pass count; all four
+  acceptance stderr captures are empty. Original JSON preservation remains an
+  attestation supported by source shape and cross-mode byte equality.
+- The private driver adds an EXIT trap but uses `set -u`, rather than the public
+  guide's `set -eu`. The trap preserves its final status and captured-failure
+  flag; unchecked setup, metadata and source-status commands can still fail
+  unnoticed. The outer wrapper also leaves sanitizer, copy, permission and
+  cleanup statuses unchecked and has no cleanup trap. Its universal setup and
+  cleanup failure-propagation claim is unsupported. Critical test/acceptance
+  commands retain their recorded exits, and analysis/privacy failures affect
+  the wrapper's failure flag.
+- The wrapper sources lab configuration for the sweep and inherits that
+  environment. The absent profile-file override and owned public fixture
+  workers provide narrower isolation. The native listing shows scanner capture
+  files at 0600, the outer output directory at 0755 and job log at 0644. Archive
+  or review-extraction modes do not certify original wrapper permissions. The
+  narrative's comparison to earlier local interpreter versions also disagrees
+  with repository records; the captured native versions are the relevant facts.
+
+No new scanner blocker was found, and these qualifications need no broad repeat.
+This accepts synthetic native retention, backup and inventory correctness;
+it does not establish real-model yield, independent target seeding, deployed
+upgrade/power-loss durability or enterprise readiness. The CLI checkpoint-file
+contract is next and remains under review. Private API admission remains a
+separate gate; neither is implemented by this acceptance.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose

@@ -214,11 +214,8 @@ The private wrapper has narrower failure-propagation, privacy-sweep and file-mod
 evidence than its narrative claims. These limits need no broad repeat and do not
 establish an operator migration or model sensitivity.
 
-Protected-access within-check receipts are next. This accepted provenance
-prerequisite does not retain a finding from an interrupted unfinished access
-check. Preserve frozen v3 finalized-check eligibility and raw archives while
-defining new receipt semantics; private server tenant inputs and CLI process-crash
-files remain separate work.
+The provenance prerequisite preserved frozen v3 finalized-check eligibility and
+raw archives. Its separate within-check retention increment is recorded below.
 
 R1.2d now implements protected-access observations under ledger `3.0` and
 checkpoint `4.0`. All four existing GET families publish actual control-backed
@@ -237,11 +234,19 @@ Independent review passes 1,052 combined cases on Python 3.13.15, followed by
 421 descriptor/version cases after extending the direct experimental-suite
 privacy guard. Catalog bytes, suite semantics/pin and request behavior remain
 unchanged. The full coverage gate passes 4,983 tests with warnings as errors;
-delivery CI is required before merge. See
+PR #81 merged as `0797857` with all eight PR checks and all eight post-merge
+checks passed. See
 [local acceptance](VALIDATION.md#protected-access-observation-retention-local-acceptance).
-The next
-external gate is the [scoped access-retention retest](access-retention-retest.md),
-pinned to the eventual merged revision; no broad model cohort is required.
+The supplied native retention gate now passes qualified acceptance on Python
+3.11.2/SQLite 3.40.1: 230 targeted tests, both thirteen-case backups and both
+inventory modes pass; all 110 captured checks reconcile. Source and runtime
+hashes match the pinned checkout. See
+[native acceptance and qualifications](VALIDATION.md#supplied-native-protected-access-retention-acceptance).
+The private driver's trap, wrapper cleanup, privacy inventory and outer file
+modes support narrower claims than its narrative. These qualifications need no
+broad repeat and do not establish model sensitivity or an operator migration.
+The CLI checkpoint-file contract is next and remains under review; private API
+admission remains a separate gate.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
