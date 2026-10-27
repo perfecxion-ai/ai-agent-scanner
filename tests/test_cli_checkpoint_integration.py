@@ -3,6 +3,7 @@
 import asyncio
 from copy import deepcopy
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import click
@@ -158,6 +159,95 @@ async def test_recovery_output_cannot_modify_checkpoint_directory(tmp_path, repo
     assert result.exit_code == 1
     assert (store / 'latest.json').read_bytes() == original
     assert {path.name for path in store.iterdir()} == {'.lock', 'latest.json'}
+
+
+def expand_owned_checkpoint(monkeypatch, directory):
+    original = Path.expanduser
+
+    def expand(path):
+        return directory if str(path) == '~/owned-checkpoints' else original(path)
+
+    monkeypatch.setattr(Path, 'expanduser', expand)
+
+
+@pytest.mark.asyncio
+async def test_quoted_tilde_scan_output_cannot_overwrite_its_checkpoint(tmp_path, reports, monkeypatch):
+    directory = tmp_path / 'checkpoints'
+    expand_owned_checkpoint(monkeypatch, directory)
+    install_pipeline(monkeypatch, reports)
+    with pytest.raises(click.ClickException, match='Unable to preserve CLI checkpoint'):
+        await scanner_cli._execute(None, None, str(directory / 'latest.json'), 'json', 'full', False,
+                                   checkpoint_dir='~/owned-checkpoints')
+    assert not directory.exists()
+
+
+@pytest.mark.asyncio
+async def test_quoted_tilde_recovery_output_cannot_overwrite_its_checkpoint(tmp_path, reports, monkeypatch):
+    directory = tmp_path / 'checkpoints'
+    with CheckpointStore.create(directory) as store:
+        store.publish(reports[0])
+    original = (directory / 'latest.json').read_bytes()
+    expand_owned_checkpoint(monkeypatch, directory)
+    result = CliRunner().invoke(scanner_cli.cli, ['recover', '--checkpoint-dir', '~/owned-checkpoints',
+                                                 '--output', str(directory / 'latest.json')])
+    assert result.exit_code == 1
+    assert 'Unable to recover CLI checkpoint' in result.output
+    assert (directory / 'latest.json').read_bytes() == original
+
+
+@pytest.mark.asyncio
+async def test_case_variant_scan_output_preserves_checkpoint_on_native_filesystem(tmp_path, reports, monkeypatch):
+    directory = tmp_path / 'Checkpoints'
+    install_pipeline(monkeypatch, reports)
+    with pytest.raises(click.ClickException):
+        await execute(tmp_path / 'checkpoints' / 'latest.json', directory)
+    if (directory / 'latest.json').exists():
+        assert json.loads((directory / 'latest.json').read_text())['format'] == 'ai-agent-scanner-cli-checkpoint'
+
+
+@pytest.mark.asyncio
+async def test_case_variant_recovery_preserves_source_on_native_filesystem(tmp_path, reports):
+    directory = tmp_path / 'Checkpoints'
+    with CheckpointStore.create(directory) as store:
+        store.publish(reports[0])
+    original = (directory / 'latest.json').read_bytes()
+    result = CliRunner().invoke(scanner_cli.cli, ['recover', '--checkpoint-dir', str(tmp_path / 'checkpoints'),
+                                                 '--output', str(directory / 'latest.json')])
+    assert result.exit_code == 1
+    assert 'Unable to recover CLI checkpoint' in result.output
+    assert (directory / 'latest.json').read_bytes() == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('operation', ['scan', 'recover'])
+async def test_filesystem_alias_with_distinct_resolved_spelling_cannot_replace_source(
+        tmp_path, reports, monkeypatch, operation):
+    directory = tmp_path / 'checkpoints'
+    alias = tmp_path / 'owned-directory-alias'
+    alias.symlink_to(directory, target_is_directory=True)
+    destination = alias / 'latest.json'
+    original_resolve = Path.resolve
+
+    def resolve(path, *args, **kwargs):
+        # Some filesystems keep distinct case/normalization spellings even when
+        # they name the same directory. Keep actual stat/inode behavior here.
+        return destination if path == destination else original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'resolve', resolve)
+    if operation == 'scan':
+        install_pipeline(monkeypatch, reports)
+        with pytest.raises(click.ClickException, match='Unable to preserve CLI checkpoint'):
+            await execute(destination, directory)
+        assert not (directory / 'latest.json').exists()
+    else:
+        with CheckpointStore.create(directory) as store:
+            store.publish(reports[0])
+        original = (directory / 'latest.json').read_bytes()
+        result = CliRunner().invoke(scanner_cli.cli, ['recover', '--checkpoint-dir', str(directory),
+                                                     '--output', str(destination)])
+        assert result.exit_code == 1
+        assert 'Unable to recover CLI checkpoint' in result.output
+        assert (directory / 'latest.json').read_bytes() == original
 
 
 @pytest.mark.asyncio

@@ -241,6 +241,26 @@ def scan(network, domain, repository, traffic, config, output, fmt, verbose, ski
                          request_timeout_seconds, prompt_suite=prompt_suite, checkpoint_dir=checkpoint_dir))
 
 
+def _checkpoint_output_conflicts(checkpoint_dir, output):
+    checkpoint = Path(checkpoint_dir).expanduser().resolve()
+    destination = Path(output).resolve()
+    if destination.is_relative_to(checkpoint):
+        return True
+    try:
+        identity = checkpoint.stat()
+    except FileNotFoundError:
+        return False
+    # Filesystem aliases can retain different path spellings after resolution.
+    for ancestor in (destination, *destination.parents):
+        try:
+            candidate = ancestor.stat()
+        except FileNotFoundError:
+            continue
+        if (candidate.st_dev, candidate.st_ino) == (identity.st_dev, identity.st_ino):
+            return True
+    return False
+
+
 async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
                    max_response_bytes=1048576, timeout_seconds=300, allow_loopback=False,
                    selections=None, request_timeout_seconds=30, prompt_suite=None, checkpoint_dir=None):
@@ -251,9 +271,11 @@ async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
     from src.core.cli_checkpoints import CheckpointStore, CLICheckpointError
 
     try:
-        if output and Path(output).resolve().is_relative_to(Path(checkpoint_dir).resolve()):
+        if output and _checkpoint_output_conflicts(checkpoint_dir, output):
             raise CLICheckpointError()
         with CheckpointStore.create(checkpoint_dir) as store:
+            if output and _checkpoint_output_conflicts(store.path, output):
+                raise CLICheckpointError()
             await _execute_with_store(scope, agents, output, fmt, mode, verbose, max_requests,
                                       max_response_bytes, timeout_seconds, allow_loopback, selections,
                                       request_timeout_seconds, prompt_suite, store)
@@ -356,7 +378,7 @@ def recover_command(checkpoint_dir, output, fmt):
     from src.core.cli_checkpoints import recover_checkpoint, CLICheckpointError
 
     try:
-        if Path(output).resolve().is_relative_to(Path(checkpoint_dir).resolve()):
+        if _checkpoint_output_conflicts(checkpoint_dir, output):
             raise CLICheckpointError()
         with recover_checkpoint(checkpoint_dir) as result:
             document = to_sarif(result) if fmt == 'sarif' else result
