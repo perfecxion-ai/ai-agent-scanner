@@ -1557,21 +1557,34 @@ priority. GET uses a read-only snapshot and checks source generation, projection
 policy, publication nonce, total/sealed/source row counts before selecting group
 heads. Unreadable or stale evidence produces an explicit unavailable view.
 
-Focused acceptance passes 114 identity/schema cases, 28 projector/history cases,
-24 API/ownership/stopped-backup cases, ten independent review regressions, and
+Focused acceptance passes 114 identity/schema cases, 31 projector/history cases,
+24 API/ownership/stopped-backup cases, eighteen independent review regressions, and
 25 public-gate cases. Exact Python 3.13.15 independent checks cover the core and
-reader cases; the public-gate set completes in 138.88 seconds with coverage and
+reader cases; the public-gate set completes in 117.67 seconds with coverage and
 warnings treated as errors. Its real normal and optimized Gunicorn cases take
-65.84 and 70.07 seconds on the final owner-isolation correction. Track the
+57.47 and 57.37 seconds with the reader-local evidence memo. Track the
 complete local coverage run and required delivery checks in
 [PR #86](https://github.com/perfecxion-ai/ai-agent-scanner/pull/86).
 
-The initial final-head macOS CI run reached 97 percent with passing progress
-before its fifteen-minute job allowance cancelled it; backup commands had not
-run. That is not a passed gate. The job now allows twenty minutes for the full
-suite and both backup commands. Scanner, request, source, fixture and backup
-deadlines, test assertions and CI commands are unchanged. Required rerun results
-remain tracked on the implementation PR.
+The first macOS CI run was cancelled at 97 percent by its fifteen-minute job
+allowance; its partial log already contained two failing progress markers.
+Reading the passing tail alone did not establish a clean run. A twenty-minute
+rerun completed with 5,303 passes and two failures: both 10,000-observation gates
+hit their unchanged 180-second deadline before initial publication. Neither run
+is accepted. The CI job retains twenty minutes for the expanded suite and both
+backup commands; actual macOS acceptance still requires a passing rerun.
+
+Profiling found repeated complete evidence validation for observations sharing
+one decoded report and asset alias. The reader now stores immutable support
+ordinals only within that bounded source read, after each row's target binding
+checks. Distinct aliases and newly decoded sources recompute support. A 500-row
+owned profile reduces support validation from 500 calls to one, with total time
+from 0.732 to 0.339 seconds. The same complete gate and polling cadence improve
+from 65.533 to 58.195 seconds locally. A separate polling comparison reduces
+fixture HTTP CPU work at 0.2-second readiness intervals; it does not independently
+explain the Mac timeout. These measurements are not macOS or production SLO
+acceptance. The 180-second gate limit, scanner/request/source/backup deadlines,
+batch limits, evidence eligibility rules and all assertions remain unchanged.
 
 The real-server gate uses 10,000 repeated observations from complete-capture
 transport test doubles without target sockets, across three synthetic
@@ -1598,14 +1611,15 @@ through normal source writes. A bad first generation owner could prevent later
 valid organizations from refreshing. The corrected selector bounds eligible
 text keys in SQL and advances its bookmark before rejecting a malformed key.
 All source rows remain unchanged; valid tenants publish independently. The full
-152-case identity/schema/reader/review set passes on Python 3.10 and exact 3.13.15,
-including the six added regressions and full source coverage on 3.13.
+163-case identity/schema/reader/review set passes on Python 3.10 and exact 3.13.15,
+including the six owner regressions, memo isolation and full source coverage on
+3.13. The combined local API/ownership/backup and focused set passes 187 cases.
 
 Build, Twine, and installed-wheel CLI recovery smoke pass. Both distributions
 contain the same 78 byte-exact scanner/CLI sources and no assistant instructions,
 operator database or lab artifact. The wheel provides CLI/library code; server
 entrypoints remain checkout/container components. The scoped scanner source
-identity is `8231b08e19eea3a8154ba599feb747cafd89dbe715ce07f2a46cf4dc36bc5d2a`.
+identity is `5ffa25f68ff98f750e63a8c47021a69f71b53d6bd512e7e72b679fae6227a847`.
 Package publication, deployment, and release attestations remain separate.
 
 Both backup modes now contain fourteen cases, with a frozen schema-6 source and
