@@ -61,14 +61,15 @@ def public_metadata(metadata):
 
 async def run_pipeline(discovery, security, risk, scope, scan_type="full", agents=None,
                        agent_validator=None, checkpoint_callback=None, *, early_agent_validator=None,
-                       producer_component='library'):
+                       producer_component='library', checkpoint_public_fields=()):
     """Run requested phases, preserving unsuccessful security outcomes."""
     if current_budget() is None:
         with scan_transport(ScanBudget()):
             return await run_pipeline(discovery, security, risk, scope, scan_type,
                                       agents, agent_validator, checkpoint_callback,
                                       early_agent_validator=early_agent_validator,
-                                      producer_component=producer_component)
+                                      producer_component=producer_component,
+                                      checkpoint_public_fields=checkpoint_public_fields)
     if scan_type not in {"full", "discovery_only", "security_only"}:
         raise ValueError("Unsupported scan type")
     producer = current_identity(component=producer_component)
@@ -83,11 +84,13 @@ async def run_pipeline(discovery, security, risk, scope, scan_type="full", agent
     with ExitStack() as preparation:
         preparation.enter_context(tenant_evidence_context(observations))
         return await _run_observations(security, risk, scan_type, observations, agent_validator,
-                                       checkpoint_callback, early_agent_validator, preparation, producer)
+                                       checkpoint_callback, early_agent_validator, preparation, producer,
+                                       checkpoint_public_fields)
 
 
 async def _run_observations(security, risk, scan_type, observations, agent_validator,
-                            checkpoint_callback, early_agent_validator, preparation, producer):
+                            checkpoint_callback, early_agent_validator, preparation, producer,
+                            checkpoint_public_fields):
     """Keep prepared tenant credentials private and stable through every checkpoint."""
     prompt_suite = (PROTECTED_DISCLOSURE_SUITE
                     if getattr(security, "prompt_suite", None) == PROTECTED_DISCLOSURE_SUITE else None)
@@ -130,6 +133,9 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
     validate_identity_fields(secrets)
     if scan_type != "discovery_only":
         _validate_access_field_privacy(secrets)
+    if any(secret and any(secret.casefold() in field.casefold() for field in checkpoint_public_fields)
+           for secret in secrets):
+        raise ValueError('Protected evidence conflicts with checkpoint fields')
     if checkpoint_callback is not None:
         checkpoint = _CheckpointState(observations, risk, scan_type, prompt_suite, secrets,
                                       checkpoint_callback, evidence_enabled=evidence_enabled,

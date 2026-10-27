@@ -30,6 +30,11 @@ from src.utils.helpers import validate_cli_target_classes, validate_scan_scope
 
 VERSION = __version__
 BANNER = "AI Agent Scanner"
+_CLI_INTERRUPTION_REASONS = (
+    'Scan cancelled; retained partial report',
+    'Scan execution failed; retained partial report',
+    'Scan deadline exhausted; retained partial report',
+)
 
 
 @click.group()
@@ -169,16 +174,19 @@ def load_targets(network, domain, repository=(), traffic=(), config=None, allow_
 @target_options
 @budget_options
 @click.option('--output', '-o', help='JSON output file')
+@click.option('--checkpoint-dir', type=click.Path(file_okay=False),
+              help='Create a new private directory for crash-recoverable public checkpoints')
 @click.option('--verbose', '-v', is_flag=True, help='Show completion details')
 def discover(network, domain, repository, traffic, config, output, verbose,
-             max_requests, max_response_bytes, timeout_seconds, allow_loopback, request_timeout_seconds):
+             max_requests, max_response_bytes, timeout_seconds, allow_loopback, request_timeout_seconds,
+             checkpoint_dir):
     """Discover agents across network, repositories, cloud, and traffic sources."""
     scope, agents = load_targets(network, domain, repository, traffic, config, allow_loopback)
     if agents is not None:
         raise click.ClickException("Explicit agents are supported by scan only")
     asyncio.run(_execute(scope, None, output, 'json', 'discovery_only', verbose,
                          max_requests, max_response_bytes, timeout_seconds, allow_loopback,
-                         request_timeout_seconds=request_timeout_seconds))
+                         request_timeout_seconds=request_timeout_seconds, checkpoint_dir=checkpoint_dir))
 
 
 @cli.command()
@@ -187,6 +195,8 @@ def discover(network, domain, repository, traffic, config, output, verbose,
 @click.option('--model-override', multiple=True, metavar='ASSET_ID=MODEL',
               help='Bind an exact discovered stable asset ID to a model (repeatable)')
 @click.option('--output', '-o', default='scan_results.json', help='Output file')
+@click.option('--checkpoint-dir', type=click.Path(file_okay=False),
+              help='Create a new private directory for crash-recoverable public checkpoints')
 @click.option('--format', '-f', 'fmt', type=click.Choice(['json', 'sarif']), default='json')
 @click.option('--verbose', '-v', is_flag=True, help='Show completion details')
 @click.option('--skip-security', is_flag=True, help='Discovery only')
@@ -194,7 +204,7 @@ def discover(network, domain, repository, traffic, config, output, verbose,
               help='Experimental protected-disclosure suite; requires explicit agents with canaries and public contexts')
 def scan(network, domain, repository, traffic, config, output, fmt, verbose, skip_security,
          model_override, max_requests, max_response_bytes, timeout_seconds, allow_loopback,
-         request_timeout_seconds, prompt_suite):
+         request_timeout_seconds, prompt_suite, checkpoint_dir):
     """Run shared discovery, security, risk, and report pipeline."""
     if prompt_suite is not None:
         try:
@@ -228,19 +238,42 @@ def scan(network, domain, repository, traffic, config, output, fmt, verbose, ski
     mode = 'security_only' if agents is not None else ('discovery_only' if skip_security else 'full')
     asyncio.run(_execute(scope, agents, output, fmt, mode, verbose,
                          max_requests, max_response_bytes, timeout_seconds, allow_loopback, selections,
-                         request_timeout_seconds, prompt_suite=prompt_suite))
+                         request_timeout_seconds, prompt_suite=prompt_suite, checkpoint_dir=checkpoint_dir))
 
 
 async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
                    max_response_bytes=1048576, timeout_seconds=300, allow_loopback=False,
-                   selections=None, request_timeout_seconds=30, prompt_suite=None):
+                   selections=None, request_timeout_seconds=30, prompt_suite=None, checkpoint_dir=None):
+    if not checkpoint_dir:
+        return await _execute_with_store(scope, agents, output, fmt, mode, verbose, max_requests,
+                                         max_response_bytes, timeout_seconds, allow_loopback, selections,
+                                         request_timeout_seconds, prompt_suite, None)
+    from src.core.cli_checkpoints import CheckpointStore, CLICheckpointError
+
+    try:
+        if output and Path(output).resolve().is_relative_to(Path(checkpoint_dir).resolve()):
+            raise CLICheckpointError()
+        with CheckpointStore.create(checkpoint_dir) as store:
+            await _execute_with_store(scope, agents, output, fmt, mode, verbose, max_requests,
+                                      max_response_bytes, timeout_seconds, allow_loopback, selections,
+                                      request_timeout_seconds, prompt_suite, store)
+    except (CLICheckpointError, OSError, ValueError, RuntimeError):
+        raise click.ClickException('Unable to preserve CLI checkpoint; use a new private checkpoint directory') from None
+
+
+async def _execute_with_store(scope, agents, output, fmt, mode, verbose, max_requests,
+                              max_response_bytes, timeout_seconds, allow_loopback, selections,
+                              request_timeout_seconds, prompt_suite, store):
     latest_checkpoint = None
     interruption = None
     cancelled = False
 
     async def retain_checkpoint(report):
         nonlocal latest_checkpoint
-        latest_checkpoint = deepcopy(validate_checkpoint_report(report))
+        candidate = deepcopy(validate_checkpoint_report(report))
+        if store is not None:
+            store.publish(candidate)
+        latest_checkpoint = candidate
 
     try:
         with scan_transport(ScanBudget(max_requests=max_requests, max_response_bytes=max_response_bytes,
@@ -252,30 +285,41 @@ async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
                              scope, mode, agents=agents,
                              agent_validator=(lambda values: apply_model_overrides(values, selections))
                              if selections else None,
-                             checkpoint_callback=retain_checkpoint, producer_component='cli'), timeout=timeout_seconds)
+                             checkpoint_callback=retain_checkpoint, producer_component='cli',
+                             checkpoint_public_fields=(*store.public_fields, *_CLI_INTERRUPTION_REASONS)
+                             if store is not None else ()),
+                timeout=timeout_seconds)
     except asyncio.CancelledError:
         if latest_checkpoint is None:
             raise
         cancelled = True
-        interruption = 'Scan cancelled; retained partial report'
+        interruption = _CLI_INTERRUPTION_REASONS[0]
     except ValueError as exc:
         if latest_checkpoint is None:
             if str(exc).startswith(('model_overrides', 'Source assets', 'Source asset')):
                 raise click.ClickException(str(exc)) from exc
             raise click.ClickException('Scan execution failed') from exc
-        interruption = 'Scan execution failed; retained partial report'
+        interruption = _CLI_INTERRUPTION_REASONS[1]
     except (TimeoutError, asyncio.TimeoutError) as exc:
         if latest_checkpoint is None:
             raise click.ClickException('Scan deadline exhausted; no report checkpoint was produced') from exc
-        interruption = 'Scan deadline exhausted; retained partial report'
+        interruption = _CLI_INTERRUPTION_REASONS[2]
     except Exception as exc:
         if latest_checkpoint is None:
             raise click.ClickException("Scan execution failed") from exc
-        interruption = 'Scan execution failed; retained partial report'
+        interruption = _CLI_INTERRUPTION_REASONS[1]
     if interruption is not None:
         result = latest_checkpoint
         result['status'] = 'cancelled' if cancelled else 'failed'
         result['error'] = interruption
+    if store is not None:
+        try:
+            store.finish(result)
+        except Exception:
+            if cancelled:
+                click.echo('Unable to preserve final CLI checkpoint after cancellation', err=True)
+                raise asyncio.CancelledError from None
+            raise
     try:
         report = to_sarif(result) if fmt == 'sarif' else result
         serialized = json.dumps(report, indent=2, allow_nan=False)
@@ -299,6 +343,29 @@ async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
         raise click.ClickException('No security checks completed; configure an explicit model or inspect skipped prerequisites')
     if result['status'] != 'completed':
         raise click.ClickException("Scan completed with failed phases; inspect report")
+
+
+@cli.command('recover')
+@click.option('--checkpoint-dir', required=True, type=click.Path(file_okay=False),
+              help='Private checkpoint directory from an earlier CLI execution')
+@click.option('--output', '-o', required=True, type=click.Path(dir_okay=False),
+              help='New report destination outside the checkpoint directory')
+@click.option('--format', '-f', 'fmt', type=click.Choice(['json', 'sarif']), default='json')
+def recover_command(checkpoint_dir, output, fmt):
+    """Export saved evidence offline without resuming or repeating a scan."""
+    from src.core.cli_checkpoints import recover_checkpoint, CLICheckpointError
+
+    try:
+        if Path(output).resolve().is_relative_to(Path(checkpoint_dir).resolve()):
+            raise CLICheckpointError()
+        with recover_checkpoint(checkpoint_dir) as result:
+            document = to_sarif(result) if fmt == 'sarif' else result
+            write_private_text(output, json.dumps(document, indent=2, allow_nan=False) + '\n')
+    except (CLICheckpointError, OSError, ValueError, TypeError, RecursionError, RuntimeError):
+        raise click.ClickException('Unable to recover CLI checkpoint; verify the private directory and output') from None
+    click.echo(f'Report saved to {output}')
+    if result['status'] != 'completed':
+        raise click.ClickException('Saved evidence exported; original scan did not complete')
 
 
 @cli.command()
