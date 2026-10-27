@@ -1557,12 +1557,12 @@ priority. GET uses a read-only snapshot and checks source generation, projection
 policy, publication nonce, total/sealed/source row counts before selecting group
 heads. Unreadable or stale evidence produces an explicit unavailable view.
 
-Focused acceptance passes 114 identity/schema cases, 31 projector/history cases,
+Focused acceptance passes 114 identity/schema cases, 32 projector/history cases,
 24 API/ownership/stopped-backup cases, eighteen independent review regressions, and
 25 public-gate cases. Exact Python 3.13.15 independent checks cover the core and
-reader cases; the public-gate set completes in 117.67 seconds with coverage and
+reader cases; the public-gate set completes in 115.14 seconds with coverage and
 warnings treated as errors. Its real normal and optimized Gunicorn cases take
-57.47 and 57.37 seconds with the reader-local evidence memo. Track the
+56.40 and 55.79 seconds with the reader memo and partial-index correction. Track the
 complete local coverage run and required delivery checks in
 [PR #86](https://github.com/perfecxion-ai/ai-agent-scanner/pull/86).
 
@@ -1585,6 +1585,24 @@ fixture HTTP CPU work at 0.2-second readiness intervals; it does not independent
 explain the Mac timeout. These measurements are not macOS or production SLO
 acceptance. The 180-second gate limit, scanner/request/source/backup deadlines,
 batch limits, evidence eligibility rules and all assertions remain unchanged.
+
+The memo-only hosted rerun still timed out in the two public gates on Python
+3.11, 3.12, 3.13 and macOS; each completed its other 5,314 cases. The failing Linux
+jobs used SQLite 3.45.1. Production query capture exposed a second cost: `IS 1`
+did not match the existing unique partial index's `= 1` predicate. A 10,000-row
+owned plan check used only the organization/build prefix; 100 lookups took
+0.086481 seconds versus 0.003334 with the exact group-head index. The staging,
+sealing and readiness predicates now use equivalent boolean equality. Schema,
+DDL, row selection, seal checks and deadlines are unchanged. The regression
+captures real executed statements; it requires exact stage/readiness index use
+while allowing the optimizer to choose the small-fixture sealing plan.
+
+An isolated Python 3.12.3 environment using the CI engine, SQLite 3.45.1, passes
+both complete normal and optimized gates in 57.708 and 58.281 seconds. Each
+returns all fourteen assertions, 10,000 observations, three published owners,
+clean server exits and fixture cleanup; stderr is empty. Initial publication
+was observed before 30 seconds. Actual hosted macOS and the full matrix still
+require a passing delivery run; local measurements do not substitute for them.
 
 The real-server gate uses 10,000 repeated observations from complete-capture
 transport test doubles without target sockets, across three synthetic
@@ -1611,15 +1629,15 @@ through normal source writes. A bad first generation owner could prevent later
 valid organizations from refreshing. The corrected selector bounds eligible
 text keys in SQL and advances its bookmark before rejecting a malformed key.
 All source rows remain unchanged; valid tenants publish independently. The full
-163-case identity/schema/reader/review set passes on Python 3.10 and exact 3.13.15,
+164-case identity/schema/reader/review set passes on Python 3.10 and exact 3.13.15,
 including the six owner regressions, memo isolation and full source coverage on
-3.13. The combined local API/ownership/backup and focused set passes 187 cases.
+3.13. The combined local API/ownership/backup and focused set passes 188 cases.
 
 Build, Twine, and installed-wheel CLI recovery smoke pass. Both distributions
 contain the same 78 byte-exact scanner/CLI sources and no assistant instructions,
 operator database or lab artifact. The wheel provides CLI/library code; server
 entrypoints remain checkout/container components. The scoped scanner source
-identity is `5ffa25f68ff98f750e63a8c47021a69f71b53d6bd512e7e72b679fae6227a847`.
+identity is `4f9a2f6fa373497ed550a483f78576e1a39f5dd1d1652638f7e3946eba380d1c`.
 Package publication, deployment, and release attestations remain separate.
 
 Both backup modes now contain fourteen cases, with a frozen schema-6 source and
