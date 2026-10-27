@@ -256,15 +256,16 @@ earlier evidence. Nonterminal recovery remains partial and exits nonzero;
 recorded terminal results preserve their actual status. Existing defaults, sample
 budgets, catalog bytes, server inputs, evidence versions and schema 6 are unchanged.
 
-All 113 new cases pass, including four unmodified production CLI children over
+All 119 new cases pass, including four unmodified production CLI children over
 verified owned HTTPS, acknowledged evidence followed by a real request stall,
 SIGKILL and fresh offline JSON/SARIF recovery. Independent Python 3.13 review
-passes 73 core cases and eleven process/guard cases. The full coverage gate passes
-5,096 tests with warnings as errors; build, installed-wheel recovery, lint and
+passes 73 core cases and 46 CLI/process/guard cases. The full coverage gate passes
+5,102 tests with warnings as errors; build, installed-wheel recovery, lint and
 configured Bandit pass. See
 [local acceptance](VALIDATION.md#cli-process-crash-checkpoint-local-acceptance)
-and [file contract](cli-checkpoints.md). Required delivery CI and the
-[scoped native file-recovery gate](cli-checkpoint-retest.md) remain pending.
+and [file contract](cli-checkpoints.md). Delivery checks are tracked on
+[PR #83](https://github.com/perfecxion-ai/ai-agent-scanner/pull/83); the
+[scoped native file-recovery gate](cli-checkpoint-retest.md) remains pending.
 This is process recovery on the supported POSIX/local-filesystem boundary, not
 power-loss, deployed storage, private API admission or enterprise acceptance.
 

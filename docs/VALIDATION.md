@@ -1358,13 +1358,14 @@ write after a directory-fsync failure; recovery uses its recorded state. This
 retains acknowledged evidence without promising exact exclusion of later coherent
 state or power-loss durability. See the [file contract](cli-checkpoints.md).
 
-All 113 new cases pass on Python 3.10.20 in 52.19 seconds with warnings as errors:
-73 core contracts, 29 CLI integration cases and eleven independent process/guard
+All 119 new cases pass on Python 3.10.20 in 52.57 seconds with warnings as errors:
+73 core contracts, 35 CLI integration cases and eleven independent process/guard
 cases. Core acceptance also passes on Python 3.13.15, including an independent
-73-case coverage run in 9.47 seconds. The actual-process gate independently passes
-eleven cases in 48.05 seconds on Python 3.13.15/SQLAlchemy 2.1.6 with coverage and
-warnings as errors in the parent and child interpreters. These are overlapping
-gates, not additional independent test totals.
+73-case coverage run in 9.47 seconds. The final CLI/process gate independently
+passes 46 cases (35 integration plus eleven process/guard) in 49.06 seconds on
+Python 3.13.15/SQLAlchemy 2.1.6 with coverage and warnings as errors in the parent
+and child interpreters. These are overlapping gates, not additional independent
+test totals.
 
 Four unmodified production CLI children use owned verified HTTPS and normal
 samples/pacing. Prompt and access-high cases retain 70/high; tenant and weak-basic
@@ -1397,7 +1398,17 @@ the core and four-objective real-process gates pass afterward. Review also close
 FIFO open blocking, boolean-versus-zero acceptance, contradictory assessment
 aliases and a symlink-loop output traceback.
 
-The combined full run passes 5,096 tests in 639.46 seconds with warnings as errors
+Final review then reproduced two quoted-tilde containment failures: the store
+expanded the checkpoint directory while the output guard compared its literal
+spelling, allowing an export to replace its own saved checkpoint. The correction
+expands that input consistently and checks actual directory identity across output
+ancestors. A second check after fresh directory creation protects case and
+normalization aliases before probing. Six regressions cover quoted tilde, native
+case variants and distinct resolved spellings with real inode/stat behavior.
+The latter simulate case-preserving resolution on Linux; native macOS CI must
+exercise the actual case-variant paths. No HOME setting or operator path is changed.
+
+The corrected combined full run passes 5,102 tests in 655.41 seconds with warnings as errors
 and 93 percent coverage. Ruff, configured Bandit, whitespace and authored-text
 privacy/ASCII checks pass. Build and Twine pass. The installed wheel performs an
 owned static-source discovery and offline recovery outside the checkout, retaining
@@ -1406,8 +1417,8 @@ files match the wheel byte for byte; no AGENTS file, database or lab-job artifac
 are included. Mocked native-guide checks preserve genuine setup exit 23, test
 exit 9 with driver exit 1, and final source-status exit 31, plus successful exit 0.
 
-Required delivery CI remains pending and will be recorded on the implementation
-PR. The next external check is the
+Required delivery checks are tracked on
+[PR #83](https://github.com/perfecxion-ai/ai-agent-scanner/pull/83). The next external check is the
 [scoped native CLI file-recovery gate](cli-checkpoint-retest.md) pinned
 to the merged revision. It uses synthetic loopback fixtures only and needs no
 broad model, tenant-cohort, MCP, backup or inventory rerun. This does not certify
