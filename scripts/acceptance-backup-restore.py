@@ -21,7 +21,7 @@ import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = ("v1", "v2", "v3", "v4", "v5", "v6", "rollback1", "rollback2", "rollback3", "rollback5",
+CASES = ("v1", "v2", "v3", "v4", "v5", "v6", "v7", "rollback1", "rollback2", "rollback3", "rollback5",
          "future", "incomplete", "lock")
 FILENAMES = {"source.sqlite", "backup.sqlite", "restore.sqlite", "old-copy.sqlite"}
 CACHE_OUTCOMES = {'assessed-zero': 'completed', 'assessed-high': 'completed',
@@ -32,7 +32,7 @@ CACHE_OUTCOMES = {'assessed-zero': 'completed', 'assessed-high': 'completed',
 def expected_assertions(case):
     assertions = ["stopped_readonly_backup_and_restore_integrity_schema_all_rows"]
     if case.startswith("v"):
-        if case in {"v4", "v5", "v6"}:
+        if case in {"v4", "v5", "v6", "v7"}:
             assertions.append("policy_refresh_preserves_sources_schema_and_unrelated_rows")
         assertions.extend(["upgrade_and_terminal_recovery", "queued_executed_once_without_active_replay",
                            "completed_evidence_audit_templates_preserved", "schedule_recovery_without_admission",
@@ -155,7 +155,7 @@ def seed(server, engine, version):
     from sqlalchemy import insert
     from src.core.schema import initialize_schema
     from tests.historical_schema import historical_metadata
-    if version < 6:
+    if version < 7:
         metadata = historical_metadata(version=version)
         metadata.create_all(engine)
     else:
@@ -163,7 +163,7 @@ def seed(server, engine, version):
         initialize_schema(engine, metadata)
     controlled = cache_fixtures()
     with engine.begin() as connection:
-        if version < 6:
+        if version < 7:
             connection.execute(insert(metadata.tables["schema_version"]).values(id=1, version=version))
         for identifier, status in (("completed", "completed"), ("queued", "queued"),
                                    ("running", "running"), ("cancel", "cancel_requested")):
@@ -290,10 +290,12 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
                     result[table] = [tuple(value for name, value in zip(columns, row, strict=True)
                                           if name not in omitted) for row in result[table]]
                 result.pop('inventory_generation', None)
+                for table in ('asset_group_index', 'asset_group_publication'):
+                    require(not result.pop(table, []), 'Fresh derived projection must be empty')
                 result['schema_version'] = [(1, SCHEMA_VERSION)]
                 return result
             require(retained(upgraded['rows']) == retained(baseline['rows'])
-                    and (upgraded['schema'] == baseline['schema'] if version >= 5 else
+                    and (upgraded['schema'] == baseline['schema'] if version >= 7 else
                          set(map(tuple, baseline['schema'])) <= set(map(tuple, upgraded['schema'])))
                     and not any('DROP TABLE' in statement.upper() or '_aiscan_v4_' in statement
                                 for statement in statements),

@@ -68,6 +68,7 @@ def assert_changed(before, after, owners):
 
 
 def test_fresh_registration_and_restart_are_exact_and_do_not_churn(database):
+    from src.core.asset_group_storage import TRIGGER_DEFINITIONS as group_triggers
     module, engine = database
     metadata = module.db.metadata
     assert register_inventory_metadata(metadata) is metadata.tables[TABLE_NAME]
@@ -75,7 +76,7 @@ def test_fresh_registration_and_restart_are_exact_and_do_not_churn(database):
     with engine.connect() as connection:
         assert token_state(connection) == {}
         assert dict(connection.exec_driver_sql(
-            "SELECT name,sql FROM sqlite_master WHERE type='trigger'").all()) == TRIGGER_DEFINITIONS
+            "SELECT name,sql FROM sqlite_master WHERE type='trigger'").all()) == dict(TRIGGER_DEFINITIONS, **group_triggers)
         indexes = dict(connection.exec_driver_sql(
             "SELECT name,sql FROM sqlite_master WHERE type='index'").all())
         assert {name: indexes[name] for name in INDEX_DEFINITIONS} == INDEX_DEFINITIONS
@@ -118,7 +119,8 @@ def test_schema_four_upgrade_reconciles_only_caches_and_preserves_archives_and_o
         columns = list(old.tables[name].columns.keys())
         expected[name] = [tuple(values.get(column, value) for column, value in zip(columns, row, strict=True))
                           for row in expected[name]]
-    assert {name: value for name, value in rows.items() if name != TABLE_NAME} == expected
+    from tests.asset_group_schema_assertions import without_group_rows
+    assert {name: value for name, value in without_group_rows(rows).items() if name != TABLE_NAME} == expected
     assert set(rows[TABLE_NAME][i][0] for i in range(len(rows[TABLE_NAME]))) == {'tenant-a', 'tenant-b'}
     assert all(re.fullmatch('[0-9a-f]{32}', row[1]) for row in rows[TABLE_NAME])
     assert set(prior_definitions) <= set(definitions)

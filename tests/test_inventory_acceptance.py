@@ -60,7 +60,7 @@ def test_complete_real_server_gate_isolated_from_operator_settings_and_alias_tmp
     assert output['assertions'] == list(gate.REQUIRED_ASSERTIONS)
     assert output['observation_count'] == 10000
     assert output['fixture_scope'] == 'repeated_observations_of_12_synthetic_assets'
-    assert output['schema_before'] == 4 and output['schema_after'] == output['schema_target'] == 6
+    assert output['schema_before'] == 4 and output['schema_after'] == output['schema_target'] == 7
     assert output['cache_policy_upgrade'] == {
         'scan_caches_reconciled': 12, 'observation_caches_reconciled': 10000,
         'original_stale_scan_caches_restored': 12, 'original_stale_observation_caches_restored': 10000}
@@ -291,6 +291,7 @@ def test_missing_server_extra_has_a_clear_nonzero_result(monkeypatch, capsys):
 @pytest.fixture
 def policy_upgraded_fixture(monkeypatch):
     from src.core.inventory_generation import register_inventory_metadata
+    from src.core.asset_group_storage import register_asset_group_metadata
     from src.core.schema import initialize_schema
     from tests.historical_schema import historical_metadata
     monkeypatch.setattr(gate, 'OBSERVATIONS', 12)
@@ -299,6 +300,7 @@ def policy_upgraded_fixture(monkeypatch):
         old = historical_metadata(version=4)
         current = historical_metadata(version=4)
         register_inventory_metadata(current)
+        register_asset_group_metadata(current)
         expected = {organization: [] for organization in gate.ORGANIZATIONS}
         try:
             old.create_all(engine)

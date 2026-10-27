@@ -11,8 +11,9 @@ VERSION_TWO_TABLES = VERSION_ONE_TABLES | {'scan_template'}
 VERSION_THREE_TABLES = VERSION_TWO_TABLES | {'scan_schedule', 'scan_occurrence'}
 VERSION_FOUR_TABLES = VERSION_THREE_TABLES
 VERSION_FIVE_TABLES = VERSION_FOUR_TABLES | {'inventory_generation'}
+VERSION_SIX_TABLES = VERSION_FIVE_TABLES
 LAYOUTS = {0: BASE_TABLES, 1: VERSION_ONE_TABLES, 2: VERSION_TWO_TABLES, 3: VERSION_THREE_TABLES,
-           4: VERSION_FOUR_TABLES, 5: VERSION_FIVE_TABLES}
+           4: VERSION_FOUR_TABLES, 5: VERSION_FIVE_TABLES, 6: VERSION_SIX_TABLES}
 
 # Exact schema 5 SQL captured at 6af7fa2, independent of current registrations.
 SCHEMA_FIVE_TRIGGERS = {
@@ -138,7 +139,8 @@ def historical_metadata(names=None, *, version=3):
                           ('scan_template', 'organization_id'), ('scan_schedule', 'organization_id'),
                           ('scan_occurrence', 'schedule_id')):
         Index(f'ix_{table}_{column}', metadata.tables[table].c[column])
-    if version == 5:
+    # Schema 6 changed the evidence policy, preserving the schema 5 physical DDL.
+    if version in {5, 6}:
         scans, agents = metadata.tables['scan_session'], metadata.tables['discovered_agent']
         Index('ix_inventory_scan_session_org_id', scans.c.organization_id, scans.c.id)
         Index('ix_inventory_observation_scan_order', agents.c.scan_id, agents.c.discovered_at.desc(), agents.c.id)

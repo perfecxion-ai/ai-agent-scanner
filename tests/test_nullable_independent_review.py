@@ -147,7 +147,9 @@ def test_partial_index_and_quoted_operator_index_survive_table_rebuild(old_datab
     assert {name: after[name] for name, _ in before} == dict(before)
     assert set(after) - {name for name, _ in before} == {
         'ix_inventory_scan_session_org_id', 'ix_inventory_observation_scan_order',
-        'ix_inventory_observation_scan_type_order', 'sqlite_autoindex_inventory_generation_1'}
+        'ix_inventory_observation_scan_type_order', 'sqlite_autoindex_inventory_generation_1',
+        'ix_asset_group_head_page', 'ix_asset_group_history', 'ux_asset_group_head',
+        'sqlite_autoindex_asset_group_index_1', 'sqlite_autoindex_asset_group_publication_1'}
 
 
 @pytest.mark.parametrize('unique', [False, True])

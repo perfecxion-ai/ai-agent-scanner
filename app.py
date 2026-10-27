@@ -46,6 +46,11 @@ from src.core.risk_projection import project_agent_risk, project_report_risk
 from src.core.stored_risk import project_stored_risk, snapshot_stored_risk
 from src.core.inventory import InventoryError, inventory_page, parse_inventory_request
 from src.core.inventory_generation import register_inventory_metadata
+from src.core.asset_group_storage import register_asset_group_metadata
+from src.core.asset_groups import (
+    AssetGroupProjector, parse_group_request, group_page,
+    parse_group_history_request, group_history_page,
+)
 from src.core.model_selection import apply_model_overrides, canonical_model_overrides
 from src.core.contracts import validate_scan_result, MAX_CHECKPOINT_TOTAL_BYTES, CheckpointError
 from src.core.scope import bounded_integer, validate_request, validate_agent_endpoints, ScopeValidationError
@@ -265,6 +270,13 @@ class ScanOccurrence(db.Model):
 
 
 _inventory_generation = register_inventory_metadata(db.metadata)
+_asset_group_index, _asset_group_publication = register_asset_group_metadata(db.metadata)
+
+
+def _asset_group_tables():
+    return {'index': _asset_group_index, 'publication': _asset_group_publication,
+            'observations': DiscoveredAgentModel.__table__, 'scans': ScanSession.__table__,
+            'reports': ScanResult.__table__, 'generations': _inventory_generation}
 
 
 # ---------------------------------------------------------------------------
@@ -1141,6 +1153,41 @@ def build_info():
     return jsonify({'success': True, 'build': current_identity(component='server')})
 
 
+@app.route('/api/asset-groups')
+@require_auth
+def list_asset_groups():
+    """Group public targets while keeping latest risk separate from finding history."""
+    try:
+        parsed = parse_group_request(request.args, g.user['organization_id'], app.config['SECRET_KEY'])
+        with _read_snapshot() as session:
+            page = group_page(session, parsed, app.config['SECRET_KEY'], _asset_group_tables())
+        return jsonify({'success': True, **page})
+    except InventoryError as error:
+        return jsonify({'success': False, 'error': error.message, 'code': error.code}), error.status
+    except Exception:
+        app.logger.error('Error listing asset groups')
+        return jsonify({'success': False, 'error': 'Asset grouping unavailable',
+                        'code': 'asset_group_projection_unavailable'}), 503
+
+
+@app.route('/api/asset-groups/<group_id>/history')
+@require_auth
+def asset_group_history(group_id):
+    """Page source finding occurrences without inferring remediation."""
+    try:
+        parsed = parse_group_history_request(request.args, g.user['organization_id'], group_id,
+                                             app.config['SECRET_KEY'])
+        with _read_snapshot() as session:
+            page = group_history_page(session, parsed, app.config['SECRET_KEY'], _asset_group_tables())
+        return jsonify({'success': True, **page})
+    except InventoryError as error:
+        return jsonify({'success': False, 'error': error.message, 'code': error.code}), error.status
+    except Exception:
+        app.logger.error('Error reading asset group history')
+        return jsonify({'success': False, 'error': 'Asset grouping unavailable',
+                        'code': 'asset_group_projection_unavailable'}), 503
+
+
 @app.route("/health")
 @app.route("/health/live")
 def health_check():
@@ -1180,10 +1227,12 @@ def start_job_dispatcher():
         if _job_dispatcher is not None:
             return _job_dispatcher
         with app.app_context():
+            grouping = AssetGroupProjector(db.engine, _asset_group_tables())
             dispatcher = JobDispatcher(_get_job_store(), _execute_job,
                                        workers=app.config["MAX_CONCURRENT_SCANS"],
                                        initialize=lambda: initialize_schema(db.engine, db.metadata),
-                                       service=_schedule_service())
+                                       service=_schedule_service(),
+                                       maintenance=lambda stop: grouping.step(stop_event=stop))
             dispatcher.start()
         _job_dispatcher = dispatcher
         return dispatcher

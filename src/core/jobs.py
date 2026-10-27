@@ -361,7 +361,8 @@ class JobStore:
 
 
 class JobDispatcher:
-    def __init__(self, store, run, workers=2, poll_seconds=0.25, initialize=None, service=None):
+    def __init__(self, store, run, workers=2, poll_seconds=0.25, initialize=None, service=None,
+                 maintenance=None):
         if workers < 1 or poll_seconds <= 0:
             raise ValueError("Worker count and poll interval must be positive")
         self.store, self.run = store, run
@@ -378,6 +379,7 @@ class JobDispatcher:
         self.logger = logging.getLogger(__name__)
         self.initialize = initialize
         self.service = service
+        self.maintenance = maintenance
 
     @property
     def ready(self):
@@ -460,6 +462,12 @@ class JobDispatcher:
                 if self.service:
                     self.service.tick(self._stop)
                 self._healthy = not self.service or self.service.healthy
+                if self.maintenance and not self._active and not self._stop.is_set():
+                    try:
+                        self.maintenance(self._stop)
+                    except Exception:
+                        # Derived views can be unavailable while scans remain usable.
+                        self.logger.error("Background inventory maintenance failed")
             except Exception:
                 self._healthy = False
                 self.logger.error("Job dispatcher could not access or finalize its queue")
