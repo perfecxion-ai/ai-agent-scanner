@@ -184,3 +184,116 @@ def test_malformed_earlier_owner_cannot_starve_valid_organizations(review_databa
                  if name != 'reports' else tables[name].c.scan_id)).all()
                  for name in ('observations', 'scans', 'reports')}
         assert after == before
+
+
+def same_report_observations(engine, tables):
+    seed_repeated_sources(engine, tables)
+    with engine.begin() as connection:
+        connection.execute(tables['observations'].update().values(scan_id='review-scan-0'))
+
+
+def observation_row(connection, tables, identifier):
+    return connection.execute(select(*sources.observation_columns(tables['observations'])).where(
+        tables['observations'].c.id == identifier)).one()
+
+
+def support_calls(monkeypatch):
+    original, calls = sources._supported_source, []
+
+    def counted(report, agent):
+        calls.append((id(report), agent['id']))
+        return original(report, agent)
+
+    monkeypatch.setattr(sources, '_supported_source', counted)
+    return calls
+
+
+def test_repeated_observations_reuse_support_without_changing_saved_json(review_database, monkeypatch):
+    engine, tables = review_database
+    same_report_observations(engine, tables)
+    calls = support_calls(monkeypatch)
+    with engine.connect() as connection:
+        original = connection.scalar(select(tables['reports'].c.result).where(
+            tables['reports'].c.scan_id == 'review-scan-0'))
+        reader = sources.SourceReader(connection, tables, time.monotonic() + 5)
+        values = [reader.observation(observation_row(connection, tables, 'review-observation-' + str(index)),
+                                     'review-owner') for index in range(2)]
+        assert all(value.risk['risk_score'] == 70 and value.supported_count == 1 for value in values)
+        assert len(calls) == 1
+        assert reader.reports['review-scan-0'].report == original
+        assert connection.scalar(select(tables['reports'].c.result).where(
+            tables['reports'].c.scan_id == 'review-scan-0')) == original
+
+
+@pytest.mark.parametrize('changes', [
+    {'metadata': {'asset_id': None}},
+    {'metadata': {'asset_id': 'missing-saved-alias'}},
+    {'provider': 'wrong-provider'},
+    {'model_name': 'wrong-model'},
+    {'endpoint_url': 'https://wrong-target.invalid/resource'},
+])
+def test_cached_support_cannot_replace_observation_alias_or_target_binding(review_database, monkeypatch, changes):
+    engine, tables = review_database
+    same_report_observations(engine, tables)
+    with engine.begin() as connection:
+        connection.execute(tables['observations'].update().where(
+            tables['observations'].c.id == 'review-observation-1').values(**changes))
+    calls = support_calls(monkeypatch)
+    with engine.connect() as connection:
+        reader = sources.SourceReader(connection, tables, time.monotonic() + 5)
+        first = reader.observation(observation_row(connection, tables, 'review-observation-0'), 'review-owner')
+        rejected = reader.observation(observation_row(connection, tables, 'review-observation-1'), 'review-owner')
+    assert first.risk['risk_score'] == 70 and first.supported_count == 1
+    assert rejected.identity.status == 'unmerged' and rejected.risk['risk_score'] is None
+    assert rejected.agent is None and rejected.claims == [] and rejected.history_complete is False
+    assert len(calls) == 1, 'Per-observation binding must be checked before consulting support'
+
+
+def test_support_is_separate_for_distinct_saved_aliases(review_database, monkeypatch):
+    engine, tables = review_database
+    same_report_observations(engine, tables)
+    report = legacy_access_v3_report('high')
+    other = json.loads(json.dumps(report['agents'][0]))
+    other['id'] = 'review-other-saved-alias'
+    report['agents'].append(other)
+    source = json.loads(json.dumps(report['security_results'][0]))
+    source.update(agent_id=other['id'], status='failed')
+    report['security_results'].append(source)
+    with engine.begin() as connection:
+        connection.execute(tables['reports'].update().where(
+            tables['reports'].c.scan_id == 'review-scan-0').values(result=report))
+        connection.execute(tables['observations'].update().where(
+            tables['observations'].c.id == 'review-observation-1').values(metadata={'asset_id': other['id']}))
+    calls = support_calls(monkeypatch)
+    with engine.connect() as connection:
+        reader = sources.SourceReader(connection, tables, time.monotonic() + 5)
+        first = reader.observation(observation_row(connection, tables, 'review-observation-0'), 'review-owner')
+        second = reader.observation(observation_row(connection, tables, 'review-observation-1'), 'review-owner')
+        assert reader.reports['review-scan-0'].report == report
+    assert first.supported_count == 1 and first.risk['risk_score'] == 70
+    assert second.supported_count is None and second.risk['risk_score'] is None
+    assert len(calls) == 2 and calls[0][0] == calls[1][0] and calls[0][1] != calls[1][1]
+
+
+def test_a_new_reader_revalidates_a_reconstructed_changed_source(review_database, monkeypatch):
+    engine, tables = review_database
+    same_report_observations(engine, tables)
+    original = legacy_access_v3_report('high')
+    calls = support_calls(monkeypatch)
+    with engine.connect() as connection:
+        first_reader = sources.SourceReader(connection, tables, time.monotonic() + 5)
+        first = first_reader.observation(observation_row(connection, tables, 'review-observation-0'), 'review-owner')
+        assert first.supported_count == 1
+    changed = json.loads(json.dumps(original))
+    changed['security_results'][0]['vulnerabilities'] = []
+    with engine.begin() as connection:
+        connection.execute(tables['reports'].update().where(
+            tables['reports'].c.scan_id == 'review-scan-0').values(result=changed))
+    with engine.connect() as connection:
+        second_reader = sources.SourceReader(connection, tables, time.monotonic() + 5)
+        second = second_reader.observation(observation_row(connection, tables, 'review-observation-0'), 'review-owner')
+    assert first_reader.reports['review-scan-0'].report == original
+    assert second_reader.reports['review-scan-0'].report == changed
+    assert second.history_complete is False and second.supported_count is None
+    assert second.risk['risk_score'] is None
+    assert len(calls) == 2 and calls[0][0] != calls[1][0]

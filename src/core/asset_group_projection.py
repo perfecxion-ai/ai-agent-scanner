@@ -1,7 +1,7 @@
 """Bounded source interpretation shared by group staging and read-only pages."""
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timezone
 import json
 import re
@@ -151,6 +151,20 @@ class ReportSource:
     report: object
     agents: dict
     risks: dict
+    _support: dict[str, tuple[bool, frozenset[int]]] = field(default_factory=dict, repr=False)
+
+    def support(self, alias):
+        # This decoded source belongs to one reader and is never mutated. Row
+        # selectors must still match before reusing its immutable evidence facts.
+        if alias not in self._support:
+            agent = self.agents[alias]
+            claims = agent.get('vulnerabilities', [])
+            shape = isinstance(claims, list) and all(isinstance(value, dict) for value in claims)
+            valid, supported = _supported_source(self.report, agent)
+            ordinals = frozenset(ordinal for ordinal, claim in enumerate(claims)
+                                if id(claim) in supported) if shape else frozenset()
+            self._support[alias] = (bool(valid and shape), ordinals)
+        return self._support[alias]
 
     @classmethod
     def from_value(cls, report):
@@ -176,7 +190,7 @@ class ObservationSource:
     agent: dict | None
     risk: dict
     claims: list
-    supported: set
+    supported: frozenset
     history_complete: bool
     observed_at_us: int
     discovered_at: str
@@ -294,7 +308,7 @@ class SourceReader:
         unknown = project_agent_risk()
         if agent is None:
             return ObservationSource(row, GroupIdentity(singleton.group_id, 'unmerged', 'unmatched_asset_alias', None),
-                                     alias, None, unknown, [], set(), False, micros, displayed)
+                                     alias, None, unknown, [], frozenset(), False, micros, displayed)
         # Public snapshot selectors must actually refer to this archived target.
         selected = {'endpoint': row.endpoint_url, 'provider': row.provider, 'model': row.model_name,
                     'evidence_context_id': agent.get('evidence_context_id'), 'metadata': metadata}
@@ -308,7 +322,7 @@ class SourceReader:
         if not exact:
             return ObservationSource(row, GroupIdentity(singleton.group_id, 'unmerged',
                                      'snapshot_target_mismatch', None), alias, None, unknown,
-                                     [], set(), False, micros, displayed)
+                                     [], frozenset(), False, micros, displayed)
         if (original.status != 'grouped' or snapshot.status != 'grouped' or original.target != snapshot.target):
             identity = GroupIdentity(singleton.group_id, 'unmerged',
                                      original.reason or snapshot.reason or 'snapshot_target_mismatch', None)
@@ -317,8 +331,6 @@ class SourceReader:
         claims = agent.get('vulnerabilities', [])
         claim_shape = isinstance(claims, list) and all(isinstance(value, dict) for value in claims)
         claims = claims if claim_shape else []
-        valid, supported_objects = _supported_source(source.report, agent)
-        supported = {ordinal for ordinal, claim in enumerate(claims) if id(claim) in supported_objects}
-        complete = bool(valid and claim_shape)
+        complete, supported = source.support(alias)
         risk = source.risks.get(alias, unknown)
         return ObservationSource(row, identity, alias, agent, risk, claims, supported, complete, micros, displayed)

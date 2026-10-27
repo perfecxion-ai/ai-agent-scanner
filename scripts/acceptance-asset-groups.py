@@ -172,7 +172,7 @@ def wait_ready(server, organization):
             return value
         require(status == 503 and value.get('code') == 'asset_group_projection_unavailable', 'unexpected_group_readiness')
         server.remaining()
-        time.sleep(0.02)
+        time.sleep(0.2)
 
 
 def page_all(server, organization, path, field):

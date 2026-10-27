@@ -11,6 +11,7 @@ from sqlalchemy import Column, DateTime, MetaData, String, Table, Text, create_e
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import MultiDict
 
+from src.core import asset_group_projection as sources
 from src.core.asset_group_storage import install_asset_group_storage, register_asset_group_metadata
 from src.core.asset_groups import (
     AssetGroupProjector, group_history_page, group_page,
@@ -104,6 +105,85 @@ def source_rows(database):
     with engine.connect() as connection:
         return {name: connection.execute(select(tables[name])).all()
                 for name in ('observations', 'scans', 'reports', 'generations')}
+
+
+def test_repeated_source_support_is_immutable_and_reader_local(database, monkeypatch):
+    seed(database, 'repeated', count=3)
+    engine, tables = database
+    calls = []
+    original = sources._supported_source
+
+    def validate(report, agent):
+        calls.append(agent['id'])
+        return original(report, agent)
+
+    monkeypatch.setattr(sources, '_supported_source', validate)
+    with engine.connect() as connection:
+        rows = connection.execute(select(*sources.observation_columns(tables['observations']))
+                                  .order_by(tables['observations'].c.id)).all()
+        reader = sources.SourceReader(connection, tables, time.monotonic() + 5)
+        observations = [reader.observation(row, 'tenant-a') for row in rows]
+        report = reader.reports['repeated'].report
+        unchanged = deepcopy(report)
+        assert calls == ['owned-access-v3']
+        assert all(item.supported_count == 1 and item.history_complete for item in observations)
+        assert all(isinstance(item.supported, frozenset) for item in observations)
+        assert all(item.supported is observations[0].supported for item in observations)
+        assert reader.observation(rows[0], 'tenant-a').supported_count == 1
+        assert report == unchanged
+        # A new read cannot inherit evidence facts from another source snapshot.
+        fresh = sources.SourceReader(connection, tables, time.monotonic() + 5)
+        assert fresh.observation(rows[0], 'tenant-a').supported_count == 1
+        assert calls == ['owned-access-v3', 'owned-access-v3']
+
+
+def test_warmed_support_memo_does_not_skip_snapshot_binding(database, monkeypatch):
+    seed(database, 'mixed-binding', count=2)
+    engine, tables = database
+    with engine.begin() as connection:
+        connection.execute(update(tables['observations']).where(
+            tables['observations'].c.id == 'mixed-binding-00001').values(endpoint_url='https://wrong.example/resource'))
+    calls = []
+    original = sources._supported_source
+
+    def validate(report, agent):
+        calls.append(agent['id'])
+        return original(report, agent)
+
+    monkeypatch.setattr(sources, '_supported_source', validate)
+    with engine.connect() as connection:
+        rows = connection.execute(select(*sources.observation_columns(tables['observations']))
+                                  .order_by(tables['observations'].c.id)).all()
+        reader = sources.SourceReader(connection, tables, time.monotonic() + 5)
+        valid, mismatched = [reader.observation(row, 'tenant-a') for row in rows]
+    assert calls == ['owned-access-v3']
+    assert valid.supported_count == 1 and valid.risk['risk_score'] == 70
+    assert mismatched.supported_count is None and mismatched.risk['risk_score'] is None
+    assert mismatched.identity.reason == 'snapshot_target_mismatch'
+
+
+def test_new_reader_revalidates_changed_source_with_same_alias(database, monkeypatch):
+    seed(database, 'changed')
+    engine, tables = database
+    calls = []
+    original = sources._supported_source
+
+    def validate(report, agent):
+        calls.append(agent['id'])
+        return original(report, agent)
+
+    monkeypatch.setattr(sources, '_supported_source', validate)
+    with engine.connect() as connection:
+        row = connection.execute(select(*sources.observation_columns(tables['observations']))).one()
+        reader = sources.SourceReader(connection, tables, time.monotonic() + 5)
+        assert reader.observation(row, 'tenant-a').supported_count == 1
+    with engine.begin() as connection:
+        connection.execute(update(tables['reports']).values(result=json.dumps(legacy_access_v3_report('zero'))))
+    with engine.connect() as connection:
+        fresh = sources.SourceReader(connection, tables, time.monotonic() + 5)
+        projected = fresh.observation(row, 'tenant-a')
+        assert projected.supported_count == 0 and projected.risk['risk_score'] == 0
+    assert calls == ['owned-access-v3', 'owned-access-v3']
 
 
 def test_latest_zero_is_separate_from_prior_confirmed_history(database):
