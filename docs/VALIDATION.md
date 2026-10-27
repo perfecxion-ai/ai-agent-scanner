@@ -1434,6 +1434,15 @@ fifteen minutes for the full suite and both existing backup commands. Scanner,
 request, fixture and backup deadlines and assertions are unchanged. The new head
 must pass all eight CI checks, including native completion and both backup modes.
 
+PR #83 merged as `1d790bf` after all eight checks passed at its exact reviewed
+head. The merge author uses the approved noreply identity and its tree matches
+that head. No post-merge run or check suite appeared during the initial watch,
+despite an enabled workflow, intact main-push trigger and no skip directive.
+This absence is not a successful post-merge gate or evidence of a service outage.
+An additional manual CI trigger permits explicit exact-revision verification
+using the same eight jobs. It changes no scanner code, test command, permissions,
+publication or deployment behavior. See [manual CI operation](DEVELOPMENT.md#ci-and-publication).
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose
