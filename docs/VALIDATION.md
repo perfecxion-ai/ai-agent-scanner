@@ -1418,9 +1418,9 @@ are included. Mocked native-guide checks preserve genuine setup exit 23, test
 exit 9 with driver exit 1, and final source-status exit 31, plus successful exit 0.
 
 Required delivery checks are tracked on
-[PR #83](https://github.com/perfecxion-ai/ai-agent-scanner/pull/83). The next external check is the
-[scoped native CLI file-recovery gate](cli-checkpoint-retest.md) pinned
-to the merged revision. It uses synthetic loopback fixtures only and needs no
+[PR #83](https://github.com/perfecxion-ai/ai-agent-scanner/pull/83). The
+[scoped native CLI file-recovery gate](cli-checkpoint-retest.md) is accepted below
+at the merged revision. It uses synthetic loopback fixtures only and needs no
 broad model, tenant-cohort, MCP, backup or inventory rerun. This does not certify
 model sensitivity, independent target seeding, deployed storage/upgrade, power
 loss, network filesystems, private API admission or enterprise readiness. No
@@ -1431,17 +1431,113 @@ The first final-head macOS job reached 97 percent of pytest with passing progres
 before its ten-minute workflow limit cancelled execution; backup acceptance was
 not reached. It is not accepted as a passed gate. The macOS job allowance is now
 fifteen minutes for the full suite and both existing backup commands. Scanner,
-request, fixture and backup deadlines and assertions are unchanged. The new head
-must pass all eight CI checks, including native completion and both backup modes.
+request, fixture and backup deadlines and assertions are unchanged. The final
+reviewed head subsequently passes all eight CI checks, including native macOS
+completion and both backup modes.
 
 PR #83 merged as `1d790bf` after all eight checks passed at its exact reviewed
-head. The merge author uses the approved noreply identity and its tree matches
-that head. No post-merge run or check suite appeared during the initial watch,
-despite an enabled workflow, intact main-push trigger and no skip directive.
-This absence is not a successful post-merge gate or evidence of a service outage.
-An additional manual CI trigger permits explicit exact-revision verification
-using the same eight jobs. It changes no scanner code, test command, permissions,
-publication or deployment behavior. See [manual CI operation](DEVELOPMENT.md#ci-and-publication).
+head. PR #84 adds manual CI dispatch and merged as `49c1041` after all eight PR
+checks passed. All eight checks on that main revision pass in
+[run 40533599489](https://github.com/perfecxion-ai/ai-agent-scanner/actions/runs/40533599489),
+covering the unchanged scanner runtime. This records verification of the latest
+main revision, not a claim that a separate post-merge event ran at `1d790bf`.
+The dispatch change alters no scanner code, test command, permissions,
+publication or deployment behavior. See
+[manual CI operation](DEVELOPMENT.md#ci-and-publication).
+
+### Supplied native CLI checkpoint acceptance
+
+Static review accepts the supplied archive for the bounded
+[CLI file-recovery gate](cli-checkpoint-retest.md) at
+`49c10419beb09b6b32646a6b3d872126edc82379`. Its SHA-256 is
+`c43614de16f837136d2b95e9bb370f46e4a6cc261c89305decc0c86e4441935d`.
+No supplied driver was executed during review. Captures record Python 3.11.2
+with GCC 12.2.0; Debian 12 is operator-attested. Dependencies record SQLAlchemy
+2.1.6 and Gunicorn 26.2.0. The 74-file scanner/CLI source digest independently
+matches the pinned checkout:
+`e634574eae0b8cb8d188d326bba13d16dc7fcb20f292adc493340ba10d4b4ec1`.
+This identifies scoped source contents, not every loaded module, dependency,
+executed test or target's provenance.
+
+The three committed test files pass all 119 cases in 61.24 seconds with warnings
+as errors and no skips. Build, Twine and installed-wheel smoke each exit zero;
+their four command exits, the driver exit and the outer job exit are all zero.
+All 23 captured assertion records reconcile with the returned data. The assertion
+helper checks source/version presence rather than the expected source pin; the
+independent digest comparison supplies that missing comparison. Build logs record
+both distributions, Twine passes both, and installed smoke reports matching
+checkout/distribution identity and completed discovery recovery with unknown risk.
+The built distributions themselves are not returned for another byte comparison.
+
+Committed assertions supply the four real CLI SIGKILL scenarios: prompt and
+access-high retain 70/high; tenant and weak-basic access retain 90/critical.
+Owned verified HTTPS, normal samples/pacing, a saved receipt followed by a real
+request stall, process reaping, exact retained receipt/finding IDs and producer
+identity, unchanged checkpoint bytes and partial JSON/SARIF recovery are tested.
+The native log is a combined dots/summary capture; raw requests, certificates,
+checkpoint fixtures, exports and child logs are excluded. Per-case facts therefore
+depend on the committed tests' assertions rather than independent returned traces.
+Configured recovery guards have positive controls and the target call count stays
+unchanged. These checks are not an arbitrary filesystem/network sandbox or a
+proof that no socket object was ever created.
+
+The archive has 60 members: four directories, 26 substantive files and 30
+AppleDouble sidecars, totaling 103,455 file bytes. Sidecars are ignored as evidence.
+Fifteen files are primary captures. Twenty files are evidence when the report and
+five driver sources are excluded. All substantive files decode as UTF-8.
+
+Private-harness and privacy qualifications:
+
+- The driver and wrapper use `set -u`, whereas the public guide uses `set -eu`.
+  The driver trap begins after initial setup, checkout and revision checks.
+  Test/build/Twine/smoke failures are explicitly retained; some metadata and final
+  source-status commands are unchecked. The wrapper ignores the clone pipeline's
+  status and does not consistently fold sanitizer, copy, chmod, cleanup or listing
+  failures into its final status. The report's complete failure-propagation claim
+  is broader than this implementation. Cleanup is attempted, without a returned
+  removal or final process inventory proving it completed.
+- The privacy receipt covers 17 files at one point: the 15 captures, setup note
+  and then-live job log. It records zero violations and no private-path prefixes.
+  Its 19 pattern entries mix configured environment values, fixed fixture values
+  and synthetic PII patterns; they are not 19 live credentials. The later privacy
+  receipt, report, start/exit files and final job-log tail are outside that sweep.
+  A stricter post-bundle sweep is described but has no separate captured receipt.
+- Four logs are sanitized before that sweep; the returned job log is also
+  sanitized. Known values, paths and addresses can be replaced, so a clean
+  returned log does not prove absence from the original. No raw-log hashes or
+  capture-to-bundle comparison chain are returned; original-byte preservation of
+  JSON/text remains attested.
+  A fresh data-only review of the 20 returned evidence files plus the report finds
+  no matches for the twelve committed fixture values or their documented encoded
+  forms. Generated invalid keys and private environment values are not in the
+  bundle and cannot be independently reswept.
+- Fixture canaries and issued keys are fixed synthetic constants; invalid keys,
+  execution IDs and disposable resources are generated. The wrapper imports an
+  optional private environment into its parent process for the absence sweep.
+  Actual scan children use an explicit environment allowlist and absent-profile
+  override. Recovery children use that restricted base environment with an owned
+  trap registry whose access is refused. The evidence does not establish general
+  isolation of every parent build/test operation from inherited environment.
+- The native listing records scanner capture files at 0600, an outer directory
+  at 0755 and its live job log at 0644. Archive metadata instead has four 0755
+  directories, 25 substantive files at 0644 and the returned job log at 0600.
+  Neither listing establishes owner-only modes for the entire shared bundle;
+  private checkpoint modes/ownership are checked inside the tests.
+- The report's earlier-local Python version does not match the recorded 3.13.15
+  gate. Its failure-before-first-acknowledgement wording must mean no snapshot was
+  saved: a coherent replaced snapshot can be recovered even if its write was not
+  acknowledged. The public contract already records that distinction.
+
+No new scanner blocker was found. These qualifications need no broad repeat.
+This closes R1.2e native process-recovery acceptance for the implemented prompt,
+tenant and access receipt families on the supported POSIX/local-filesystem
+boundary. It does not establish future-family support, independent target seeding,
+model sensitivity, power-loss/disk-failure durability, deployed storage/upgrade,
+private API admission or enterprise readiness. No package was published. Artifact
+retrieval by the private wrapper is not an assessment of an external target.
+R1.4b1 conservative grouping of latest observations versus prior confirmed history
+is next under design; R1.4b2 authoritative source-bound indexes remain separate.
+Neither is implemented by this acceptance.
 
 ### Protected-access request-provenance prerequisite
 

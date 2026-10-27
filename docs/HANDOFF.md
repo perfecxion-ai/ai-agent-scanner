@@ -263,11 +263,26 @@ passes 73 core cases and 46 CLI/process/guard cases. The full coverage gate pass
 5,102 tests with warnings as errors; build, installed-wheel recovery, lint and
 configured Bandit pass. See
 [local acceptance](VALIDATION.md#cli-process-crash-checkpoint-local-acceptance)
-and [file contract](cli-checkpoints.md). Delivery checks are tracked on
-[PR #83](https://github.com/perfecxion-ai/ai-agent-scanner/pull/83); the
-[scoped native file-recovery gate](cli-checkpoint-retest.md) remains pending.
-This is process recovery on the supported POSIX/local-filesystem boundary, not
-power-loss, deployed storage, private API admission or enterprise acceptance.
+and [file contract](cli-checkpoints.md). PR #83 merged as `1d790bf` after all
+eight PR checks passed. PR #84 adds manual CI dispatch and merged as `49c1041`
+after all eight PR checks; all eight checks on that main revision also pass,
+covering the unchanged scanner runtime.
+
+The supplied native file-recovery gate now passes qualified acceptance on Python
+3.11.2: 119 cases in 61.24 seconds, build, Twine and installed-wheel smoke all
+pass, with 23 captured checks reconciled and matching 74-file source identity.
+The wrapper's setup/cleanup handling, temporal privacy sweep, sanitized logs and
+returned modes support narrower claims than its report. See
+[native acceptance and qualifications](VALIDATION.md#supplied-native-cli-checkpoint-acceptance).
+This closes R1.2e for the currently implemented prompt, tenant and access receipt
+families on the supported POSIX/local-filesystem process-recovery boundary.
+Future evidence families, power loss, deployed storage, private API admission and
+enterprise acceptance remain separate gates.
+
+Next is the R1.4b1 design for conservative observation groups: show the latest
+observation separately from prior confirmed history, without treating a quiet or
+unknown run as resolution. R1.4b2 authoritative source-bound indexes are separate.
+Neither increment is implemented by this acceptance.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
