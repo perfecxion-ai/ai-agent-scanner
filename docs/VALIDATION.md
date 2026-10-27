@@ -1333,9 +1333,88 @@ Privacy and private-harness qualifications:
 No new scanner blocker was found, and these qualifications need no broad repeat.
 This accepts synthetic native retention, backup and inventory correctness;
 it does not establish real-model yield, independent target seeding, deployed
-upgrade/power-loss durability or enterprise readiness. The CLI checkpoint-file
-contract is next and remains under review. Private API admission remains a
-separate gate; neither is implemented by this acceptance.
+upgrade/power-loss durability or enterprise readiness. CLI checkpoint files and
+private API admission were outside that tested revision. The separate local CLI
+increment is recorded below; private API admission remains open.
+
+### CLI process-crash checkpoint local acceptance
+
+R1.2e adds opt-in `--checkpoint-dir` to CLI `scan` and `discover`, plus an offline
+`recover` JSON/SARIF export command. Each execution creates a new 0700 directory
+with owned, single-link 0600 files and exclusive nonblocking ownership. No existing
+directory is reused for writes. Saved public reports retain their producer,
+evidence and checkpoint versions. The envelope has its own version 1.0; server
+inputs, schema 6, caches, archived reports, catalogs, samples and budgets are
+unchanged. Default CLI execution still uses its existing in-memory accumulator.
+
+The file writer validates canonical risk and evidence, pins identity and prefixes,
+and acknowledges only after file fsync, atomic replacement and directory fsync.
+Failure stops later writes and probes. Recovery holds ownership through output,
+reads bounded local JSON without credential/configuration/registry/database
+resolution, and never replays a request. Nonterminal state remains partial with a
+static explanation and nonzero exit; a genuine terminal result preserves its
+actual status. A replaced coherent snapshot can exist without an acknowledged
+write after a directory-fsync failure; recovery uses its recorded state. This
+retains acknowledged evidence without promising exact exclusion of later coherent
+state or power-loss durability. See the [file contract](cli-checkpoints.md).
+
+All 113 new cases pass on Python 3.10.20 in 52.19 seconds with warnings as errors:
+73 core contracts, 29 CLI integration cases and eleven independent process/guard
+cases. Core acceptance also passes on Python 3.13.15, including an independent
+73-case coverage run in 9.47 seconds. The actual-process gate independently passes
+eleven cases in 48.05 seconds on Python 3.13.15/SQLAlchemy 2.1.6 with coverage and
+warnings as errors in the parent and child interpreters. These are overlapping
+gates, not additional independent test totals.
+
+Four unmodified production CLI children use owned verified HTTPS and normal
+samples/pacing. Prompt and access-high cases retain 70/high; tenant and weak-basic
+access cases retain 90/critical. Each waits for durable receipt evidence and the
+next genuine request stall before SIGKILL. Fresh production recovery processes
+preserve exact receipt/finding IDs, control proof, source bytes and producer
+identity, with partial JSON/SARIF risk and exit 1. No further fixture calls occur.
+Seven positive controls prove the recovery guards reject configured network,
+DNS, SQLite, private config/registry, environment and subprocess operations. These
+guards are not an arbitrary filesystem or network sandbox. Owned process groups
+are reaped, private modes/ownership hold, and known raw/encoded fixture values stay
+out of checkpoint, export and child-log surfaces.
+
+Core and integration cases include frozen checkpoint versions 1/2/3 and current
+version 4, genuine current zero/high/partial reports, live-owner refusal, canonical
+ancestor symlinks, unsafe leaf and hard links, FIFO refusal, byte/depth/expanded
+object bounds, duplicate/nonfinite JSON, private-field/URL rejection, typed risk
+values and assessment aliases. Atomic-write faults preserve earlier evidence;
+one bounded safe staging residue can remain after process termination. Failure
+before any snapshot is saved cannot recover; cancellation remains cancellation
+even if final persistence or cleanup fails. A completed snapshot can survive an
+ordinary output error.
+
+Real process testing caught a guard regression missed by the initial core cases:
+normal prompt findings contain tuples that JSON serializes as arrays. The new
+size guard rejected them before their receipt could be saved. Corrected bounded
+tuple traversal normalizes through JSON before privacy/contracts/prefix checks,
+with genuine prompt HTTP and tuple privacy/cycle/depth/expansion regressions. Both
+the core and four-objective real-process gates pass afterward. Review also closed
+FIFO open blocking, boolean-versus-zero acceptance, contradictory assessment
+aliases and a symlink-loop output traceback.
+
+The combined full run passes 5,096 tests in 639.46 seconds with warnings as errors
+and 93 percent coverage. Ruff, configured Bandit, whitespace and authored-text
+privacy/ASCII checks pass. Build and Twine pass. The installed wheel performs an
+owned static-source discovery and offline recovery outside the checkout, retaining
+the completed report, unknown score and private modes. All 74 Python CLI source
+files match the wheel byte for byte; no AGENTS file, database or lab-job artifacts
+are included. Mocked native-guide checks preserve genuine setup exit 23, test
+exit 9 with driver exit 1, and final source-status exit 31, plus successful exit 0.
+
+Required delivery CI remains pending and will be recorded on the implementation
+PR. The next external check is the
+[scoped native CLI file-recovery gate](cli-checkpoint-retest.md) pinned
+to the merged revision. It uses synthetic loopback fixtures only and needs no
+broad model, tenant-cohort, MCP, backup or inventory rerun. This does not certify
+model sensitivity, independent target seeding, deployed storage/upgrade, power
+loss, network filesystems, private API admission or enterprise readiness. No
+operator configuration or database was accessed; no package was published or
+service deployed.
 
 ### Protected-access request-provenance prerequisite
 

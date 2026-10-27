@@ -105,8 +105,9 @@ remove them after retaining and reviewing the requested captures.
 
 ## Required results
 
-All three test files must pass without skips or warnings. Four cases run the
-unmodified production CLI against owned verified HTTPS fixtures. They wait for
+All 113 cases in the three test files must pass without skips or warnings. Four
+cases run the unmodified production CLI against owned verified HTTPS fixtures.
+They wait for
 an on-disk finding and the next actual stalled request, kill and reap the CLI,
 then recover through fresh production CLI processes. Require exact retained
 receipts, finding IDs, control proof, producer identity and unchanged saved bytes.

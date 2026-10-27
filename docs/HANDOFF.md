@@ -245,8 +245,28 @@ hashes match the pinned checkout. See
 The private driver's trap, wrapper cleanup, privacy inventory and outer file
 modes support narrower claims than its narrative. These qualifications need no
 broad repeat and do not establish model sensitivity or an operator migration.
-The CLI checkpoint-file contract is next and remains under review; private API
+The separate CLI checkpoint-file increment is recorded below. Private API
 admission remains a separate gate.
+
+R1.2e now has local acceptance for opt-in CLI process-crash files. `scan` and
+`discover` can create a fresh private checkpoint directory; `recover` exports its
+public evidence offline without credential resolution or probe replay. Exclusive
+ownership, bounded canonical validation and atomic file replacement preserve
+earlier evidence. Nonterminal recovery remains partial and exits nonzero;
+recorded terminal results preserve their actual status. Existing defaults, sample
+budgets, catalog bytes, server inputs, evidence versions and schema 6 are unchanged.
+
+All 113 new cases pass, including four unmodified production CLI children over
+verified owned HTTPS, acknowledged evidence followed by a real request stall,
+SIGKILL and fresh offline JSON/SARIF recovery. Independent Python 3.13 review
+passes 73 core cases and eleven process/guard cases. The full coverage gate passes
+5,096 tests with warnings as errors; build, installed-wheel recovery, lint and
+configured Bandit pass. See
+[local acceptance](VALIDATION.md#cli-process-crash-checkpoint-local-acceptance)
+and [file contract](cli-checkpoints.md). Required delivery CI and the
+[scoped native file-recovery gate](cli-checkpoint-retest.md) remain pending.
+This is process recovery on the supported POSIX/local-filesystem boundary, not
+power-loss, deployed storage, private API admission or enterprise acceptance.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
