@@ -115,6 +115,20 @@ the reloader to avoid duplicate dispatchers. See [job operations](jobs.md).
 
 ## CI and publication
 
+CI also supports an explicit run when an expected push event has not appeared:
+
+```sh
+gh workflow run ci.yml --ref main
+gh run list --workflow ci.yml --branch main --event workflow_dispatch \
+  --json databaseId,headSha,status,conclusion
+```
+
+Check that the run's `headSha` is the intended merged revision and all eight jobs
+complete successfully. A successful pull-request run does not establish that a
+post-merge event ran. The manual trigger requires repository write access and
+uses the same jobs and read-only repository permissions; it does not publish or
+deploy. See [GitHub's manual workflow guide](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+
 CI checks all Python files with Ruff, runs tests and installed-wheel smoke checks
 on all supported Python versions, audits resolved dependencies (including cloud
 and server extras), runs Bandit, and builds and starts the container. Dependency
