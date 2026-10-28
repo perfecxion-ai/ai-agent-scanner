@@ -288,9 +288,18 @@ dispatcher ownership and yields to active scan workers; GET never repairs the
 index. Stale or unreadable sources return unavailable. See the
 [contract](asset-groups.md) and [local acceptance](VALIDATION.md#public-target-grouping-local-acceptance).
 
-The new [native grouping retest](asset-groups-retest.md) remains pending. It uses
-its own synthetic data and real loopback Gunicorn API, without lab services or
-operator secrets. R1.4b2 authoritative risk indexes, dashboard group views,
+PR #86 merged as `678fd717788d91a5062f4d3a723cc30979427871` with all eight PR and
+post-merge checks passing. The supplied native grouping gate remains failed:
+both 180-second modes time out, and SQLite 3.40.1 chooses a valid covering index
+that one focused assertion rejects. A separate 300-second diagnostic passes all
+fourteen assertions in 191.528 seconds without replacing those failed receipts.
+See [failure review and correction](VALIDATION.md#supplied-native-asset-group-gate-failure-and-portability-correction).
+The correction prepares each bounded source selector once per reader with fresh
+observation, scan and owner bindings. It preserves source reopening, evidence
+validation, limits and the 180-second gate. Independent reader regressions pass
+on SQLite 3.40.1 and 3.45.1. The [scoped native retest](asset-groups-retest.md)
+still needs a fresh pinned run after corrected-source delivery; it uses its own
+synthetic data and loopback Gunicorn API. R1.4b2 authoritative risk indexes, dashboard group views,
 credential/principal equivalence, logical-finding consolidation, and the remaining
 R2 through R4 work are separate. Group history counts occurrences, not independent
 vulnerabilities. No enterprise or release approval follows from these local gates.
