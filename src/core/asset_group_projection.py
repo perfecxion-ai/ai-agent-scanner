@@ -7,7 +7,7 @@ import json
 import re
 import time
 
-from sqlalchemy import LargeBinary, String, and_, bindparam, case, cast, func, select
+from sqlalchemy import Integer, LargeBinary, String, and_, bindparam, case, cast, func, select
 
 from src.core.asset_identity import GroupIdentity, target_group_identity
 from src.core.contracts import (
@@ -238,6 +238,7 @@ class SourceReader:
         self.connection, self.tables, self.deadline, self.stop_event = connection, tables, deadline, stop_event
         self.reports, self.source_bytes = {}, 0
         self._observation_statement = None
+        self._raw_statements = {}
 
     def observation_row(self, observation_id, scan_id, organization):
         check_deadline(self.deadline, self.stop_event)
@@ -252,11 +253,18 @@ class SourceReader:
             'group_observation_id': observation_id, 'group_scan_id': scan_id,
             'group_organization_id': organization}).first()
 
-    def _raw(self, column, predicate, allowance):
-        binary = cast(column, LargeBinary)
-        size = func.length(binary)
-        record = self.connection.execute(select(size, case(
-            (size <= min(allowance, MAX_STORED_RISK_BYTES), binary), else_=None), column.is_(None)).where(predicate)).first()
+    def _raw(self, column, selector_column, identifier, allowance):
+        check_deadline(self.deadline, self.stop_event)
+        key = (column, selector_column)
+        if key not in self._raw_statements:
+            binary = cast(column, LargeBinary)
+            size = func.length(binary)
+            self._raw_statements[key] = select(size, case(
+                (size <= bindparam('group_source_allowance', type_=Integer), binary), else_=None),
+                column.is_(None)).where(selector_column == bindparam('group_source_identifier'))
+        record = self.connection.execute(self._raw_statements[key], {
+            'group_source_identifier': identifier,
+            'group_source_allowance': min(allowance, MAX_STORED_RISK_BYTES)}).first()
         if record is None:
             return False, None, 0
         length, raw, is_null = record
@@ -298,12 +306,12 @@ class SourceReader:
             if len(self.reports) >= MAX_REPORTS:
                 raise PageBudget()
             report_table = self.tables['reports']
-            _, raw, size = self._raw(report_table.c.result, report_table.c.scan_id == row.scan_id,
+            _, raw, size = self._raw(report_table.c.result, report_table.c.scan_id, row.scan_id,
                                      remaining - metadata_size)
             self.reports[row.scan_id] = ReportSource.from_value(decode_source(raw))
             self.source_bytes += size
         observations = self.tables['observations']
-        exists, raw, size = self._raw(observations.c.metadata, observations.c.id == row.id,
+        exists, raw, size = self._raw(observations.c.metadata, observations.c.id, row.id,
                                       MAX_SOURCE_BYTES - self.source_bytes)
         if not exists:
             raise unavailable()
