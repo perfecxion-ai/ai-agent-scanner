@@ -56,6 +56,9 @@ ais_group_capture backup-optimized "$AIS_GROUP_PY" -O scripts/acceptance-backup-
 if "$AIS_GROUP_PY" -Werror -m pytest -o asyncio_default_fixture_loop_scope=function \
   tests/test_asset_identity.py tests/test_asset_group_schema.py \
   tests/test_asset_groups.py tests/test_asset_group_review.py \
+  tests/test_asset_group_prepared_reads.py tests/test_asset_group_prepared_review.py \
+  tests/test_asset_group_source_reads.py tests/test_asset_group_source_review.py \
+  tests/test_asset_group_gate_retries.py tests/test_asset_group_cleanup_contention.py \
   tests/test_asset_group_api.py tests/test_asset_group_backup.py \
   tests/test_job_maintenance.py tests/test_asset_group_acceptance.py \
   -k 'not public_group_gate_runs_real_server' -q \
@@ -76,6 +79,14 @@ All five exit captures must be zero. Both group receipts must report
 `asset-group-acceptance-v1`, `accepted: true`, and 10,000 observations. Both backup
 receipts must accept all fourteen cases. Preserve nonzero exits and diagnostics
 when a gate fails. Do not replace a failed receipt with a successful retry.
+
+The group receipts include numeric `page_retries` counts for `initial` and
+`restart`. Pagination retries only the documented
+`503/asset_group_projection_unavailable` failure envelope, using the identical
+cursor and request within the shared 180-second deadline. Each page permits at
+most 25 retries with at most 0.2 seconds of backoff. Other statuses, malformed
+responses, stale cursors and transport failures remain failures. This checks
+eventual complete traversal within the budget, not uninterrupted availability.
 
 ## Acceptance boundary
 

@@ -33,6 +33,10 @@ spec.loader.exec_module(inventory)
 GateFailure, require = inventory.GateFailure, inventory.require
 FORMAT_VERSION = 'asset-group-acceptance-v1'
 OBSERVATIONS = 10000
+MAX_PAGE_RETRIES = 25
+PAGE_RETRY_SECONDS = 0.2
+PAGE_HTTP_FAILURES = {status: 'page_http_' + str(status) for status in
+                      (400, 401, 403, 404, 405, 408, 409, 413, 422, 429, 500, 502, 503, 504)}
 ORGANIZATIONS = inventory.ORGANIZATIONS
 CATEGORIES = ('high', 'unscored', 'zero', 'unknown', 'model', 'context', 'endpoint', 'redacted', 'ambiguous')
 REQUIRED_ASSERTIONS = (
@@ -175,16 +179,32 @@ def wait_ready(server, organization):
         time.sleep(0.2)
 
 
-def page_all(server, organization, path, field):
+def page_all(server, organization, path, field, *, stats=None):
     values, visited, cursor, complete = [], set(), None, False
     while not complete:
         query = {'limit': 2 if field == 'asset_groups' else 100}
         if cursor:
             query['cursor'] = cursor
-        status, page = server.request(path + '?' + urlencode(query), organization=organization)
-        require(status == 200 and page.get('success') is True and type(page.get(field)) is list, 'page_failed')
+        url, retries = path + '?' + urlencode(query), 0
+        while True:
+            server.remaining()
+            if retries and stats is not None:
+                stats[server.phase] += 1
+            status, page = server.request(url, organization=organization)
+            unavailable = (type(status) is int and status == 503
+                and type(page) is dict and set(page) == {'success', 'error', 'code'}
+                and page['success'] is False and type(page['error']) is str and bool(page['error'])
+                and page['code'] == 'asset_group_projection_unavailable')
+            if not unavailable:
+                break
+            require(retries < MAX_PAGE_RETRIES, 'page_unavailable')
+            retries += 1
+            time.sleep(min(PAGE_RETRY_SECONDS, server.remaining()))
+        failure = PAGE_HTTP_FAILURES.get(status, 'page_http_error') if type(status) is int else 'page_http_error'
+        require(type(status) is int and status == 200, failure)
+        require(type(page) is dict and page.get('success') is True and type(page.get(field)) is list, 'page_failed')
         coverage = page.get('coverage', {})
-        require(type(coverage.get('search_complete')) is bool, 'missing_completion_fact')
+        require(type(coverage) is dict and type(coverage.get('search_complete')) is bool, 'missing_completion_fact')
         complete, next_cursor = coverage['search_complete'], page.get('next_cursor')
         require((complete and next_cursor is None) or (not complete and type(next_cursor) is str
                 and next_cursor and next_cursor not in visited), 'nonadvancing_or_false_completion')
@@ -195,14 +215,14 @@ def page_all(server, organization, path, field):
     return values
 
 
-def verify_views(server, expected):
+def verify_views(server, expected, *, stats=None):
     from src.core.risk_projection import project_agent_risk, project_report_risk
     reports = {id(row['report']): row['report'] for rows in expected.values() for row in rows.values()}
     risks = {key: project_report_risk(report)[1] for key, report in reports.items()}
     counts, all_group_ids = {}, set()
     for organization in ORGANIZATIONS:
         wait_ready(server, organization)
-        groups = page_all(server, organization, '/api/asset-groups', 'asset_groups')
+        groups = page_all(server, organization, '/api/asset-groups', 'asset_groups', stats=stats)
         require(len({group['id'] for group in groups}) == len(groups), 'duplicate_group')
         require(all_group_ids.isdisjoint(group['id'] for group in groups), 'cross_owner_group_identity')
         all_group_ids.update(group['id'] for group in groups)
@@ -215,7 +235,7 @@ def verify_views(server, expected):
         for group in groups:
             require(set(group) == {'id', 'identity_status', 'unmerged_reason', 'target', 'latest_observation',
                                   'latest_observation_risk', 'observation_count', 'confirmation_history'}, 'invented_group_risk')
-            history = page_all(server, organization, group['confirmation_history']['url'], 'history')
+            history = page_all(server, organization, group['confirmation_history']['url'], 'history', stats=stats)
             keys = [(item['observation_id'], item['finding_ordinal']) for item in history]
             require(len(set(keys)) == len(keys), 'duplicate_history_occurrence')
             ids = set(item['observation_id'] for item in history)
@@ -340,7 +360,7 @@ def execute(directory, environment, listener, values, output, deadline, expected
         verify_upgrade(directory, original, old_definitions)
         output['schema_after'] = 7
         output['assertions'].append(REQUIRED_ASSERTIONS[2])
-        output['traversal_counts'] = verify_views(first, expected)
+        output['traversal_counts'] = verify_views(first, expected, stats=output['page_retries'])
         output['assertions'].append(REQUIRED_ASSERTIONS[3])
         source_checks(first, directory, expected, output)
         final_sources = sources(directory, names=original)
@@ -358,7 +378,8 @@ def execute(directory, environment, listener, values, output, deadline, expected
     try:
         second.start()
         second.tokens = first.tokens.copy()
-        require(verify_views(second, expected) == output['traversal_counts'] and publication(directory) == stamp
+        require(verify_views(second, expected, stats=output['page_retries']) == output['traversal_counts']
+                and publication(directory) == stamp
                 and sources(directory, names=original) == final_sources, 'restart_changed_complete_views_or_generation')
         output['assertions'].append(REQUIRED_ASSERTIONS[9])
         inventory.no_work(directory)
@@ -447,7 +468,8 @@ def main(argv=None):
     parser.add_argument('--timeout-seconds', type=inventory.timeout_value, default=180)
     output = {'format_version': FORMAT_VERSION, 'accepted': False, 'observation_count': OBSERVATIONS,
               'fixture_scope': 'repeated_observations_over_controlled_no_socket_pipeline_sources',
-              'schema_before': None, 'schema_after': None, 'schema_target': 7, 'assertions': [], 'server_exits': []}
+              'schema_before': None, 'schema_after': None, 'schema_target': 7, 'assertions': [], 'server_exits': [],
+              'page_retries': {'initial': 0, 'restart': 0}}
     failures, values, handlers = [], {}, {}
     temporary = directory = listener = previous_mask = None
     try:

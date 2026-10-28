@@ -288,9 +288,29 @@ dispatcher ownership and yields to active scan workers; GET never repairs the
 index. Stale or unreadable sources return unavailable. See the
 [contract](asset-groups.md) and [local acceptance](VALIDATION.md#public-target-grouping-local-acceptance).
 
-The new [native grouping retest](asset-groups-retest.md) remains pending. It uses
-its own synthetic data and real loopback Gunicorn API, without lab services or
-operator secrets. R1.4b2 authoritative risk indexes, dashboard group views,
+PR #86 merged as `678fd717788d91a5062f4d3a723cc30979427871` with all eight PR and
+post-merge checks passing. The supplied native grouping gate remains failed:
+both 180-second modes time out, and SQLite 3.40.1 chooses a valid covering index
+that one focused assertion rejects. A separate 300-second diagnostic passes all
+fourteen assertions in 191.528 seconds without replacing those failed receipts.
+See [failure review and correction](VALIDATION.md#supplied-native-asset-group-gate-failure-and-portability-correction).
+The correction prepares each bounded source selector once per reader with fresh
+observation, scan and owner bindings. It preserves source reopening, evidence
+validation, limits and the 180-second gate. Report and metadata SELECTs also
+reuse only their SQL, rebinding identifiers and byte caps before every fetch.
+Independent review passes 105 combined cases on SQLite 3.40.1 and 3.45.1. Owned
+complete normal/optimized gates pass in 48.152/48.214 seconds on the local
+compatibility runtime, with all fourteen assertions and both backup modes passing.
+The first correction CI run also exposes an unclassified restart-page failure
+in the optimized Python 3.12 gate. A controlled cleanup fixture proves that the
+documented retryable 503 can occur while a valid cursor remains usable. The gate
+now follows that narrow retry contract within its existing deadline and records
+phase retry counts, while retaining all negative controls and full-view checks.
+The original CI status was not captured, so its cause remains unproven; corrected
+delivery still requires all platform checks.
+These measurements do not replace the slower native runner. The [scoped native retest](asset-groups-retest.md)
+still needs a fresh pinned run after corrected-source delivery; it uses its own
+synthetic data and loopback Gunicorn API. R1.4b2 authoritative risk indexes, dashboard group views,
 credential/principal equivalence, logical-finding consolidation, and the remaining
 R2 through R4 work are separate. Group history counts occurrences, not independent
 vulnerabilities. No enterprise or release approval follows from these local gates.

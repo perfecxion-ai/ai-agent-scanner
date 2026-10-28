@@ -1572,7 +1572,8 @@ Reading the passing tail alone did not establish a clean run. A twenty-minute
 rerun completed with 5,303 passes and two failures: both 10,000-observation gates
 hit their unchanged 180-second deadline before initial publication. Neither run
 is accepted. The CI job retains twenty minutes for the expanded suite and both
-backup commands; actual macOS acceptance still requires a passing rerun.
+backup commands; actual macOS acceptance still required a passing rerun at that
+point. The final PR #86 and post-merge results are recorded below.
 
 Profiling found repeated complete evidence validation for observations sharing
 one decoded report and asset alias. The reader now stores immutable support
@@ -1594,15 +1595,18 @@ owned plan check used only the organization/build prefix; 100 lookups took
 0.086481 seconds versus 0.003334 with the exact group-head index. The staging,
 sealing and readiness predicates now use equivalent boolean equality. Schema,
 DDL, row selection, seal checks and deadlines are unchanged. The regression
-captures real executed statements; it requires exact stage/readiness index use
-while allowing the optimizer to choose the small-fixture sealing plan.
+captures real executed statements. The original PR #86 regression required exact
+stage/readiness index use while allowing the optimizer to choose the small-fixture
+sealing plan. The later portability correction below retains exact staging and
+accepts either recognized readiness-count index.
 
 An isolated Python 3.12.3 environment using the CI engine, SQLite 3.45.1, passes
 both complete normal and optimized gates in 57.708 and 58.281 seconds. Each
 returns all fourteen assertions, 10,000 observations, three published owners,
 clean server exits and fixture cleanup; stderr is empty. Initial publication
-was observed before 30 seconds. Actual hosted macOS and the full matrix still
-require a passing delivery run; local measurements do not substitute for them.
+was observed before 30 seconds. Hosted macOS and the full matrix still required
+a passing delivery run at that point; local measurements did not substitute for
+them. The final delivery results are recorded below.
 
 The real-server gate uses 10,000 repeated observations from complete-capture
 transport test doubles without target sockets, across three synthetic
@@ -1647,12 +1651,158 @@ rebuilding. Cache-tamper HTTP cases restore publication metadata after a changed
 sealed row, extra unsealed row, source-generation retarget, or policy retarget;
 each refuses the grouping view while the observation API remains usable.
 
-The [scoped native retest](asset-groups-retest.md) remains pending for the new
+PR #86 merged as `678fd717788d91a5062f4d3a723cc30979427871` after all eight PR
+checks passed. The complete local coverage run passes 5,317 tests at 93 percent.
+All eight post-merge checks pass too. One existing macOS contention test exceeded
+its 2.5-second wall-clock assertion by 13.3 ms; independent owned instrumentation
+verified the configured lock cap and timeout restoration, and an unchanged
+isolated rerun passed 5,317 tests and both fourteen-case backup modes. No scanner
+deadline or test assertion was relaxed.
+
+The [scoped native retest](asset-groups-retest.md) remains a separate gate for the new
 schema and grouping API. It needs no model service, lab secret or operator data.
 These gates do not establish model sensitivity, target seeding, power-loss
 durability, credential equivalence, distributed operation or enterprise
 readiness. Private server inputs, dashboard grouping, authoritative risk indexes,
 and the remaining R2 through R4 work retain their own acceptance criteria.
+
+### Supplied native asset-group gate failure and portability correction
+
+Data-only review of `aiscan-asset-group-678fd71.tar.gz` retains its failed native
+gate at `678fd717788d91a5062f4d3a723cc30979427871`. The archive SHA-256 is
+`579f0cfd47fa8315f32e0e50ba97227ece162e43a87f1e95a3814daea2c09a24`.
+No supplied driver was executed. Captures record Python 3.11.2, SQLite 3.40.1,
+SQLAlchemy 2.1.6 and Gunicorn 26.2.0; Debian 12 is operator-attested. All three
+group receipts match the pinned 78-file scanner/CLI digest, app, public driver,
+inventory helper, Gunicorn hooks and both projection-policy hashes.
+
+Both required 180-second runs exit 1 with `overall_timeout`, at 180.853 and
+180.858 seconds. Each reaches eleven of fourteen assertions. Restart consistency,
+no active admissions and final process-group completion remain unasserted, even
+though both recorded server exits are zero. The focused set reports 210 passes,
+one failure and two deselections; an isolated diagnostic reproduces the same
+readiness-count plan assertion. Both backup modes pass all fourteen cases. The
+35-check capture table correctly retains twelve failures, driver exit 1 and
+outer gate-job exit 7.
+
+The separate 300-second diagnostic exits zero in 191.528 seconds with all fourteen
+assertions, 10,000 observations, 24 groups, 828 checked HTTP responses and both
+server exits zero. It is supplementary characterization, not acceptance of the
+180-second gate. The reported macOS comparison is not captured in this bundle;
+hardware, Python and dependency differences prevent attributing the runtime
+difference solely to SQLite.
+
+The plan failure is at the readiness count, not the exact three-key staging
+lookup. SQLite 3.40.1 selects `ix_asset_group_head_page` for an organization/build
+count instead of the partial unique head index. Both counts are semantically
+valid. The covering index includes all observations and is not established to be
+faster. The corrected regression accepts only the two recognized owner/build
+SEARCH plans for that count, retaining the exact staging lookup and `= 1`
+predicate. It passes on SQLite 3.40.1, 3.45.1 and 3.53.1; owned negative controls
+still reject the old `IS 1` staging lookup and an unrecognized count index.
+
+Profiling found repeated construction of the same bounded source SELECT during
+history traversal. The reader now prepares that SQL once per reader and binds
+observation, scan and organization separately on every execution. It caches no
+rows or bound values. Metadata reads, target/alias checks, source-byte limits,
+publication proofs, cursor semantics, read deadlines and the public gate's
+180-second allowance remain unchanged. An owned SQLite 3.40.1 traversal over 500
+observations improves from a median 0.298 to 0.110 seconds with identical SELECT
+counts. That is a local read-path measurement, not native or production SLO
+acceptance. Separate count-plan measurements find extra covering-index scan work,
+but do not justify a production index hint.
+
+Independent review passes 72 combined reader/history cases on SQLite 3.40.1 and
+3.45.1, including thirteen author regressions and nine independent cases. The
+nine independent cases also pass on SQLite 3.53.1. They cover cold/warm expired
+or stopped readers issuing no SQL, changed ownership or scan membership, deleted
+rows, oversized changed metadata refused before materialization, and warmed
+provider mismatches retaining unknown evidence.
+
+A further measured change prepares the two bounded report/metadata SELECTs
+once per reader. Each fetch binds both its current selector and the lesser of
+the remaining allowance and absolute byte cap. The SQL `CASE` still withholds
+oversized content before materialization. No source values are cached by this
+change. Cold and reused raw reads also check cancellation/deadline before SQL.
+The owned 500-row median improves from 0.10915 to 0.08729 seconds with identical
+SELECT counts. Twenty-nine author cases and four additional independent cases
+cover changing allowances, missing/SQL NULL/JSON null/empty values, oversized
+sources, report/metadata selector isolation, cumulative source accounting and
+UTF-8 byte limits. All 105 combined reader/history cases pass on SQLite 3.40.1
+and 3.45.1 under warnings-as-errors.
+
+Before the bounded-retry follow-up below, the complete corrected-source normal
+and optimized 180-second gates pass in
+48.152 and 48.214 seconds on an owned Python 3.12.3/SQLite 3.40.1 compatibility
+runtime. Each retains all fourteen assertions, 10,000 observations, complete
+traversal, clean initial/restart exits and fixture cleanup. The unmodified source
+passes the same local normal gate in 56.909 seconds. Both corrected-source backup
+modes pass all fourteen cases, and Ruff plus the configured Bandit gate pass.
+The 78-file scanner/CLI digest is
+`7042cf8dbb339babfdb5a87d02607d00f6ee968b4e4153a2daf90e06bdd277d2`.
+Track full coverage, package validation and required delivery CI in
+[PR #87](https://github.com/perfecxion-ai/ai-agent-scanner/pull/87).
+These local measurements do not replace the original native Python 3.11.2
+runner. The compatibility build has verified millisecond sleeps; an initial
+build that rounded short waits to whole seconds is excluded from acceptance.
+
+The first correction CI run at `e7f3ad9` passes seven checks but fails one Python
+3.12.15/SQLite 3.45.1 case: the optimized group gate returns `page_failed` during
+restart traversal after 83.756 seconds, with eleven assertions. Its other 5,371
+cases pass, as do the normal group gate and macOS's complete 5,372-case suite plus
+both backup modes. The failed receipt does not capture HTTP status or distinguish
+a failed page from a malformed successful response. Its cause cannot be assigned
+retrospectively to contention. That failed run remains preserved.
+
+An independent controlled fixture establishes a legitimate retryable case on
+SQLite 3.40.1 and 3.45.1. With a valid publication and signed history cursor,
+production cleanup removes eighty obsolete cache rows under the existing
+half-second writer deadline and 50 ms busy cap. A controlled one-page SQLite
+cache forces spill: the concurrent read refuses with
+`503/asset_group_projection_unavailable` and SQLite busy code 5. The exact same
+cursor succeeds after cleanup commits, preserving history, coverage, publication,
+generation and source rows. A RESERVED-only writer and cleanup with spill disabled
+both permit the read. Committed regressions use production read/write budgets,
+release and join every writer, and pass on SQLite 3.40.1, 3.45.1 and 3.53.1.
+They demonstrate a supported operational refusal; they do not identify the old
+CI response or establish continuous availability.
+
+The gate client now follows the [documented retry contract](asset-groups.md):
+only the exact valid unavailable envelope can retry. It preserves the same
+request, owner, page limit, cursor, accumulated items and visited-cursor set.
+The existing 180-second shared deadline stays in force, with at most 25 retries
+per page and backoff capped at 0.2 seconds and the remaining budget. Numeric
+`page_retries` counts by phase expose attempted retries even when a later step
+fails. Static HTTP failure codes distinguish other statuses without copying
+response text into receipts. Stale or invalid cursors, other errors, malformed
+responses and transport failures never restart traversal or retry. All fourteen
+assertions, full occurrence/digest comparisons, publication-stamp comparisons
+and direct malformed-source/tamper refusal checks remain intact. This changes
+the harness's zero-transient-refusal expectation to eventual complete reads under
+the existing budget; it is not a production availability guarantee.
+
+The next macOS run passes 5,414 cases and fails the new cleanup regression's
+final full-history comparison. The busy-code assertion and exact-cursor recovery
+already succeeded; an artificial 0.1-second test reader budget remained active
+for the final comparison. The correction removes that override and uses the
+production read budget throughout. Writer holds remain bounded by the original
+half-second cooperative deadline, with the same 50 ms busy cap. No scanner
+deadline, retry budget or content assertion changes.
+
+Privacy and private-harness qualifications remain narrow. A fresh sweep of 36
+returned logical evidence files finds no known fixture/PII, encoded-value,
+RFC1918-address or known private-prefix matches. No lab secrets were accessed
+during review. The on-runner sweep's ten named sets contain six static sets and
+four available lab-value sets. Sanitized logs, absent raw responses/databases and
+49 binary AppleDouble metadata files prevent a broader original-output claim;
+separate known-prefix checks of those metadata files found no hits. Wrapper
+setup/status/cleanup commands do not consistently propagate failures, and the
+diagnostic pytest failure lacks its own exit capture despite its preserved log.
+These qualifications do not obscure the genuine failed gate.
+
+Native acceptance stays open until the corrected merged revision passes a fresh
+[scoped run](asset-groups-retest.md) with its original budget and all assertions.
+No broader cloud or model-sensitivity repeat is required for this correction.
 
 ### Protected-access request-provenance prerequisite
 
