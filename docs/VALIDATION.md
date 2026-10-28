@@ -1762,7 +1762,7 @@ cache forces spill: the concurrent read refuses with
 `503/asset_group_projection_unavailable` and SQLite busy code 5. The exact same
 cursor succeeds after cleanup commits, preserving history, coverage, publication,
 generation and source rows. A RESERVED-only writer and cleanup with spill disabled
-both permit the read. Committed regressions bound the test reader to 0.1 seconds,
+both permit the read. Committed regressions use production read/write budgets,
 release and join every writer, and pass on SQLite 3.40.1, 3.45.1 and 3.53.1.
 They demonstrate a supported operational refusal; they do not identify the old
 CI response or establish continuous availability.
@@ -1780,6 +1780,14 @@ assertions, full occurrence/digest comparisons, publication-stamp comparisons
 and direct malformed-source/tamper refusal checks remain intact. This changes
 the harness's zero-transient-refusal expectation to eventual complete reads under
 the existing budget; it is not a production availability guarantee.
+
+The next macOS run passes 5,414 cases and fails the new cleanup regression's
+final full-history comparison. The busy-code assertion and exact-cursor recovery
+already succeeded; an artificial 0.1-second test reader budget remained active
+for the final comparison. The correction removes that override and uses the
+production read budget throughout. Writer holds remain bounded by the original
+half-second cooperative deadline, with the same 50 ms busy cap. No scanner
+deadline, retry budget or content assertion changes.
 
 Privacy and private-harness qualifications remain narrow. A fresh sweep of 36
 returned logical evidence files finds no known fixture/PII, encoded-value,

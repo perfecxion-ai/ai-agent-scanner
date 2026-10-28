@@ -24,7 +24,7 @@ def sqlite_errors(error):
 
 
 @pytest.mark.parametrize('mode', ['reserved-only', 'cleanup-without-spill', 'cleanup-with-spill'])
-def test_cleanup_contention_preserves_the_same_history_cursor(database, monkeypatch, mode):
+def test_cleanup_contention_preserves_the_same_history_cursor(database, mode):
     seed(database, 'owned-source', count=3)
     publish(database)
     engine, tables = database
@@ -46,9 +46,8 @@ def test_cleanup_contention_preserves_the_same_history_cursor(database, monkeypa
                      'is_latest': False, 'group_observation_count': 0} for ordinal in range(80)]
         connection.execute(insert(tables['index']), obsolete)
 
-    # Keep the production writer's half-second cooperative deadline and 50 ms
-    # SQLite busy cap. Only the owned reader gets a shorter test deadline.
-    monkeypatch.setattr(asset_groups, 'READ_SECONDS', 0.1)
+    # Use production read and write budgets throughout the comparison. The
+    # writer hold and SQLite busy cap bound the controlled contention window.
     ready, release = threading.Event(), threading.Event()
     result = {}
 
