@@ -57,6 +57,7 @@ if "$AIS_GROUP_PY" -Werror -m pytest -o asyncio_default_fixture_loop_scope=funct
   tests/test_asset_identity.py tests/test_asset_group_schema.py \
   tests/test_asset_groups.py tests/test_asset_group_review.py \
   tests/test_asset_group_prepared_reads.py tests/test_asset_group_prepared_review.py \
+  tests/test_asset_group_source_reads.py tests/test_asset_group_source_review.py \
   tests/test_asset_group_api.py tests/test_asset_group_backup.py \
   tests/test_job_maintenance.py tests/test_asset_group_acceptance.py \
   -k 'not public_group_gate_runs_real_server' -q \

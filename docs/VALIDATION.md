@@ -1717,8 +1717,32 @@ Independent review passes 72 combined reader/history cases on SQLite 3.40.1 and
 nine independent cases also pass on SQLite 3.53.1. They cover cold/warm expired
 or stopped readers issuing no SQL, changed ownership or scan membership, deleted
 rows, oversized changed metadata refused before materialization, and warmed
-provider mismatches retaining unknown evidence. Complete gate, package and
-delivery results remain required for the corrected revision.
+provider mismatches retaining unknown evidence.
+
+A further measured change prepares the two bounded report/metadata SELECTs
+once per reader. Each fetch binds both its current selector and the lesser of
+the remaining allowance and absolute byte cap. The SQL `CASE` still withholds
+oversized content before materialization. No source values are cached by this
+change. Cold and reused raw reads also check cancellation/deadline before SQL.
+The owned 500-row median improves from 0.10915 to 0.08729 seconds with identical
+SELECT counts. Twenty-nine author cases and four additional independent cases
+cover changing allowances, missing/SQL NULL/JSON null/empty values, oversized
+sources, report/metadata selector isolation, cumulative source accounting and
+UTF-8 byte limits. All 105 combined reader/history cases pass on SQLite 3.40.1
+and 3.45.1 under warnings-as-errors.
+
+The complete corrected-source normal and optimized 180-second gates pass in
+48.152 and 48.214 seconds on an owned Python 3.12.3/SQLite 3.40.1 compatibility
+runtime. Each retains all fourteen assertions, 10,000 observations, complete
+traversal, clean initial/restart exits and fixture cleanup. The unmodified source
+passes the same local normal gate in 56.909 seconds. Both corrected-source backup
+modes pass all fourteen cases, and Ruff plus the configured Bandit gate pass.
+The 78-file scanner/CLI digest is
+`7042cf8dbb339babfdb5a87d02607d00f6ee968b4e4153a2daf90e06bdd277d2`.
+Track full coverage, package validation and required delivery CI in the correction
+PR. These local measurements do not replace the original native Python 3.11.2
+runner. The compatibility build has verified millisecond sleeps; an initial
+build that rounded short waits to whole seconds is excluded from acceptance.
 
 Privacy and private-harness qualifications remain narrow. A fresh sweep of 36
 returned logical evidence files finds no known fixture/PII, encoded-value,

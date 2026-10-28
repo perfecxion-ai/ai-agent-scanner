@@ -296,8 +296,12 @@ fourteen assertions in 191.528 seconds without replacing those failed receipts.
 See [failure review and correction](VALIDATION.md#supplied-native-asset-group-gate-failure-and-portability-correction).
 The correction prepares each bounded source selector once per reader with fresh
 observation, scan and owner bindings. It preserves source reopening, evidence
-validation, limits and the 180-second gate. Independent reader regressions pass
-on SQLite 3.40.1 and 3.45.1. The [scoped native retest](asset-groups-retest.md)
+validation, limits and the 180-second gate. Report and metadata SELECTs also
+reuse only their SQL, rebinding identifiers and byte caps before every fetch.
+Independent review passes 105 combined cases on SQLite 3.40.1 and 3.45.1. Owned
+complete normal/optimized gates pass in 48.152/48.214 seconds on the local
+compatibility runtime, with all fourteen assertions and both backup modes passing.
+These measurements do not replace the slower native runner. The [scoped native retest](asset-groups-retest.md)
 still needs a fresh pinned run after corrected-source delivery; it uses its own
 synthetic data and loopback Gunicorn API. R1.4b2 authoritative risk indexes, dashboard group views,
 credential/principal equivalence, logical-finding consolidation, and the remaining
