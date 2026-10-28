@@ -7,7 +7,7 @@ import json
 import re
 import time
 
-from sqlalchemy import LargeBinary, String, and_, case, cast, func, select
+from sqlalchemy import LargeBinary, String, and_, bindparam, case, cast, func, select
 
 from src.core.asset_identity import GroupIdentity, target_group_identity
 from src.core.contracts import (
@@ -237,6 +237,20 @@ class SourceReader:
     def __init__(self, connection, tables, deadline, stop_event=None):
         self.connection, self.tables, self.deadline, self.stop_event = connection, tables, deadline, stop_event
         self.reports, self.source_bytes = {}, 0
+        self._observation_statement = None
+
+    def observation_row(self, observation_id, scan_id, organization):
+        check_deadline(self.deadline, self.stop_event)
+        if self._observation_statement is None:
+            observations, scans = self.tables['observations'], self.tables['scans']
+            self._observation_statement = select(*observation_columns(observations)).join(
+                scans, observations.c.scan_id == scans.c.id).where(
+                observations.c.id == bindparam('group_observation_id'),
+                observations.c.scan_id == bindparam('group_scan_id'),
+                scans.c.organization_id == bindparam('group_organization_id'))
+        return self.connection.execute(self._observation_statement, {
+            'group_observation_id': observation_id, 'group_scan_id': scan_id,
+            'group_organization_id': organization}).first()
 
     def _raw(self, column, predicate, allowance):
         binary = cast(column, LargeBinary)

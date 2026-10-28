@@ -482,11 +482,8 @@ def _read_publication(connection, parsed, tables):
     return publication
 
 
-def _reopen(reader, cache, organization, tables):
-    observations, scans = tables['observations'], tables['scans']
-    row = reader.connection.execute(select(*observation_columns(observations)).join(
-        scans, observations.c.scan_id == scans.c.id).where(observations.c.id == cache.observation_id,
-        observations.c.scan_id == cache.scan_id, scans.c.organization_id == organization)).first()
+def _reopen(reader, cache, organization):
+    row = reader.observation_row(cache.observation_id, cache.scan_id, organization)
     if row is None:
         raise unavailable()
     source = reader.observation(row, organization)
@@ -530,7 +527,7 @@ def group_page(session, parsed, secret, tables):
             items, response_bytes, evaluated, last = [], 0, 0, None
             for row in rows[:MAX_ROWS]:
                 try:
-                    source = _reopen(reader, row, parsed.organization, tables)
+                    source = _reopen(reader, row, parsed.organization)
                 except PageBudget:
                     break
                 item = {'id': row.group_id, 'identity_status': source.identity.status,
@@ -586,7 +583,7 @@ def group_history_page(session, parsed, secret, tables):
             items, response_bytes, evaluated, last, complete, last_complete = [], 0, 0, None, False, False
             for row in rows[:MAX_ROWS]:
                 try:
-                    source = _reopen(reader, row, parsed.organization, tables)
+                    source = _reopen(reader, row, parsed.organization)
                 except PageBudget:
                     break
                 count = max(1, len(source.claims))
