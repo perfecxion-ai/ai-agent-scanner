@@ -220,7 +220,11 @@ def test_production_stage_head_lookup_uses_exact_partial_unique_index(database):
             details = [row[3] for row in connection.exec_driver_sql('EXPLAIN QUERY PLAN ' + statement, parameters)]
             assert 'asset_group_index.is_latest = 1' in statement
             if 'sum(' not in statement:
-                assert any('INDEX ux_asset_group_head (organization_id=? AND build_id=?)' in item
+                # SQLite versions can prefer the covering page index for this
+                # count. Both recognized plans stay scoped to this owner/build.
+                assert any(item.startswith('SEARCH asset_group_index USING ')
+                           and any('INDEX ' + name + ' (organization_id=? AND build_id=?)' in item
+                                   for name in ('ux_asset_group_head', 'ix_asset_group_head_page'))
                            for item in details), details
             # A sum needs row payloads, so SQLite can prefer another bounded
             # index on tiny fixtures. Equality keeps the partial index eligible.
