@@ -1731,7 +1731,8 @@ sources, report/metadata selector isolation, cumulative source accounting and
 UTF-8 byte limits. All 105 combined reader/history cases pass on SQLite 3.40.1
 and 3.45.1 under warnings-as-errors.
 
-The complete corrected-source normal and optimized 180-second gates pass in
+Before the bounded-retry follow-up below, the complete corrected-source normal
+and optimized 180-second gates pass in
 48.152 and 48.214 seconds on an owned Python 3.12.3/SQLite 3.40.1 compatibility
 runtime. Each retains all fourteen assertions, 10,000 observations, complete
 traversal, clean initial/restart exits and fixture cleanup. The unmodified source
@@ -1739,10 +1740,46 @@ passes the same local normal gate in 56.909 seconds. Both corrected-source backu
 modes pass all fourteen cases, and Ruff plus the configured Bandit gate pass.
 The 78-file scanner/CLI digest is
 `7042cf8dbb339babfdb5a87d02607d00f6ee968b4e4153a2daf90e06bdd277d2`.
-Track full coverage, package validation and required delivery CI in the correction
-PR. These local measurements do not replace the original native Python 3.11.2
+Track full coverage, package validation and required delivery CI in
+[PR #87](https://github.com/perfecxion-ai/ai-agent-scanner/pull/87).
+These local measurements do not replace the original native Python 3.11.2
 runner. The compatibility build has verified millisecond sleeps; an initial
 build that rounded short waits to whole seconds is excluded from acceptance.
+
+The first correction CI run at `e7f3ad9` passes seven checks but fails one Python
+3.12.15/SQLite 3.45.1 case: the optimized group gate returns `page_failed` during
+restart traversal after 83.756 seconds, with eleven assertions. Its other 5,371
+cases pass, as do the normal group gate and macOS's complete 5,372-case suite plus
+both backup modes. The failed receipt does not capture HTTP status or distinguish
+a failed page from a malformed successful response. Its cause cannot be assigned
+retrospectively to contention. That failed run remains preserved.
+
+An independent controlled fixture establishes a legitimate retryable case on
+SQLite 3.40.1 and 3.45.1. With a valid publication and signed history cursor,
+production cleanup removes eighty obsolete cache rows under the existing
+half-second writer deadline and 50 ms busy cap. A controlled one-page SQLite
+cache forces spill: the concurrent read refuses with
+`503/asset_group_projection_unavailable` and SQLite busy code 5. The exact same
+cursor succeeds after cleanup commits, preserving history, coverage, publication,
+generation and source rows. A RESERVED-only writer and cleanup with spill disabled
+both permit the read. Committed regressions bound the test reader to 0.1 seconds,
+release and join every writer, and pass on SQLite 3.40.1, 3.45.1 and 3.53.1.
+They demonstrate a supported operational refusal; they do not identify the old
+CI response or establish continuous availability.
+
+The gate client now follows the [documented retry contract](asset-groups.md):
+only the exact valid unavailable envelope can retry. It preserves the same
+request, owner, page limit, cursor, accumulated items and visited-cursor set.
+The existing 180-second shared deadline stays in force, with at most 25 retries
+per page and backoff capped at 0.2 seconds and the remaining budget. Numeric
+`page_retries` counts by phase expose attempted retries even when a later step
+fails. Static HTTP failure codes distinguish other statuses without copying
+response text into receipts. Stale or invalid cursors, other errors, malformed
+responses and transport failures never restart traversal or retry. All fourteen
+assertions, full occurrence/digest comparisons, publication-stamp comparisons
+and direct malformed-source/tamper refusal checks remain intact. This changes
+the harness's zero-transient-refusal expectation to eventual complete reads under
+the existing budget; it is not a production availability guarantee.
 
 Privacy and private-harness qualifications remain narrow. A fresh sweep of 36
 returned logical evidence files finds no known fixture/PII, encoded-value,

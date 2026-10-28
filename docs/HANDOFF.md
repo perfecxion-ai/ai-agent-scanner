@@ -301,6 +301,13 @@ reuse only their SQL, rebinding identifiers and byte caps before every fetch.
 Independent review passes 105 combined cases on SQLite 3.40.1 and 3.45.1. Owned
 complete normal/optimized gates pass in 48.152/48.214 seconds on the local
 compatibility runtime, with all fourteen assertions and both backup modes passing.
+The first correction CI run also exposes an unclassified restart-page failure
+in the optimized Python 3.12 gate. A controlled cleanup fixture proves that the
+documented retryable 503 can occur while a valid cursor remains usable. The gate
+now follows that narrow retry contract within its existing deadline and records
+phase retry counts, while retaining all negative controls and full-view checks.
+The original CI status was not captured, so its cause remains unproven; corrected
+delivery still requires all platform checks.
 These measurements do not replace the slower native runner. The [scoped native retest](asset-groups-retest.md)
 still needs a fresh pinned run after corrected-source delivery; it uses its own
 synthetic data and loopback Gunicorn API. R1.4b2 authoritative risk indexes, dashboard group views,
