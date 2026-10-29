@@ -1800,9 +1800,112 @@ setup/status/cleanup commands do not consistently propagate failures, and the
 diagnostic pytest failure lacks its own exit capture despite its preserved log.
 These qualifications do not obscure the genuine failed gate.
 
-Native acceptance stays open until the corrected merged revision passes a fresh
+Native acceptance remained open at this correction checkpoint pending a fresh
 [scoped run](asset-groups-retest.md) with its original budget and all assertions.
 No broader cloud or model-sensitivity repeat is required for this correction.
+
+### Supplied native asset-group acceptance
+
+Data-only independent review accepts `aiscan-asset-group-1b164df.tar.gz` for the
+scoped [native correctness gate](asset-groups-retest.md) at PR #87's merged revision
+`1b164df8bdd4361dc92ef17b917bc1e63291fa91`. The archive SHA-256 is
+`f906246441d7ba1259e8667acc7e8208f3c834dd3bcc737d863d8466a4a40127`.
+No supplied driver was executed and no operator database, registry, configuration
+or lab secret was accessed during review. The original `678fd71` native failure,
+longer diagnostic and historical CI failures above retain their recorded outcomes.
+
+Captures consistently identify Linux, Python 3.11.2, SQLite 3.40.1, Gunicorn
+26.2.0, SQLAlchemy 2.1.6 and scanner version `1.2.0.dev0`. Debian 12 and use of
+the same original runner are producer attestations. The reported macOS
+Python 3.13.5/SQLite 3.45.3 comparison has no returned captures and is not
+independently accepted here.
+
+Both group receipts exactly match the pinned public gate's fourteen assertions:
+
+1. `private_environment_and_owned_schema6_fixture`
+2. `genuine_pipeline_sources_with_scoped_and_unmergeable_targets`
+3. `schema6_to7_preserves_source_rows_caches_archives_and_definitions`
+4. `exhaustive_group_and_history_pagination_with_latest_risk_separate`
+5. `signed_cursor_ownership_group_limit_and_tampering`
+6. `rollback_and_other_organization_preserve_cursor`
+7. `committed_source_write_invalidates_cursor`
+8. `uninterpretable_source_blocks_groups_without_hiding_inventory`
+9. `exact_source_restore_rebuilds_complete_publication`
+10. `restart_preserves_publication_generation_and_complete_views`
+11. `no_active_scans_schedules_or_admissions`
+12. `real_server_exits_and_process_groups_reaped`
+13. `known_value_and_log_privacy_checks`
+14. `private_fixture_and_socket_cleanup`
+
+| Capture | Observed result |
+| --- | --- |
+| Normal group gate | Accepted, 129.273 seconds, 765 checked HTTP responses |
+| Optimized group gate | Accepted, 135.675 seconds, 777 checked HTTP responses |
+| Both group modes | Unchanged 180-second budget; all fourteen assertions; 10,000 observations; eight groups per organization across three organizations; schema before 6, after/target 7 |
+| Both pagination phases in each mode | Zero recorded pagination retries; initial and restart server exits zero |
+| Normal and optimized backups | Both accepted; all fourteen exact case names and per-case assertion arrays match the pinned script |
+| Focused warnings-as-errors tests | 309 passed, two deselected, 30.33 seconds; fourteen files in the actual driver |
+| Exit captures | All five step exits, driver exit and outer job exit zero; `captured_gate_failure=0` |
+| Independent capture table | All 37 records true; revision matches; source-status capture exists and is empty |
+
+The two excluded tests are the separately captured real-server gate cases.
+Backup cases are `v1` through `v7`, `rollback1/2/3/5`, `future`, `incomplete` and
+`lock`. They establish their documented stopped synthetic backup/upgrade checks.
+Preservation of a populated published group cache is a separate included focused
+test in `test_asset_group_backup.py`, not an extra assertion established by the
+public backup receipts alone.
+
+Independent recomputation over the pinned 78 scanner/CLI source files yields
+`7042cf8dbb339babfdb5a87d02607d00f6ee968b4e4153a2daf90e06bdd277d2`, matching
+both receipts. The complete public build identities, package/schema versions,
+catalog hashes, protected catalog pin and semantics also match. Separate app,
+public acceptance driver, inventory helper and Gunicorn configuration hashes
+match the pinned bytes. The projection policy is
+`7b02923a3694ccd6cd2d2911877567a71e41789eacc83a3233c24e48426c88c9` and the
+asset-group policy is
+`ee311d0f3fda27893ad2321c6406643741447735ab26dae813ea6530e41558fa`.
+These are consistency checks against the captured pin, not authenticated proof
+of execution or dependency/build attestation.
+
+The gate uses owned synthetic schema-6 fixtures, complete-capture pipeline test
+doubles that open no target sockets, and a real single-worker loopback Gunicorn
+server. Ten thousand repeated observations are not ten thousand deployments.
+Zero pagination retries describes these traversals; it does not establish absence
+of readiness responses or continuous availability. Measured times leave 50.727
+and 44.325 seconds under the configured budget on this run, not a production SLO.
+
+Privacy review distinguishes the producer's sweep from returned evidence. The
+on-runner capture records zero violations over 23 files and ten named sets,
+comprising six static sets and four available lab-value sets. Lab-secret
+absence remains producer-attested because review did not access those values.
+An independent sweep of 26 returned evidence text files finds no matches for six
+checked-in fixture/PII values, their raw, URL, JSON, hex and base64 forms, RFC1918
+addresses or known private prefixes. All 32 substantive files are UTF-8; separate
+known-literal/private-prefix byte checks of 35 AppleDouble metadata files find no
+hits. Harness source deliberately names detection patterns and is not runtime
+evidence. Sanitized human-readable logs, omitted raw responses/databases and
+bounded known-value checks do not establish arbitrary-secret absence or original
+output authenticity.
+
+The private wrapper supports narrower failure and cleanup claims than its report.
+The five capture commands preserve genuine exits, and the complete supplied
+receipts independently establish the results above. However, setup, sanitization,
+copy, permission, source-status and cleanup operations do not consistently
+propagate failures. The assertion helper would treat a missing source-status file
+as empty; review separately verified that this capture exists and is empty.
+The inner gate checks fixture/socket cleanup and process reaping, while the
+outer checkout/venv removal has no checked status or post-cleanup verification.
+The setup note says eight focused files although the actual driver lists fourteen;
+the driver's header retains the old revision while its operational pin is correct.
+These limits do not invalidate this complete scoped capture set.
+
+R1.4b1's native correctness gate is closed. No broad cloud or model retest is
+needed for this documentation record. Authoritative source-bound risk indexes
+(R1.4b2), dashboard group views, logical-finding consolidation, private server
+inputs and the remaining R2 through R4 work stay open. Group history counts
+occurrences, not independent vulnerabilities. This does not establish model
+sensitivity, principal/credential equivalence, deployed storage or power-loss
+durability, PostgreSQL/distributed support, release approval or enterprise readiness.
 
 ### Protected-access request-provenance prerequisite
 
