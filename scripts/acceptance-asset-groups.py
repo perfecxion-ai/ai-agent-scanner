@@ -31,18 +31,21 @@ spec = importlib.util.spec_from_file_location('asset_group_inventory_helpers', R
 inventory = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(inventory)
 GateFailure, require = inventory.GateFailure, inventory.require
-FORMAT_VERSION = 'asset-group-acceptance-v1'
+FORMAT_VERSION = 'asset-group-acceptance-v2'
 OBSERVATIONS = 10000
 MAX_PAGE_RETRIES = 25
 PAGE_RETRY_SECONDS = 0.2
 PAGE_HTTP_FAILURES = {status: 'page_http_' + str(status) for status in
                       (400, 401, 403, 404, 405, 408, 409, 413, 422, 429, 500, 502, 503, 504)}
 ORGANIZATIONS = inventory.ORGANIZATIONS
+RISK_ORGANIZATION = 'asset-group-risk-control'
+RISK_LEVELS = ('critical', 'high', 'medium', 'low', 'minimal', 'unknown')
+RISK_CONTROLS = ('high-0', 'high-1', 'high-2', 'zero', 'unknown')
 CATEGORIES = ('high', 'unscored', 'zero', 'unknown', 'model', 'context', 'endpoint', 'redacted', 'ambiguous')
 REQUIRED_ASSERTIONS = (
     'private_environment_and_owned_schema6_fixture',
     'genuine_pipeline_sources_with_scoped_and_unmergeable_targets',
-    'schema6_to7_preserves_source_rows_caches_archives_and_definitions',
+    'schema6_to8_preserves_source_rows_caches_archives_and_definitions',
     'exhaustive_group_and_history_pagination_with_latest_risk_separate',
     'signed_cursor_ownership_group_limit_and_tampering',
     'rollback_and_other_organization_preserve_cursor',
@@ -54,10 +57,13 @@ REQUIRED_ASSERTIONS = (
     'real_server_exits_and_process_groups_reaped',
     'known_value_and_log_privacy_checks',
     'private_fixture_and_socket_cleanup',
+    'indexed_latest_risk_filters_match_independent_source_sets',
+    'signed_risk_filter_scope_and_normalized_continuation',
+    'restart_preserves_indexed_latest_risk_filters',
 )
 
 
-def produce(category, values):
+def produce(category, values, *, model=None):
     """Bind public identity before execution; never rewrite produced evidence."""
     from src.core.pipeline import run_pipeline
     from src.core.risk_projection import project_report_risk
@@ -69,6 +75,8 @@ def produce(category, values):
         agent = controlled_access.target(id='source-' + category, protected_response_marker=values['marker'],
                                          protected_path_markers={'/admin': values['marker']})
         agent['name'] = 'Owned group source ' + category
+        if model is not None:
+            agent['model'] = model
         if category == 'model':
             agent['model'] = 'distinct-owned-model'
         elif category == 'context':
@@ -118,7 +126,9 @@ def seed(directory, values):
     import app as server
     from tests.historical_schema import historical_metadata
     reports = {category: produce(category, values) for category in CATEGORIES}
-    expected = {organization: {} for organization in ORGANIZATIONS}
+    risk_reports = {control: produce('high' if control.startswith('high-') else control, values,
+                                    model='owned-risk-control-' + control) for control in RISK_CONTROLS}
+    expected = {organization: {} for organization in (*ORGANIZATIONS, RISK_ORGANIZATION)}
     with server.app.app_context():
         engine = server.db.engine
         inventory.guard_engine(engine, inventory.owned_database(directory))
@@ -156,6 +166,24 @@ def seed(directory, values):
                         'category': category, 'asset': deepcopy(asset), 'report': reports[category],
                         'scan_id': scan_id, 'discovered_at': timestamp.isoformat()}
                 transaction.execute(metadata.tables['discovered_agent'].insert(), rows)
+                for index, (control, report) in enumerate(risk_reports.items()):
+                    scan_id = RISK_ORGANIZATION + '-' + control
+                    asset, identifier = report['agents'][0], 'risk-control-observation-' + control
+                    timestamp = datetime(2026, 1, 2) + timedelta(seconds=index)
+                    transaction.execute(metadata.tables['scan_session'].insert().values(
+                        id=scan_id, organization_id=RISK_ORGANIZATION, scan_name='Owned risk-control fixture',
+                        scan_type=report['scan_type'], status=report['status'], target_scope={}, scan_config={},
+                        agents_discovered=1, overall_risk_score=99))
+                    transaction.execute(metadata.tables['scan_result'].insert().values(scan_id=scan_id, result=report))
+                    transaction.execute(metadata.tables['scan_job'].insert().values(scan_id=scan_id, status='completed'))
+                    transaction.execute(metadata.tables['discovered_agent'].insert().values(
+                        id=identifier, scan_id=scan_id, agent_name=asset['name'], agent_type=asset['type'],
+                        provider=asset.get('provider'), model_name=asset.get('model'), endpoint_url=asset.get('endpoint'),
+                        discovery_method='owned-controlled-pipeline', metadata={'asset_id': asset['id']},
+                        risk_score=99, risk_level='critical', discovered_at=timestamp))
+                    expected[RISK_ORGANIZATION][identifier] = {
+                        'category': control, 'asset': deepcopy(asset), 'report': report,
+                        'scan_id': scan_id, 'discovered_at': timestamp.isoformat()}
                 transaction.exec_driver_sql(inventory.OPERATOR_INDEX)
         finally:
             server.db.session.remove()
@@ -179,10 +207,12 @@ def wait_ready(server, organization):
         time.sleep(0.2)
 
 
-def page_all(server, organization, path, field, *, stats=None):
+def page_all(server, organization, path, field, *, stats=None, filters=None):
     values, visited, cursor, complete = [], set(), None, False
     while not complete:
         query = {'limit': 2 if field == 'asset_groups' else 100}
+        if filters:
+            query.update(filters)
         if cursor:
             query['cursor'] = cursor
         url, retries = path + '?' + urlencode(query), 0
@@ -205,6 +235,8 @@ def page_all(server, organization, path, field, *, stats=None):
         require(type(page) is dict and page.get('success') is True and type(page.get(field)) is list, 'page_failed')
         coverage = page.get('coverage', {})
         require(type(coverage) is dict and type(coverage.get('search_complete')) is bool, 'missing_completion_fact')
+        if filters and 'risk_level' in filters:
+            require(coverage.get('risk_scope') == 'latest_observation', 'incorrect_filtered_risk_scope')
         complete, next_cursor = coverage['search_complete'], page.get('next_cursor')
         require((complete and next_cursor is None) or (not complete and type(next_cursor) is str
                 and next_cursor and next_cursor not in visited), 'nonadvancing_or_false_completion')
@@ -310,10 +342,89 @@ def verify_views(server, expected, *, stats=None):
     return counts
 
 
+def expected_latest_risks(rows, organization):
+    """Derive identities and latest risk from original sources, without index reads."""
+    from src.core.asset_identity import target_group_identity
+    from src.core.risk_projection import project_agent_risk, project_report_risk
+    latest, projected = {}, {}
+    for identifier, row in rows.items():
+        asset = row['asset']
+        unmatched = row['category'] == 'ambiguous'
+        identity = target_group_identity({} if unmatched else asset,
+                                         organization_id=organization, observation_id=identifier)
+        order = (-datetime.fromisoformat(row['discovered_at']).timestamp(), identifier)
+        if identity.group_id in latest and latest[identity.group_id]['order'] <= order:
+            continue
+        key = id(row['report'])
+        if key not in projected:
+            projected[key] = project_report_risk(row['report'])[1]
+        risk = project_agent_risk() if unmatched else projected[key][asset['id']]
+        latest[identity.group_id] = {'order': order, 'observation_id': identifier, 'risk': risk}
+    return latest
+
+
+def verify_risk_filters(server, expected, *, stats=None):
+    counts = {}
+    for organization in (*ORGANIZATIONS, RISK_ORGANIZATION):
+        wait_ready(server, organization)
+        latest = expected_latest_risks(expected[organization], organization)
+        counts[organization] = {}
+        for level in RISK_LEVELS:
+            wanted = sorted((identifier for identifier, item in latest.items()
+                             if item['risk']['risk_level'] == level),
+                            key=lambda identifier: (latest[identifier]['order'][0], identifier))
+            actual = page_all(server, organization, '/api/asset-groups', 'asset_groups',
+                              stats=stats, filters={'risk_level': level})
+            require([item['id'] for item in actual] == wanted, 'risk_filter_set_or_order_changed')
+            for item in actual:
+                source = latest[item['id']]
+                require(item['latest_observation']['id'] == source['observation_id']
+                        and json.dumps(item['latest_observation_risk'], sort_keys=True, allow_nan=False)
+                        == json.dumps(source['risk'], sort_keys=True, allow_nan=False),
+                        'filtered_risk_not_latest_canonical_source')
+                if level == 'unknown':
+                    require(item['latest_observation_risk']['risk_score'] is None,
+                            'filtered_unknown_score_not_null')
+                if level == 'minimal':
+                    require(item['latest_observation_risk']['risk_score'] == 0,
+                            'filtered_supported_zero_changed')
+            counts[organization][level] = {'groups': len(actual), 'view_sha256': hashlib.sha256(
+                json.dumps(actual, sort_keys=True, allow_nan=False, separators=(',', ':')).encode()).hexdigest()}
+    control = counts[RISK_ORGANIZATION]
+    require({level: item['groups'] for level, item in control.items()}
+            == {'critical': 0, 'high': 3, 'medium': 0, 'low': 0, 'minimal': 1, 'unknown': 1},
+            'positive_risk_control_counts_changed')
+    return counts
+
+
+def risk_cursor_checks(server):
+    query = {'limit': 1, 'risk_level': ' HIGH '}
+    status, first = server.request('/api/asset-groups?' + urlencode(query), organization=RISK_ORGANIZATION)
+    require(status == 200 and first.get('next_cursor') and len(first.get('asset_groups', [])) == 1,
+            'filtered_cursor_fixture_missing')
+    cursor = first['next_cursor']
+    normalized = {'limit': 1, 'risk_level': 'high', 'cursor': cursor}
+    status, following = server.request('/api/asset-groups?' + urlencode(normalized), organization=RISK_ORGANIZATION)
+    require(status == 200 and len(following.get('asset_groups', [])) == 1
+            and following['asset_groups'][0]['id'] != first['asset_groups'][0]['id'],
+            'normalized_risk_filter_cursor_failed')
+    for query in ({'limit': 1, 'risk_level': 'unknown', 'cursor': cursor},
+                  {'limit': 1, 'cursor': cursor},
+                  {'limit': 2, 'risk_level': 'high', 'cursor': cursor}):
+        require(server.request('/api/asset-groups?' + urlencode(query), organization=RISK_ORGANIZATION)[0] == 400,
+                'changed_filter_or_limit_cursor_accepted')
+    require(server.request('/api/asset-groups?' + urlencode(normalized), organization=ORGANIZATIONS[0])[0] == 400,
+            'filtered_cross_owner_cursor_accepted')
+    require(server.request('/api/asset-groups?risk_level=high&risk_level=high',
+                           organization=RISK_ORGANIZATION)[0] == 400, 'duplicate_risk_filter_accepted')
+    require(server.request(first['asset_groups'][0]['confirmation_history']['url'] + '?risk_level=high',
+                           organization=RISK_ORGANIZATION)[0] == 400, 'history_risk_filter_accepted')
+
+
 def publication(directory):
     with closing(inventory.connection(directory)) as database:
         rows = database.execute('SELECT * FROM asset_group_publication ORDER BY organization_id').fetchall()
-        require(len(rows) == 3, 'publication_owners_changed')
+        require({row[0] for row in rows} == {*ORGANIZATIONS, RISK_ORGANIZATION}, 'publication_owners_changed')
         for owner, build, generation, nonce, policy, row_count, group_count, *_ in rows:
             require(all(type(value) is str and value for value in (build, generation, nonce, policy)),
                     'publication_not_complete')
@@ -340,10 +451,11 @@ def verify_upgrade(directory, original, old_definitions):
         'asset_group_index': 'table', 'asset_group_publication': 'table',
         'sqlite_autoindex_asset_group_index_1': 'index', 'sqlite_autoindex_asset_group_publication_1': 'index',
         'ux_asset_group_head': 'index', 'ix_asset_group_head_page': 'index', 'ix_asset_group_history': 'index',
+        'ix_asset_group_head_risk_page': 'index',
         'aiscan_asset_group_index_insert': 'trigger', 'aiscan_asset_group_index_update': 'trigger',
         'aiscan_asset_group_index_delete': 'trigger'}, 'upgrade_added_unexpected_definitions')
     with closing(inventory.connection(directory)) as database:
-        require(database.execute('SELECT version FROM schema_version WHERE id=1').fetchone() == (7,), 'schema_not_seven')
+        require(database.execute('SELECT version FROM schema_version WHERE id=1').fetchone() == (8,), 'schema_not_eight')
     publication(directory)
 
 
@@ -355,13 +467,23 @@ def execute(directory, environment, listener, values, output, deadline, expected
         first.start()
         first.authenticate(values)
         values.update({'jwt' + str(index): first.tokens[owner] for index, owner in enumerate(ORGANIZATIONS)})
-        for organization in ORGANIZATIONS:
+        from src.utils.auth import create_jwt_token
+        first.tokens[RISK_ORGANIZATION] = create_jwt_token(
+            {'user_id': 'synthetic-driver', 'organization_id': RISK_ORGANIZATION}, values['signing'])
+        values['jwt3'] = first.tokens[RISK_ORGANIZATION]
+        for organization in (*ORGANIZATIONS, RISK_ORGANIZATION):
             wait_ready(first, organization)
         verify_upgrade(directory, original, old_definitions)
-        output['schema_after'] = 7
+        output['schema_after'] = 8
         output['assertions'].append(REQUIRED_ASSERTIONS[2])
         output['traversal_counts'] = verify_views(first, expected, stats=output['page_retries'])
         output['assertions'].append(REQUIRED_ASSERTIONS[3])
+        output['risk_filter_counts'] = verify_risk_filters(first, expected, stats=output['page_retries'])
+        output['risk_fixture_counts'] = {'observations': len(expected[RISK_ORGANIZATION]),
+            'groups': sum(item['groups'] for item in output['risk_filter_counts'][RISK_ORGANIZATION].values())}
+        output['risk_filter_assertions'].append(REQUIRED_ASSERTIONS[14])
+        risk_cursor_checks(first)
+        output['risk_filter_assertions'].append(REQUIRED_ASSERTIONS[15])
         source_checks(first, directory, expected, output)
         final_sources = sources(directory, names=original)
         require({key: value for key, value in final_sources.items() if key != 'inventory_generation'}
@@ -382,6 +504,9 @@ def execute(directory, environment, listener, values, output, deadline, expected
                 and publication(directory) == stamp
                 and sources(directory, names=original) == final_sources, 'restart_changed_complete_views_or_generation')
         output['assertions'].append(REQUIRED_ASSERTIONS[9])
+        require(verify_risk_filters(second, expected, stats=output['page_retries']) == output['risk_filter_counts'],
+                'restart_changed_indexed_risk_filters')
+        output['risk_filter_assertions'].append(REQUIRED_ASSERTIONS[16])
         inventory.no_work(directory)
         output['assertions'].append(REQUIRED_ASSERTIONS[10])
     finally:
@@ -415,10 +540,14 @@ def source_checks(server, directory, expected, output):
     require(status == 200 and first.get('next_cursor'), 'cursor_fixture_missing')
     cursor = first['next_cursor']
     continuation = '/api/asset-groups?' + urlencode({'limit': 1, 'cursor': cursor})
+    status, filtered = server.request('/api/asset-groups?limit=1&risk_level=unknown', organization=owner)
+    require(status == 200 and filtered.get('next_cursor'), 'unknown_filter_cursor_fixture_missing')
+    filtered_continuation = '/api/asset-groups?' + urlencode({
+        'limit': 1, 'risk_level': 'unknown', 'cursor': filtered['next_cursor']})
     for path, organization in [
             (continuation, other),
             ('/api/asset-groups?' + urlencode({'limit': 1, 'cursor': cursor + 'x'}), owner),
-            ('/api/asset-groups?risk_level=high', owner), ('/api/asset-groups?limit=0', owner)]:
+            ('/api/asset-groups?risk_level=invalid', owner), ('/api/asset-groups?limit=0', owner)]:
         require(server.request(path, organization=organization)[0] == 400, 'invalid_cursor_or_filter_accepted')
     history_url = first['asset_groups'][0]['confirmation_history']['url']
     status, history = server.request(history_url + '?limit=1', organization=owner)
@@ -431,13 +560,19 @@ def source_checks(server, directory, expected, output):
         database.execute('UPDATE scan_result SET result=result WHERE scan_id=?', (owner + '-high',))
         database.rollback()
     require(server.request(continuation, organization=owner)[0] == 200, 'rollback_invalidated_cursor')
+    require(server.request(filtered_continuation, organization=owner)[0] == 200,
+            'rollback_invalidated_filtered_cursor')
     with closing(inventory.connection(directory, write=True)) as database, database:
         database.execute('UPDATE scan_result SET result=result WHERE scan_id=?', (other + '-high',))
     require(server.request(continuation, organization=owner)[0] == 200, 'other_owner_invalidated_cursor')
+    require(server.request(filtered_continuation, organization=owner)[0] == 200,
+            'other_owner_invalidated_filtered_cursor')
     output['assertions'].append(REQUIRED_ASSERTIONS[5])
     with closing(inventory.connection(directory, write=True)) as database, database:
         database.execute('UPDATE scan_result SET result=result WHERE scan_id=?', (owner + '-high',))
     require(server.request(continuation, organization=owner)[0] == 409, 'source_write_did_not_invalidate_cursor')
+    require(server.request(filtered_continuation, organization=owner)[0] == 409,
+            'source_write_did_not_invalidate_filtered_cursor')
     output['assertions'].append(REQUIRED_ASSERTIONS[6])
     with closing(inventory.connection(directory, write=True)) as database, database:
         original = database.execute('SELECT result FROM scan_result WHERE scan_id=?', (owner + '-high',)).fetchone()[0]
@@ -447,6 +582,9 @@ def source_checks(server, directory, expected, output):
         status, blocked = server.request('/api/asset-groups?limit=1', organization=owner)
         require(status == 503 and blocked.get('code') == 'asset_group_projection_unavailable',
                 'uninterpretable_source_published')
+        status, blocked_filter = server.request('/api/asset-groups?risk_level=high', organization=owner)
+        require(status == 503 and blocked_filter.get('code') == 'asset_group_projection_unavailable',
+                'uninterpretable_nonmatching_source_hidden_by_risk_filter')
         require(server.request('/api/agents?limit=1', organization=owner)[0] == 200,
                 'unrelated_latest_inventory_hidden_by_group_build')
         output['assertions'].append(REQUIRED_ASSERTIONS[7])
@@ -468,7 +606,8 @@ def main(argv=None):
     parser.add_argument('--timeout-seconds', type=inventory.timeout_value, default=180)
     output = {'format_version': FORMAT_VERSION, 'accepted': False, 'observation_count': OBSERVATIONS,
               'fixture_scope': 'repeated_observations_over_controlled_no_socket_pipeline_sources',
-              'schema_before': None, 'schema_after': None, 'schema_target': 7, 'assertions': [], 'server_exits': [],
+              'schema_before': None, 'schema_after': None, 'schema_target': 8, 'assertions': [], 'server_exits': [],
+              'risk_filter_assertions': [],
               'page_retries': {'initial': 0, 'restart': 0}}
     failures, values, handlers = [], {}, {}
     temporary = directory = listener = previous_mask = None
@@ -528,7 +667,15 @@ def main(argv=None):
                 require(directory.stat().st_mode & 0o777 == 0o700, 'fixture_directory_mode_changed')
                 require((directory / 'fixture.sqlite.dispatcher.lock').is_file(), 'missing_dispatcher_lock')
                 surfaces.extend(path for path in directory.iterdir() if path.name.startswith('fixture.sqlite'))
-                inventory.privacy_check(surfaces, values, json.dumps(output, sort_keys=True).encode())
+                require(set(values) == {'signing', 'operator', 'marker', 'issued', 'jwt0', 'jwt1', 'jwt2', 'jwt3'},
+                        'missing_required_secret_check')
+                receipt_bytes = json.dumps(output, sort_keys=True).encode()
+                inventory.privacy_check(surfaces, {key: value for key, value in values.items() if key != 'jwt3'},
+                                        receipt_bytes)
+                for surface in surfaces:
+                    inventory.assert_private_absent(surface.read_bytes(), {'jwt3': values['jwt3']},
+                                                   'private_value_in_log_or_fixture')
+                inventory.assert_private_absent(receipt_bytes, {'jwt3': values['jwt3']}, 'private_value_in_stdout')
                 from tests.controlled_access import REFERENCE
                 for surface in surfaces:
                     inventory.assert_private_absent(surface.read_bytes(), {'reference': REFERENCE}, 'private_reference_in_fixture')
@@ -551,6 +698,7 @@ def main(argv=None):
                 os.umask(previous_mask)
             except Exception:
                 failures.append('permission_mask_cleanup_failed')
+    output['assertions'].extend(output.pop('risk_filter_assertions', []))
     if not failures and output['assertions'] != list(REQUIRED_ASSERTIONS):
         failures.append('missing_required_assertions')
     output['accepted'] = not failures
