@@ -18,9 +18,10 @@ from src.core.asset_group_projection import (
     public_text, unavailable,
 )
 from src.core.inventory import InventoryError, PROJECTION_POLICY
+from src.core.asset_group_risk import RISK_FIELDS, RISK_LEVELS, risk_descriptor
 
 
-ASSET_GROUP_POLICY = hashlib.sha256(('public-target-groups-v1:' + PROJECTION_POLICY).encode()).hexdigest()
+ASSET_GROUP_POLICY = hashlib.sha256(('public-target-groups-v2:' + PROJECTION_POLICY).encode()).hexdigest()
 BACKGROUND_SECONDS = 0.5
 READ_SECONDS = 5.0
 BUSY_TIMEOUT_MS = 50
@@ -61,6 +62,7 @@ class GroupRequest:
     after: tuple | None = None
     has_cursor: bool = False
     after_complete: bool = False
+    risk_level: str | None = None
 
 
 def _invalid_request():
@@ -97,7 +99,7 @@ def _parse(args, organization, secret, group_id=None):
             raise _invalid_request()
         if group_id is not None and not _hex(group_id, _HEX64):
             raise _invalid_request()
-        allowed = {'limit', 'cursor'}
+        allowed = {'limit', 'cursor'} | ({'risk_level'} if group_id is None else set())
         if set(args) - allowed:
             raise _invalid_request()
         for name in allowed:
@@ -109,11 +111,17 @@ def _parse(args, organization, secret, group_id=None):
         limit = int(raw_limit)
         if not 1 <= limit <= MAX_PAGE_LIMIT:
             raise _invalid_request()
+        raw_risk_level = args.get('risk_level', '')
+        if not isinstance(raw_risk_level, str):
+            raise _invalid_request()
+        risk_level = raw_risk_level.strip().lower() or None
+        if risk_level is not None and risk_level not in RISK_LEVELS:
+            raise _invalid_request()
     except InventoryError as exc:
         if exc.status == 400:
             raise
         raise _invalid_request() from None
-    parsed = GroupRequest(organization, limit, group_id)
+    parsed = GroupRequest(organization, limit, group_id, risk_level=risk_level)
     if 'cursor' not in args:
         return parsed
     cursor = args.get('cursor')
@@ -124,13 +132,16 @@ def _parse(args, organization, secret, group_id=None):
         signed = _signer(secret).unsign(cursor, max_age=CURSOR_SECONDS)
         raw = base64.b64decode(signed + b'=' * (-len(signed) % 4), altchars=b'-_', validate=True)
         value = json.loads(raw)
-        if type(value) is not dict or set(value) != {
+        shape = {
                 'organization', 'limit', 'group_id', 'route', 'order', 'policy',
-                'build_id', 'generation', 'nonce', 'after', 'after_complete'}:
+                'build_id', 'generation', 'nonce', 'after', 'after_complete'}
+        if type(value) is not dict or set(value) not in (shape, shape | {'risk_level'}):
             raise ValueError('Invalid cursor shape')
         expected = (organization, limit, group_id, route, order)
         if tuple(value[key] for key in ('organization', 'limit', 'group_id', 'route', 'order')) != expected:
             raise ValueError('Invalid cursor scope')
+        if value.get('risk_level') != risk_level or group_id is not None and value.get('risk_level') is not None:
+            raise ValueError('Invalid cursor risk scope')
         if type(value['limit']) is not int or not all(_hex(value[key], _HEX32) for key in (
                 'build_id', 'generation', 'nonce')) or not _hex(value['policy'], _HEX64):
             raise ValueError('Invalid cursor identity')
@@ -151,8 +162,10 @@ def _parse(args, organization, secret, group_id=None):
         raise _invalid_cursor() from None
     if value['policy'] != ASSET_GROUP_POLICY:
         raise _stale_cursor()
+    if 'risk_level' not in value:
+        raise _invalid_cursor()
     return GroupRequest(organization, limit, group_id, value['build_id'],
-                        value['generation'], value['nonce'], tuple(after), True, value['after_complete'])
+                        value['generation'], value['nonce'], tuple(after), True, value['after_complete'], risk_level)
 
 
 def parse_group_request(args, organization, secret):
@@ -165,7 +178,7 @@ def parse_group_history_request(args, organization, group_id, secret):
 
 def _cursor(parsed, publication, after, secret, *, after_complete=True):
     history = parsed.group_id is not None
-    payload = {'organization': parsed.organization, 'limit': parsed.limit,
+    payload = {'organization': parsed.organization, 'limit': parsed.limit, 'risk_level': parsed.risk_level,
                'group_id': parsed.group_id, 'route': 'history' if history else 'groups',
                'order': HISTORY_ORDER if history else GROUP_ORDER, 'policy': ASSET_GROUP_POLICY,
                'build_id': publication['active_build_id'], 'generation': publication['active_generation'],
@@ -252,6 +265,25 @@ def _ready(connection, organization, tables, publication=None):
     return None
 
 
+def _risk_facts(value):
+    try:
+        if value.get('risk_score_is_null') is False and value['risk_score'] is None:
+            raise ValueError('Invalid derived score type')
+        if value.get('risk_scoring_policy_is_null') is False and value['risk_scoring_policy'] is None:
+            raise ValueError('Invalid derived scoring policy')
+        return risk_descriptor(value)
+    except (KeyError, ValueError, TypeError, OverflowError):
+        raise unavailable() from None
+
+
+def _risk_columns(c):
+    return [case((func.typeof(c.risk_score).in_(('real', 'integer')), c.risk_score),
+                 else_=None).label('risk_score'),
+            c.risk_score.is_(None).label('risk_score_is_null'),
+            c.risk_scoring_policy.is_(None).label('risk_scoring_policy_is_null'),
+            *[bounded_field(c[name], c[name].type.length) for name in RISK_FIELDS if name != 'risk_score']]
+
+
 class AssetGroupProjector:
     """Only the exclusive dispatcher's idle hook calls this resumable writer."""
 
@@ -318,6 +350,7 @@ class AssetGroupProjector:
                 'group_supported_confirmation_count': supported if newest else None,
                 'group_archived_claim_count': archived if newest else None, 'publication_nonce': None,
                 'source_generation': generation, 'projection_policy': ASSET_GROUP_POLICY}
+            values.update(_risk_facts(projected.risk))
             connection.execute(insert(table).values(**values))
             processed += 1
             last = row
@@ -341,10 +374,13 @@ class AssetGroupProjector:
         if len(nonces) > 1 or nonces and not _hex(nonces[0], _HEX32):
             raise unavailable()
         nonce = nonces[0] if nonces else uuid.uuid4().hex
-        unsealed = connection.execute(select(c.observation_id).where(*scope,
-            c.publication_nonce.is_(None)).order_by(c.observation_id).limit(MAX_ROWS)).scalars().all()
+        unsealed = connection.execute(select(c.observation_id, *_risk_columns(c)).where(*scope,
+            c.publication_nonce.is_(None)).order_by(c.observation_id).limit(MAX_ROWS)).mappings().all()
         if unsealed:
-            connection.execute(update(table).where(*scope, c.observation_id.in_(unsealed)).values(publication_nonce=nonce))
+            for row in unsealed:
+                _risk_facts(row)
+            connection.execute(update(table).where(*scope, c.observation_id.in_(
+                [row['observation_id'] for row in unsealed])).values(publication_nonce=nonce))
             return Progress('sealing', organization, processed_rows=0, started=True)
         sealed = connection.execute(select(func.count()).where(*_proof_conditions(
             c, organization, build, generation, nonce))).scalar_one()
@@ -490,6 +526,8 @@ def _reopen(reader, cache, organization):
     if (source.identity.group_id != cache.group_id or source.identity.status != cache.identity_status
             or source.observed_at_us != cache.observed_at_us or source.asset_id != cache.report_asset_id):
         raise unavailable()
+    if _risk_facts(cache._mapping) != _risk_facts(source.risk):
+        raise unavailable()
     return source
 
 
@@ -503,7 +541,7 @@ def _cache_columns(table):
             bounded_field(c.report_asset_id, 1024), bounded_field(c.group_id, 64),
             bounded_field(c.identity_status, 16), c.observed_at_us,
             c.group_history_complete, c.group_observation_count,
-            c.group_supported_confirmation_count, c.group_archived_claim_count]
+            c.group_supported_confirmation_count, c.group_archived_claim_count, *_risk_columns(c)]
 
 
 def group_page(session, parsed, secret, tables):
@@ -518,8 +556,14 @@ def group_page(session, parsed, secret, tables):
                         'coverage': _coverage(publication, reader, 0, True)}
             c = tables['index'].c
             conditions = list(_proof_conditions(c, parsed.organization, publication['active_build_id'],
-                publication['active_generation'], publication['active_nonce'])) + [c.is_latest.is_(True)]
+                publication['active_generation'], publication['active_nonce'])) + [c.is_latest == true()]
+            if parsed.risk_level is not None:
+                conditions.append(c.risk_level == parsed.risk_level)
             if parsed.after:
+                if parsed.risk_level is not None:
+                    # Make the leading timestamp range available to SQLite's
+                    # risk index while preserving the mixed-direction tie key.
+                    conditions.append(c.observed_at_us <= parsed.after[0])
                 conditions.append(or_(c.observed_at_us < parsed.after[0], and_(
                     c.observed_at_us == parsed.after[0], c.group_id > parsed.after[1])))
             rows = connection.execute(select(*_cache_columns(tables['index'])).where(*conditions)

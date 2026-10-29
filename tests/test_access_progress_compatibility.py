@@ -15,7 +15,7 @@ from tests.legacy_access_v3_fixtures import (
 from tests.test_access_cache_policy_upgrade import (
     api as api, database as database, caches, seed, state,
 )
-from tests.asset_group_schema_assertions import assert_group_extension, without_group_rows
+from tests.asset_group_schema_assertions import assert_group_extension, assert_group_risk_extension, without_group_rows
 
 
 @pytest.mark.parametrize('name', ['zero', 'high', 'partial', 'mixed'])
@@ -35,7 +35,7 @@ def test_frozen_v3_archive_keeps_its_original_supported_risk(name):
     assert legacy_access_v3_archive(name) == before
 
 
-@pytest.mark.parametrize('version', [5, 6, 7])
+@pytest.mark.parametrize('version', [5, 6, 7, 8])
 def test_existing_v3_caches_need_no_reclassification_during_derived_schema_extension(database, version):
     module, engine = database
     manifest = legacy_access_v3_manifest()['archives']
@@ -43,8 +43,9 @@ def test_existing_v3_caches_need_no_reclassification_during_derived_schema_exten
     for name, expected in manifest.items():
         documents.append((name, legacy_access_v3_report(name), legacy_access_v3_archive(name),
                           expected['original_score'], expected['original_level']))
-    seed(engine, documents, version=min(version, 6))
-    if version == 7:
+    seed(engine, documents, version=min(version, 7))
+    if version == 8:
+        # Initialize the current fixture before recording the idempotence baseline.
         schema.initialize_schema(engine, module.db.metadata)
     before_definitions, before_rows = state(engine)
     before_caches = caches(engine)
@@ -60,17 +61,23 @@ def test_existing_v3_caches_need_no_reclassification_during_derived_schema_exten
         event.remove(engine, 'before_cursor_execute', observe)
     definitions, rows = state(engine)
     expected_rows = deepcopy(before_rows)
-    expected_rows['schema_version'] = [(1, 7)]
-    assert schema.SCHEMA_VERSION == 7
+    expected_rows['schema_version'] = [(1, 8)]
+    assert schema.SCHEMA_VERSION == 8
     if version < 7:
         assert_group_extension(before_definitions, definitions)
         assert without_group_rows(rows) == expected_rows
+    elif version == 7:
+        assert_group_risk_extension(before_definitions, definitions)
+        assert rows == expected_rows
     else:
         assert definitions == before_definitions and rows == expected_rows
     assert caches(engine) == before_caches
     writes = [statement for statement in statements if statement.upper().startswith(
         ('UPDATE ', 'INSERT ', 'DELETE ', 'CREATE ', 'DROP ', 'ALTER '))]
     data_writes = [statement for statement in writes if not statement.upper().startswith('CREATE ')]
-    assert len(data_writes) == (1 if version < 7 else 0)
-    if data_writes:
-        assert data_writes[0].startswith('UPDATE schema_version SET version=')
+    assert len(data_writes) == (1 if version < 7 else 7 if version == 7 else 0)
+    if version < 8:
+        assert data_writes[-1].startswith('UPDATE schema_version SET version=')
+    if version == 7:
+        assert all(statement.startswith('ALTER TABLE asset_group_index ADD COLUMN ')
+                   for statement in data_writes[:-1])

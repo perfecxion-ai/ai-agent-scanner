@@ -7,9 +7,15 @@ authorization. It does not determine whether a finding has been remediated.
 
 `GET /api/asset-groups` lists groups for the authenticated organization.
 `GET /api/asset-groups/{id}/history` lists their finding occurrences. Both accept
-`limit` (1 through 100) and an opaque `cursor`. Other parameters, including risk
-filters, are rejected. The existing `/api/agents` endpoint still lists individual
-observations with their original IDs.
+`limit` (1 through 100) and an opaque `cursor`. The list also accepts `risk_level`:
+`critical`, `high`, `medium`, `low`, `minimal`, or `unknown`, with surrounding
+whitespace and case normalized. It matches only the latest observation's canonical
+risk. An empty normalized value means no filter. An earlier high confirmation
+does not make a currently unknown group match
+`risk_level=high`; that confirmation remains in its history. History rejects risk
+filters. Duplicate parameters, unsupported levels, type/coverage filters and other
+parameters are rejected. The existing `/api/agents` endpoint still lists individual
+observations with its original eligibility, IDs and exhaustive traversal.
 
 A group has a credential-free public target, its latest observation, an
 `observation_count`, and `confirmation_history`. Its `latest_observation_risk`
@@ -17,6 +23,10 @@ uses the same canonical saved-evidence interpretation as the observation API.
 An unassessed score remains null. A newer assessed zero or discovery observation
 can change the latest risk without deleting an earlier supported confirmation.
 `remediation_status` remains `not_evaluated`.
+
+Group risk also requires the snapshot selectors to match its saved target. The
+observation endpoint retains its existing alias-based eligibility, so a mismatched
+historical snapshot can remain assessed there while its group is unknown.
 
 History entries identify the scan, observation, original asset, and finding
 ordinal. They distinguish `supported_confirmation` from `archived_claim`.
@@ -56,8 +66,9 @@ The source generation, policy, and sealed row counts must match before the API
 selects a page. Source changes invalidate existing cursors and make a stale
 projection unavailable until a new build is published.
 
-Clients should retain the exact page limit when following a cursor. Cursors bind
-the organization, route, group when applicable, publication, policy, and ordering.
+Clients should retain the same page limit and normalized risk filter when following
+a cursor. Cursors bind the organization, route, filter, group when applicable,
+publication, policy, and ordering.
 A stale cursor returns `409` with `stale_cursor`; restart traversal from the first
 page. An invalid cursor or unsupported request returns `400`.
 
@@ -75,16 +86,25 @@ an unavailable projection instead of an apparently complete empty inventory.
 
 ## Storage boundary
 
-Schema 7 adds two derived tables, their indexes, and invalidation triggers. The
-upgrade from schema 6 preserves reports, observation IDs, score caches, existing
-indexes, and the nine inventory source triggers. The background projection can
-be rebuilt from saved sources. It does not execute probes, resume scans, or create
-schedules.
+Schema 8 adds six nullable canonical risk facts and a partial group-head risk
+index to the schema-7 derived storage. The additive upgrade preserves existing
+rows, reports, observation IDs, score caches, indexes and invalidation triggers.
+Old derived rows cannot serve the new policy until idle maintenance rebuilds
+their publication. Unknown scores remain SQL NULL; an unbuilt descriptor is not
+treated as unknown evidence.
+
+Risk filters use the sealed source-derived index after the complete readiness
+proof, then reopen each selected observation and compare all six risk facts with
+its saved source. Existing scalar score caches never exclude candidates. Readiness
+still counts the complete source and publication, so it is O(N); indexed candidate
+selection does not make the whole request constant time. Continuous writes can
+keep the projection unavailable. The background projection does not execute
+probes, resume scans, or create schedules.
 
 The server still supports one process, file-backed SQLite, POSIX, and a local
 filesystem. Run it from the supported checkout or container; the wheel provides
 the CLI and library, without the server entrypoint. The cache checks detect
 ordinary stale or altered projection rows;
 they do not authenticate a database against a malicious writer with the same
-filesystem access. Source-bound risk filtering and dashboard group views remain
-separate work.
+filesystem access. Indexed observation filtering, dashboard group views and
+logical-finding consolidation remain separate work.

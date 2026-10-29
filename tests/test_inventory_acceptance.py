@@ -60,7 +60,7 @@ def test_complete_real_server_gate_isolated_from_operator_settings_and_alias_tmp
     assert output['assertions'] == list(gate.REQUIRED_ASSERTIONS)
     assert output['observation_count'] == 10000
     assert output['fixture_scope'] == 'repeated_observations_of_12_synthetic_assets'
-    assert output['schema_before'] == 4 and output['schema_after'] == output['schema_target'] == 7
+    assert output['schema_before'] == 4 and output['schema_after'] == output['schema_target'] == 8
     assert output['cache_policy_upgrade'] == {
         'scan_caches_reconciled': 12, 'observation_caches_reconciled': 10000,
         'original_stale_scan_caches_restored': 12, 'original_stale_observation_caches_restored': 10000}

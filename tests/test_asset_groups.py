@@ -224,7 +224,8 @@ def test_production_stage_head_lookup_uses_exact_partial_unique_index(database):
                 # count. Both recognized plans stay scoped to this owner/build.
                 assert any(item.startswith('SEARCH asset_group_index USING ')
                            and any('INDEX ' + name + ' (organization_id=? AND build_id=?)' in item
-                                   for name in ('ux_asset_group_head', 'ix_asset_group_head_page'))
+                                   for name in ('ux_asset_group_head', 'ix_asset_group_head_page',
+                                                'ix_asset_group_head_risk_page'))
                            for item in details), details
             # A sum needs row payloads, so SQLite can prefer another bounded
             # index on tiny fixtures. Equality keeps the partial index eligible.
@@ -503,7 +504,7 @@ def test_cancelled_step_and_gets_never_write_source_or_cache(database):
         assert connection.execute(select(tables['index'])).all() == index_before
 
 
-@pytest.mark.parametrize('args', [[('agent_type', 'assistant')], [('risk_level', 'high')], [('limit', ' 1')],
+@pytest.mark.parametrize('args', [[('agent_type', 'assistant')], [('risk_level', 'invalid')], [('limit', ' 1')],
                                  [('limit', '0')], [('limit', '101')], [('limit', '1'), ('limit', '2')]])
 def test_invalid_request_rejects_without_sql(args):
     with pytest.raises(InventoryError) as failure:

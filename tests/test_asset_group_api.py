@@ -57,7 +57,8 @@ def test_group_routes_require_authentication_before_reading_projection(api, monk
     assert client.get(path).status_code == 401
 
 
-@pytest.mark.parametrize('query', ['limit=0', 'limit=101', 'limit=1&limit=2', 'risk_level=high',
+@pytest.mark.parametrize('query', ['limit=0', 'limit=101', 'limit=1&limit=2', 'risk_level=invalid',
+                                  'risk_level=high&risk_level=low',
                                   'agent_type=assistant', 'unknown=value', 'cursor=malformed'])
 @pytest.mark.parametrize('path', ['/api/asset-groups', '/api/asset-groups/' + 'a' * 64 + '/history'])
 def test_group_request_rejection_precedes_database_access(api, monkeypatch, path, query):
@@ -71,6 +72,19 @@ def test_group_request_rejection_precedes_database_access(api, monkeypatch, path
     assert response.status_code == 400
     assert response.json['code'] in {'invalid_asset_group_request', 'invalid_cursor'}
     assert response.headers['Cache-Control'] == 'no-store'
+
+
+@pytest.mark.parametrize('risk', ['high', 'unknown', ' HIGH '])
+def test_history_still_rejects_risk_filters_before_database_access(api, monkeypatch, risk):
+    module, client = api
+
+    def forbidden():
+        raise AssertionError('History filters must be rejected before reading sources')
+
+    monkeypatch.setattr(module, '_read_snapshot', forbidden)
+    response = client.get('/api/asset-groups/' + 'a' * 64 + '/history',
+                          query_string={'risk_level': risk}, headers=headers(module))
+    assert response.status_code == 400 and response.json['code'] == 'invalid_asset_group_request'
 
 
 def test_group_reads_preserve_observation_ids_caches_sources_and_tenant_boundaries(api):
@@ -95,6 +109,9 @@ def test_group_reads_preserve_observation_ids_caches_sources_and_tenant_boundari
         assert groups.json['coverage']['indexed_observations'] == 3
         assert groups.json['coverage']['indexed_groups'] == 2
         own = groups.json['asset_groups']
+        filtered = client.get('/api/asset-groups?risk_level=unknown', headers=headers(module))
+        assert filtered.status_code == 200 and filtered.json['asset_groups'] == own
+        assert client.get('/api/asset-groups?risk_level=high', headers=headers(module)).json['asset_groups'] == []
         assert sorted(value['observation_count'] for value in own) == [1, 2]
         for value in own:
             assert value['identity_status'] == 'grouped'
