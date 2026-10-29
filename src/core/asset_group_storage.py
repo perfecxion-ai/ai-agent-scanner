@@ -48,7 +48,7 @@ INDEX_DEFINITIONS = {
     'ux_asset_group_head': 'CREATE UNIQUE INDEX ux_asset_group_head ON asset_group_index (organization_id, build_id, group_id) WHERE is_latest = 1',
     'ix_asset_group_head_page': 'CREATE INDEX ix_asset_group_head_page ON asset_group_index (organization_id, build_id, publication_nonce, source_generation, projection_policy, is_latest, observed_at_us DESC, group_id)',
     'ix_asset_group_history': 'CREATE INDEX ix_asset_group_history ON asset_group_index (organization_id, build_id, publication_nonce, source_generation, projection_policy, group_id, observed_at_us DESC, observation_id)',
-    'ix_asset_group_head_risk_page': 'CREATE INDEX ix_asset_group_head_risk_page ON asset_group_index (organization_id, build_id, publication_nonce, source_generation, projection_policy, risk_level, observed_at_us DESC, group_id) WHERE is_latest = 1',
+    'ix_asset_group_head_risk_page': 'CREATE INDEX ix_asset_group_head_risk_page ON asset_group_index (organization_id, build_id, publication_nonce, source_generation, projection_policy, is_latest, risk_level, observed_at_us DESC, group_id) WHERE is_latest = 1',
 }
 INDEX_NAMES = frozenset(INDEX_DEFINITIONS)
 SCHEMA_SEVEN_INDEX_NAMES = INDEX_NAMES - {'ix_asset_group_head_risk_page'}
@@ -134,8 +134,10 @@ def register_asset_group_metadata(metadata):
         'ix_asset_group_history': ((c.organization_id, c.build_id, c.publication_nonce,
                                    c.source_generation, c.projection_policy, c.group_id,
                                    c.observed_at_us.desc(), c.observation_id), {}),
+        # Repeat the partial predicate as a key to improve default planner
+        # estimates when the older page index also offers a timestamp range.
         'ix_asset_group_head_risk_page': ((c.organization_id, c.build_id, c.publication_nonce,
-                                         c.source_generation, c.projection_policy, c.risk_level,
+                                         c.source_generation, c.projection_policy, c.is_latest, c.risk_level,
                                          c.observed_at_us.desc(), c.group_id),
                                         {'sqlite_where': text('is_latest = 1')}),
     }

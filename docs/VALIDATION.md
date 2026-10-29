@@ -1982,6 +1982,41 @@ checkout; the new module and regression files are included as appropriate.
 Full-suite and required PR/post-merge checks are tracked in
 [PR #89](https://github.com/perfecxion-ai/ai-agent-scanner/pull/89).
 
+Before the index refinement below, the complete local suite passes 5,477 cases
+in 826.19 seconds with 93% coverage and warnings as errors. CI run `40800251585`
+then passes five jobs and has plan failures in three jobs: Python 3.10.22 has one failure
+and 5,476 passes; Python 3.12.15 and 3.13 each have two failures and 5,475 passes.
+They select the older page index for filtered continuation ranges. The CI logs
+identify SQLAlchemy 2.0.55 and 2.1.6 but do not capture SQLite versions, so those
+versions cannot be inferred from the interpreters. These failed results remain
+recorded; correct result dictionaries alone do not close the access-plan issue.
+
+Controlled fresh-connection probes reproduce the choice by reversing valid
+index creation order on SQLite 3.40.1 and 3.45.1. When newer nonmatches are outside
+the timestamp range, the alternative plan is efficient. With 650 tied nonmatches
+and six matching heads, one probe consumes 7,570 SQLite VM steps rather than 519.
+The new, unmerged schema-8 index now includes the constant `is_latest` key before
+`risk_level`, while retaining the partial `WHERE is_latest = 1` predicate. It uses
+520 steps in both creation orders and all three timestamp distributions, without
+a planner hint. In that 656-head fixture it adds 656 payload bytes and no allocated
+pages; this is a local measurement, not a production storage or latency promise.
+Source/row/field comparisons, read deadlines, continuation predicates and the
+180-second gate budget are unchanged. Exact migration and backup DDL oracles
+recognize only the refined definition.
+
+Six permanent cases exercise both index orders and older, tied and newer
+nonmatches through actual API pages. They retain complete canonical result and
+source-reopening checks, then explain the executed first and continuation SELECTs.
+Failures include the connected SQLite version and compile options. The focused
+123-case set passes on all three SQLite engines. The refined 79-file source digest is
+`bf1f96fe64b5e9f3dd711e9499ab01848e6c37d1e1a35ae288bded8486261831`;
+the projection policy is
+`2c28e632c518535a0b2993347475f9f9ef5fc57eea55c2af62347e41a56e84e1`
+and group policy is
+`e55b26e90a77b0ae777b1ed26fac163245e45e73fcd7035c8a46983792f748c2`.
+Final full-suite, packaging, refreshed compatibility gates and required delivery
+checks are recorded in PR #89.
+
 These are local compatibility and controlled-fixture results. The fresh
 [native gate](asset-groups-retest.md) at the final merged pin remains required;
 the accepted `1b164df` archive above covers the preceding schema-7 grouping slice.

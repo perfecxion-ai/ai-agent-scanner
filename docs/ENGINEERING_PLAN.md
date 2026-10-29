@@ -197,6 +197,9 @@ six facts compared with their saved source. Unknown remains null, and earlier
 confirmed history never promotes the latest risk. Signed cursors bind normalized
 filters, and actual continuation plans use the timestamp range. Full readiness
 still counts all source/publication rows; this is not constant-time inventory.
+The partial risk index repeats the constant head flag as a key to avoid SQLite
+cost ties with the older page index on continuation ranges. Controlled regressions
+cover both valid index creation orders and older, tied and newer nonmatches.
 Focused and independent tests pass on SQLite 3.40.1, 3.45.1 and 3.53.1. The extended
 local compatibility gate retains the original 10,000-observation oracle and
 180-second budget, with separate positive risk controls. See

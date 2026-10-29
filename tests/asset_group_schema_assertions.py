@@ -31,7 +31,7 @@ def assert_group_risk_extension(before, after):
     assert current['ix_asset_group_head_risk_page'] == (
         'index', 'ix_asset_group_head_risk_page', 'asset_group_index',
         'CREATE INDEX ix_asset_group_head_risk_page ON asset_group_index (organization_id, build_id, '
-        'publication_nonce, source_generation, projection_policy, risk_level, observed_at_us DESC, group_id) '
+        'publication_nonce, source_generation, projection_policy, is_latest, risk_level, observed_at_us DESC, group_id) '
         'WHERE is_latest = 1')
 
 

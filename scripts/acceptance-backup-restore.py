@@ -262,7 +262,7 @@ def refresh_schema_preserved(before, after, version):
     risk_name = 'ix_asset_group_head_risk_page'
     risk_sql = ('CREATE INDEX ix_asset_group_head_risk_page ON asset_group_index '
                 '(organization_id, build_id, publication_nonce, source_generation, '
-                'projection_policy, risk_level, observed_at_us DESC, group_id) WHERE is_latest = 1')
+                'projection_policy, is_latest, risk_level, observed_at_us DESC, group_id) WHERE is_latest = 1')
     if set(new) != set(old) | {risk_name} or new[risk_name] != (
             'index', risk_name, 'asset_group_index', risk_sql):
         return False

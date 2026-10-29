@@ -340,7 +340,7 @@ Prior confirmations remain in history, and unknown remains null. Filters bind
 signed cursors, including normalized equivalent values. Filtered continuation
 plans use a timestamp range while preserving tied-group ordering.
 
-Local focused/independent checks pass on SQLite 3.40.1, 3.45.1 and 3.53.1. Both
+Local focused/independent checks pass on SQLite 3.40.1, 3.45.1 and 3.53.1. Initial
 extended gates pass on the owned Python 3.12.3/SQLite 3.40.1 compatibility runtime
 in 52.205/51.440 seconds, retaining the 180-second budget and original
 10,000-observation/24-group oracle plus five separate risk controls. Both backup
@@ -352,6 +352,15 @@ original Python 3.11.2 runtime before this slice's native gate closes.
 Observation API risk indexing/eligibility, dashboard grouping and logical findings
 remain separate. Readiness remains O(N), and continuous writes can keep grouping
 unavailable; no broader deployment or sensitivity claim follows.
+
+Subsequent CI exposes SQLite index-order cost ties on filtered continuations.
+The refined risk index repeats the constant head flag before risk level, avoiding
+the older page index's residual scan without a planner hint. All six creation-order
+and timestamp-distribution cases retain exact results and source reopening. The
+refinement changes no predicates, evidence semantics or execution budgets. Its
+79-file source digest is
+`bf1f96fe64b5e9f3dd711e9499ab01848e6c37d1e1a35ae288bded8486261831`.
+See PR #89 for final full-suite, refreshed compatibility receipts and required CI.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned

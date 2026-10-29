@@ -60,7 +60,7 @@ ais_group_capture backup-optimized "$AIS_GROUP_PY" -O scripts/acceptance-backup-
 if "$AIS_GROUP_PY" -Werror -m pytest -o asyncio_default_fixture_loop_scope=function \
   tests/test_asset_identity.py tests/test_asset_group_schema.py \
   tests/test_asset_group_risk.py tests/test_asset_group_risk_schema.py \
-  tests/test_asset_group_risk_review.py \
+  tests/test_asset_group_risk_review.py tests/test_asset_group_risk_plans.py \
   tests/test_inventory_acceptance.py tests/test_nullable_independent_review.py \
   tests/test_asset_groups.py tests/test_asset_group_review.py \
   tests/test_asset_group_prepared_reads.py tests/test_asset_group_prepared_review.py \
@@ -95,6 +95,12 @@ separately report five observations and five groups. All seventeen assertion nam
 must match the pinned script. Both backup receipts must accept all fifteen cases,
 including the distinct frozen schema-7 and current schema-8 cases. Preserve nonzero exits and diagnostics
 when a gate fails. Do not replace a failed receipt with a successful retry.
+
+The focused plan cases recreate the two valid indexes in both creation orders
+and exercise older, tied and newer nonmatching groups. They check the actual
+filtered SELECT and continuation range, while retaining source reopening and
+complete result checks. A failure includes the connected SQLite version and
+compile options.
 
 The focused command also runs both existing inventory real-server gates. They
 check schema-4-to-8 policy reconciliation, exhaustive observation filters, stale
