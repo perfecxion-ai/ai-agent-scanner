@@ -1,6 +1,6 @@
-"""Recognized storage for derived public-target groups, without risk verdicts."""
+"""Recognized storage for source-bound public-target group projections."""
 
-from sqlalchemy import BigInteger, Boolean, Column, DDL, Index, Integer, JSON, String, Table, text
+from sqlalchemy import BigInteger, Boolean, Column, DDL, Float, Index, Integer, JSON, String, Table, text
 from sqlalchemy.dialects.sqlite import dialect
 from sqlalchemy.schema import CreateIndex
 
@@ -36,12 +36,22 @@ COLUMNS = {
 }
 PRIMARY_KEYS = {INDEX_TABLE: ('organization_id', 'build_id', 'observation_id'),
                 PUBLICATION_TABLE: ('organization_id',)}
+# Frozen schema-7 descriptors must remain independent of schema-8 additions.
+SCHEMA_SEVEN_COLUMNS = dict(COLUMNS)
+RISK_COLUMNS = (
+    ('risk_score', 'FLOAT', True), ('risk_level', 'VARCHAR(20)', True),
+    ('risk_coverage_status', 'VARCHAR(32)', True), ('risk_assessment_status', 'VARCHAR(32)', True),
+    ('risk_scoring_policy', 'VARCHAR(64)', True), ('security_status', 'VARCHAR(32)', True),
+)
+COLUMNS[INDEX_TABLE] += RISK_COLUMNS
 INDEX_DEFINITIONS = {
     'ux_asset_group_head': 'CREATE UNIQUE INDEX ux_asset_group_head ON asset_group_index (organization_id, build_id, group_id) WHERE is_latest = 1',
     'ix_asset_group_head_page': 'CREATE INDEX ix_asset_group_head_page ON asset_group_index (organization_id, build_id, publication_nonce, source_generation, projection_policy, is_latest, observed_at_us DESC, group_id)',
     'ix_asset_group_history': 'CREATE INDEX ix_asset_group_history ON asset_group_index (organization_id, build_id, publication_nonce, source_generation, projection_policy, group_id, observed_at_us DESC, observation_id)',
+    'ix_asset_group_head_risk_page': 'CREATE INDEX ix_asset_group_head_risk_page ON asset_group_index (organization_id, build_id, publication_nonce, source_generation, projection_policy, is_latest, risk_level, observed_at_us DESC, group_id) WHERE is_latest = 1',
 }
 INDEX_NAMES = frozenset(INDEX_DEFINITIONS)
+SCHEMA_SEVEN_INDEX_NAMES = INDEX_NAMES - {'ix_asset_group_head_risk_page'}
 UNIQUE_HEAD_INDEX = 'ux_asset_group_head'
 ACTIVE_FIELDS = ('active_build_id', 'active_generation', 'active_nonce', 'active_policy',
                  'active_row_count', 'active_group_count')
@@ -92,7 +102,8 @@ TRIGGER_DEFINITIONS = {
 def _column_type(definition):
     if definition.startswith('VARCHAR('):
         return String(int(definition[8:-1]))
-    return {'BIGINT': BigInteger, 'BOOLEAN': Boolean, 'INTEGER': Integer, 'JSON': JSON}[definition]()
+    return {'BIGINT': BigInteger, 'BOOLEAN': Boolean, 'FLOAT': Float,
+            'INTEGER': Integer, 'JSON': JSON}[definition]()
 
 
 def register_asset_group_metadata(metadata):
@@ -123,6 +134,12 @@ def register_asset_group_metadata(metadata):
         'ix_asset_group_history': ((c.organization_id, c.build_id, c.publication_nonce,
                                    c.source_generation, c.projection_policy, c.group_id,
                                    c.observed_at_us.desc(), c.observation_id), {}),
+        # Repeat the partial predicate as a key to improve default planner
+        # estimates when the older page index also offers a timestamp range.
+        'ix_asset_group_head_risk_page': ((c.organization_id, c.build_id, c.publication_nonce,
+                                         c.source_generation, c.projection_policy, c.is_latest, c.risk_level,
+                                         c.observed_at_us.desc(), c.group_id),
+                                        {'sqlite_where': text('is_latest = 1')}),
     }
     for name, (columns, options) in specs.items():
         matches = [index for item in metadata.tables.values() for index in item.indexes
@@ -141,7 +158,8 @@ def validate_asset_group_definitions(connection, version):
     for name, definition in indexes.items():
         if name.casefold() in reserved and (name != reserved[name.casefold()] or definition != INDEX_DEFINITIONS[name]):
             raise AssetGroupSchemaError('Reserved asset-group index definition conflicts')
-    if version >= 7 and not INDEX_NAMES <= indexes.keys():
+    required = INDEX_NAMES if version >= 8 else SCHEMA_SEVEN_INDEX_NAMES if version >= 7 else frozenset()
+    if not required <= indexes.keys():
         raise AssetGroupSchemaError('Missing asset-group index')
 
 
@@ -150,3 +168,12 @@ def install_asset_group_storage(connection, metadata):
         metadata.tables[name].create(connection, checkfirst=True)
     for definition in TRIGGER_DEFINITIONS.values():
         connection.exec_driver_sql(definition)
+
+
+def install_asset_group_risk(connection, metadata):
+    """Add nullable derived facts without rewriting schema-7 sources or caches."""
+    for name, kind, _ in RISK_COLUMNS:
+        connection.exec_driver_sql('ALTER TABLE asset_group_index ADD COLUMN ' + name + ' ' + kind)
+    index = next(item for item in metadata.tables[INDEX_TABLE].indexes
+                 if item.name == 'ix_asset_group_head_risk_page')
+    index.create(connection)

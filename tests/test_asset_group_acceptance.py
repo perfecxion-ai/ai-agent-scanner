@@ -25,7 +25,7 @@ spec.loader.exec_module(gate)
 
 def private_values():
     return {name: 'owned-private-acceptance-value-' + name + '-e7981402' for name in
-            ('signing', 'operator', 'marker', 'issued', 'jwt0', 'jwt1', 'jwt2')}
+            ('signing', 'operator', 'marker', 'issued', 'jwt0', 'jwt1', 'jwt2', 'jwt3')}
 
 
 @pytest.mark.parametrize('optimized', [False, True])
@@ -44,13 +44,17 @@ def test_public_group_gate_runs_real_server_and_refuses_inherited_operator_input
     assert result.returncode == 0 and output['accepted'] is True, result.stdout
     assert result.stderr == ''
     assert output['format_version'] == gate.FORMAT_VERSION
-    assert output['schema_before'] == 6 and output['schema_after'] == output['schema_target'] == 7
+    assert output['schema_before'] == 6 and output['schema_after'] == output['schema_target'] == 8
     assert output['observation_count'] == 10000
     assert output['assertions'] == list(gate.REQUIRED_ASSERTIONS)
     assert output['server_exits'] == [{'phase': 'initial', 'returncode': 0}, {'phase': 'restart', 'returncode': 0}]
     assert sum(row['observations'] for row in output['traversal_counts'].values()) == 10000
     assert all(row['groups'] == 8 for row in output['traversal_counts'].values())
-    assert output['privacy']['required_values_checked'] == 7
+    assert output['risk_fixture_counts'] == {'observations': 5, 'groups': 5}
+    assert set(output['risk_filter_counts']) == {*gate.ORGANIZATIONS, gate.RISK_ORGANIZATION}
+    assert {level: item['groups'] for level, item in output['risk_filter_counts'][gate.RISK_ORGANIZATION].items()} == {
+        'critical': 0, 'high': 3, 'medium': 0, 'low': 0, 'minimal': 1, 'unknown': 1}
+    assert output['privacy']['required_values_checked'] == 8
     assert output['http_responses_checked'] >= 200
     assert operator.read_bytes() == b'Owned operator sentinel remains unchanged'
     assert profile.read_text() == 'Owned configuration sentinel must not be parsed'
@@ -79,6 +83,65 @@ def test_fixture_produces_real_controlled_evidence_before_database_observations(
     assert bool(confirmed_findings({**asset, 'status': asset['security_status'], 'check_schema_version': '1.0'})) is confirmed
     text = json.dumps(report)
     assert private_values()['marker'] not in text and private_values()['issued'] not in text
+
+
+@pytest.mark.parametrize('category,level,score', [('unknown', 'unknown', None), ('zero', 'minimal', 0),
+                                               ('unscored', 'unknown', None)])
+def test_independent_filter_oracle_uses_latest_source_instead_of_earlier_high(category, level, score):
+    rows = {}
+    for index, kind in enumerate(('high', category)):
+        report = gate.produce(kind, private_values())
+        rows['observation-' + str(index)] = {
+            'category': kind, 'asset': report['agents'][0], 'report': report,
+            'scan_id': 'scan-' + str(index), 'discovered_at': datetime(2026, 1, index + 1).isoformat()}
+    latest = gate.expected_latest_risks(rows, gate.ORGANIZATIONS[0])
+    assert len(latest) == 1
+    assert next(iter(latest.values()))['observation_id'] == 'observation-1'
+    assert next(iter(latest.values()))['risk']['risk_level'] == level
+    assert next(iter(latest.values()))['risk']['risk_score'] == score
+
+
+def test_positive_filter_controls_bind_distinct_models_before_evidence_execution():
+    rows = {}
+    for index in range(3):
+        model = 'owned-positive-risk-control-' + str(index)
+        report = gate.produce('high', private_values(), model=model)
+        rows[str(index)] = {'category': 'high', 'asset': report['agents'][0], 'report': report,
+                            'scan_id': str(index), 'discovered_at': '2026-01-01T00:00:00'}
+        assert report['agents'][0]['model'] == model
+    latest = gate.expected_latest_risks(rows, gate.RISK_ORGANIZATION)
+    assert len(latest) == 3
+    assert all(item['risk']['risk_score'] == 70 and item['risk']['risk_level'] == 'high'
+               for item in latest.values())
+
+
+def test_filtered_pagination_preserves_filter_on_identical_retry_and_continuation(monkeypatch):
+    server = Mock(phase='initial')
+    server.remaining.return_value = 10
+    server.request.side_effect = [
+        (503, {'success': False, 'error': 'Asset group projection unavailable',
+               'code': 'asset_group_projection_unavailable'}),
+        (200, {'success': True, 'asset_groups': [{'id': 'first'}], 'next_cursor': 'next',
+               'coverage': {'search_complete': False, 'risk_scope': 'latest_observation'}}),
+        (200, {'success': True, 'asset_groups': [{'id': 'second'}], 'next_cursor': None,
+               'coverage': {'search_complete': True, 'risk_scope': 'latest_observation'}})]
+    monkeypatch.setattr(gate.time, 'sleep', Mock())
+    stats = {'initial': 0}
+    assert gate.page_all(server, gate.ORGANIZATIONS[0], '/api/asset-groups', 'asset_groups',
+                         filters={'risk_level': 'high'}, stats=stats) == [{'id': 'first'}, {'id': 'second'}]
+    calls = [item.args[0] for item in server.request.call_args_list]
+    assert calls == ['/api/asset-groups?limit=2&risk_level=high',
+                     '/api/asset-groups?limit=2&risk_level=high',
+                     '/api/asset-groups?limit=2&risk_level=high&cursor=next']
+    assert stats == {'initial': 1}
+
+
+def test_filtered_pagination_refuses_a_different_risk_scope():
+    server = Mock()
+    server.request.return_value = 200, {'success': True, 'asset_groups': [], 'next_cursor': None,
+        'coverage': {'search_complete': True, 'risk_scope': 'all_history'}}
+    with pytest.raises(gate.GateFailure, match='incorrect_filtered_risk_scope'):
+        gate.page_all(server, gate.ORGANIZATIONS[0], '/api/asset-groups', 'asset_groups', filters={'risk_level': 'high'})
 
 
 @pytest.mark.parametrize('complete,cursor', [(True, 'unexpected'), (False, None), (False, '')])
@@ -156,7 +219,8 @@ def published_sources(api):
     yield module, client, saved
 
 
-@pytest.mark.parametrize('fault', ['changed-sealed-row', 'extra-unsealed-row', 'generation-retarget', 'policy-retarget'])
+@pytest.mark.parametrize('fault', ['changed-sealed-row', 'changed-risk-to-unknown', 'extra-unsealed-row',
+                                 'generation-retarget', 'policy-retarget'])
 def test_actual_http_refuses_tampered_cache_after_active_publication_metadata_is_restored(published_sources, monkeypatch, fault):
     from src.core import asset_groups
     module, client, saved = published_sources
@@ -167,6 +231,12 @@ def test_actual_http_refuses_tampered_cache_after_active_publication_metadata_is
         if fault == 'changed-sealed-row':
             connection.execute(update(index).where(index.c.observation_id == head['observation_id'])
                                .values(group_supported_confirmation_count=0))
+            assert connection.execute(select(index.c.publication_nonce).where(
+                index.c.observation_id == head['observation_id'])).scalar_one() is None
+        elif fault == 'changed-risk-to-unknown':
+            connection.execute(update(index).where(index.c.observation_id == head['observation_id']).values(
+                risk_score=None, risk_level='unknown', risk_coverage_status='not_assessed',
+                risk_assessment_status='not_assessed', risk_scoring_policy=None))
             assert connection.execute(select(index.c.publication_nonce).where(
                 index.c.observation_id == head['observation_id'])).scalar_one() is None
         elif fault == 'extra-unsealed-row':
@@ -189,6 +259,9 @@ def test_actual_http_refuses_tampered_cache_after_active_publication_metadata_is
     assert response.status_code == 503
     assert response.json['code'] == 'asset_group_projection_unavailable'
     assert response.headers['Cache-Control'] == 'no-store'
+    for level in ('high', 'minimal', 'unknown'):
+        filtered = client.get('/api/asset-groups?risk_level=' + level, headers=headers(module))
+        assert filtered.status_code == 503 and filtered.json['code'] == 'asset_group_projection_unavailable'
     history = client.get('/api/asset-groups/' + head['group_id'] + '/history', headers=headers(module))
     assert history.status_code == 503 and history.json['code'] == 'asset_group_projection_unavailable'
     # No background repair runs in this HTTP test-client proof. Source views
@@ -197,7 +270,7 @@ def test_actual_http_refuses_tampered_cache_after_active_publication_metadata_is
     assert source.status_code == 200 and source.json['agents'][0]['risk_score'] == 0
 
 
-@pytest.mark.parametrize('failure', ['analysis', 'privacy', 'cleanup', 'signal'])
+@pytest.mark.parametrize('failure', ['analysis', 'privacy', 'cleanup', 'signal', 'missing-risk-checks'])
 def test_gate_analysis_privacy_and_cleanup_failures_are_nonzero_and_static(monkeypatch, capsys, failure):
     monkeypatch.delitem(sys.modules, 'app', raising=False)
     original_temporary, actual = tempfile.TemporaryDirectory, []
@@ -216,7 +289,7 @@ def test_gate_analysis_privacy_and_cleanup_failures_are_nonzero_and_static(monke
     monkeypatch.setattr(gate, 'seed', seed)
     def execute(directory, environment, listener, values, output, deadline, expected):
         output['assertions'] = list(gate.REQUIRED_ASSERTIONS[:12])
-        values.update({name: private_values()[name] for name in ('jwt0', 'jwt1', 'jwt2')})
+        values.update({name: private_values()[name] for name in ('jwt0', 'jwt1', 'jwt2', 'jwt3')})
         if failure == 'analysis':
             raise gate.GateFailure('owned_analysis_failed')
     monkeypatch.setattr(gate, 'execute', execute)
@@ -237,7 +310,8 @@ def test_gate_analysis_privacy_and_cleanup_failures_are_nonzero_and_static(monke
         text = capsys.readouterr().out
         output = json.loads(text)
         expected = {'analysis': 'owned_analysis_failed', 'privacy': 'privacy_check_failed',
-                    'cleanup': 'fixture_cleanup_failed', 'signal': 'signal_cleanup_failed'}[failure]
+                    'cleanup': 'fixture_cleanup_failed', 'signal': 'signal_cleanup_failed',
+                    'missing-risk-checks': 'missing_required_assertions'}[failure]
         assert output['accepted'] is False and expected in output['failure_codes'] and 'owned-private' not in text
     finally:
         for instance, cleanup in actual:

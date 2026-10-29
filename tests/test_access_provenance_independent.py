@@ -403,7 +403,7 @@ def test_policy_and_group_schema_upgrade_preserves_archive_bytes_and_untouched_o
             assert injected == [True] and after == before
             return
         from tests.asset_group_schema_assertions import assert_group_extension
-        assert after['version'] == 7
+        assert after['version'] == 8
         assert_group_extension(before['ddl'], after['ddl'])
         assert dict(after['reports']) == {key: raw.decode() for key, raw in archived.items()}
         for table, caches in [('scans', {'overall_risk_score'}), ('agents', {'risk_score', 'risk_level'})]:

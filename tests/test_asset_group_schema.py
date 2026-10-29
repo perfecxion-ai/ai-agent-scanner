@@ -86,7 +86,7 @@ def test_fresh_registration_is_exact_and_restart_never_churns(database):
     assert register_asset_group_metadata(metadata) == (metadata.tables[INDEX_TABLE], metadata.tables[PUBLICATION_TABLE])
     schema.initialize_schema(engine, metadata)
     with engine.connect() as connection:
-        assert connection.scalar(select(metadata.tables['schema_version'].c.version)) == 7
+        assert connection.scalar(select(metadata.tables['schema_version'].c.version)) == 8
         triggers = dict(connection.exec_driver_sql("SELECT name,sql FROM sqlite_master WHERE type='trigger'").all())
         assert triggers == {**SCHEMA_FIVE_TRIGGERS, **TRIGGER_DEFINITIONS}
         indexes = dict(connection.exec_driver_sql("SELECT name,sql FROM sqlite_master WHERE type='index'").all())
@@ -110,10 +110,10 @@ def test_schema_six_upgrade_preserves_every_existing_byte_and_cache(database):
     schema.initialize_schema(engine, metadata)
     definitions, rows = fingerprint(engine)
     for name in before_rows:
-        assert rows[name] == ([(1, 7)] if name == 'schema_version' else before_rows[name])
+        assert rows[name] == ([(1, 8)] if name == 'schema_version' else before_rows[name])
     assert set(rows) - set(before_rows) == TABLE_NAMES
     assert [entry for entry in definitions if entry in before_definitions] == before_definitions
-    assert len(definitions) - len(before_definitions) == 10  # 2 tables,2 primary indexes,3 indexes,3 triggers.
+    assert len(definitions) - len(before_definitions) == 11  # 2 tables,2 primary indexes,4 indexes,3 triggers.
     assert rows[INDEX_TABLE] == rows[PUBLICATION_TABLE] == []
     after = fingerprint(engine)
     schema.initialize_schema(engine, metadata)
@@ -121,7 +121,7 @@ def test_schema_six_upgrade_preserves_every_existing_byte_and_cache(database):
 
 
 @pytest.mark.parametrize('old_version', [1, 2, 3, 4, 5])
-def test_known_older_upgrade_order_still_reaches_seven(database, old_version):
+def test_known_older_upgrade_order_still_reaches_eight(database, old_version):
     engine, metadata = database
     old = historical_metadata(version=old_version)
     old.create_all(engine)
@@ -130,7 +130,7 @@ def test_known_older_upgrade_order_still_reaches_seven(database, old_version):
         seed_source(connection, old)
     schema.initialize_schema(engine, metadata)
     with engine.connect() as connection:
-        assert connection.scalar(select(metadata.tables['schema_version'].c.version)) == 7
+        assert connection.scalar(select(metadata.tables['schema_version'].c.version)) == 8
         assert connection.scalar(select(metadata.tables['scan_result'].c.result)) == {'original': [1, 2], 'synthetic': True}
         assert connection.scalar(select(metadata.tables['discovered_agent'].c.id)) == 'observation-a'
         assert connection.scalar(select(metadata.tables['discovered_agent'].c.risk_score)) is None
@@ -313,7 +313,7 @@ def test_frozen_table_descriptors_have_no_server_defaults_or_foreign_keys(databa
         assert [(column.name, str(column.type).upper(), column.nullable) for column in table.columns] == list(expected)
         assert all(column.server_default is None for column in table.columns)
         assert not table.foreign_keys
-    assert len(INDEX_DEFINITIONS) == len(TRIGGER_DEFINITIONS) == 3
+    assert len(INDEX_DEFINITIONS) == 4 and len(TRIGGER_DEFINITIONS) == 3
     assert schema.VERSION_SEVEN_TABLES - schema.VERSION_SIX_TABLES == TABLE_NAMES
 
 

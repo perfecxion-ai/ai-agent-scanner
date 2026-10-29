@@ -5,9 +5,12 @@ checkout. This gate needs Python, SQLite, and the server dependencies. It uses
 owned synthetic data and its own loopback server. Existing lab services, secrets,
 operator databases, profiles, schedules, and model calls are unnecessary.
 
-The public script upgrades a frozen schema-6 fixture through real single-worker
-Gunicorn, then checks grouping and finding history across 10,000 observations and
-three organizations. Its producers use a complete-capture transport test double
+The public script upgrades a frozen schema-6 fixture to schema 8 through real
+single-worker Gunicorn, then checks grouping and finding history across the
+original 10,000 observations, three organizations and 24 groups. A separate fourth
+organization adds five risk-control observations and five groups: three supported
+70/high targets, an assessed zero and an unknown. The original traversal oracle
+and 180-second shared deadline remain in force. Its producers use a complete-capture transport test double
 without target sockets; the authenticated Gunicorn API uses real loopback HTTP.
 These are
 repeated observations, not 10,000 deployments or a sensitivity measurement.
@@ -22,7 +25,8 @@ configuration:
 set -eu
 : "${AIS_ASSET_GROUP_REVISION:?Set the full merged SHA from the handoff}"
 umask 077
-test -z "$(git status --porcelain)"
+AIS_GROUP_STATUS=$(git status --porcelain)
+test -z "$AIS_GROUP_STATUS"
 git checkout --detach "$AIS_ASSET_GROUP_REVISION"
 test "$(git rev-parse HEAD)" = "$AIS_ASSET_GROUP_REVISION"
 AIS_GROUP_ROOT=$(mktemp -d)
@@ -55,6 +59,9 @@ ais_group_capture backup-normal "$AIS_GROUP_PY" scripts/acceptance-backup-restor
 ais_group_capture backup-optimized "$AIS_GROUP_PY" -O scripts/acceptance-backup-restore.py --timeout-seconds 5
 if "$AIS_GROUP_PY" -Werror -m pytest -o asyncio_default_fixture_loop_scope=function \
   tests/test_asset_identity.py tests/test_asset_group_schema.py \
+  tests/test_asset_group_risk.py tests/test_asset_group_risk_schema.py \
+  tests/test_asset_group_risk_review.py tests/test_asset_group_risk_plans.py \
+  tests/test_inventory_acceptance.py tests/test_nullable_independent_review.py \
   tests/test_asset_groups.py tests/test_asset_group_review.py \
   tests/test_asset_group_prepared_reads.py tests/test_asset_group_prepared_review.py \
   tests/test_asset_group_source_reads.py tests/test_asset_group_source_review.py \
@@ -70,15 +77,35 @@ else
   printf '%s\n' "$AIS_GROUP_EXIT" > "$AIS_GROUP_OUT/focused-tests.exit"
   AIS_GROUP_FAILED=1
 fi
-test -z "$(git status --porcelain)" || AIS_GROUP_FAILED=1
+if git status --porcelain > "$AIS_GROUP_OUT/source-status.txt"
+then
+  test ! -s "$AIS_GROUP_OUT/source-status.txt" || AIS_GROUP_FAILED=1
+else
+  AIS_GROUP_FAILED=1
+fi
 printf 'captured_gate_failure=%s\n' "$AIS_GROUP_FAILED" > "$AIS_GROUP_OUT/result.txt"
 test "$AIS_GROUP_FAILED" -eq 0
 ```
 
 All five exit captures must be zero. Both group receipts must report
-`asset-group-acceptance-v1`, `accepted: true`, and 10,000 observations. Both backup
-receipts must accept all fourteen cases. Preserve nonzero exits and diagnostics
+`asset-group-acceptance-v2`, `accepted: true`, schema before 6 and after/target 8,
+and `observation_count: 10000`. The three `traversal_counts` entries must still sum
+to 10,000 observations and contain eight groups each. `risk_fixture_counts` must
+separately report five observations and five groups. All seventeen assertion names
+must match the pinned script. Both backup receipts must accept all fifteen cases,
+including the distinct frozen schema-7 and current schema-8 cases. Preserve nonzero exits and diagnostics
 when a gate fails. Do not replace a failed receipt with a successful retry.
+
+The focused plan cases recreate the two valid indexes in both creation orders
+and exercise older, tied and newer nonmatching groups. They check the actual
+filtered SELECT and continuation range, while retaining source reopening and
+complete result checks. A failure includes the connected SQLite version and
+compile options.
+
+The focused command also runs both existing inventory real-server gates. They
+check schema-4-to-8 policy reconciliation, exhaustive observation filters, stale
+cache restoration, restart and operator-input isolation. The nullable upgrade
+review retains its exact operator-index and derived-index preservation checks.
 
 The group receipts include numeric `page_retries` counts for `initial` and
 `restart`. Pagination retries only the documented
@@ -93,9 +120,23 @@ eventual complete traversal within the budget, not uninterrupted availability.
 The group gate checks complete group/history traversal, original occurrence
 references, latest risk versus prior confirmations, tenant and cursor scope,
 source changes, rollback, malformed-source refusal, exact source restoration,
-and restart. Separate focused HTTP tests exercise cache changes followed by
+and restart. It additionally compares each of the six risk-level filters against
+identities and latest canonical risk derived independently from the original
+pipeline sources. Filtered pages must retain ordering and exact canonical risk;
+unknown scores stay null and assessed zero remains zero. The fourth owner's
+three high targets force positive filtered pagination. Normalized filters retain
+the cursor scope; changing or omitting the filter, changing the page limit,
+cross-owner reuse, duplicate filters and history filters are refused. Restart
+must reproduce every filter's count and complete-view digest. Results appear in
+`risk_filter_counts` for all four owners and six levels. The positive owner must
+have counts `high: 3`, `minimal: 1`, `unknown: 1`, and zero for the other levels.
+An unreadable older source must also block a filter that would otherwise be
+empty. Separate focused HTTP tests exercise cache changes followed by
 publication-metadata restoration without racing background repair. The stopped
-backup test includes a populated published cache.
+backup test includes a populated published cache. Eight private values, including
+all four owner tokens, are checked across the same response, log and fixture
+surfaces. The original inventory helper's seven-value sweep remains intact, with
+an additional sweep for the fourth token.
 
 Retain the receipts and focused test summary. They establish what the pinned
 assertions checked; they do not independently attest target seeding or storage
@@ -105,5 +146,8 @@ operator configuration, keys, evidence profiles, and the temporary environment.
 
 This is a native SQLite and process-lifecycle retest. It does not measure model
 detection sensitivity, prove credential or principal equivalence, or establish
-PostgreSQL, distributed-server, or enterprise acceptance. Dashboard group views
-and source-bound risk filtering remain separate increments.
+PostgreSQL, distributed-server, or enterprise acceptance. Observation-index
+acceleration for `/api/agents`, dashboard group views and logical findings remain
+separate increments. Readiness still proves publication-wide source and row
+counts before using the risk index; this gate does not establish unlimited scale
+or continuous availability.

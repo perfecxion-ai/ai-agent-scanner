@@ -4,7 +4,7 @@ Use the exact merged revision supplied with the handoff in a disposable clean
 checkout. Make that revision available through the normal code-transfer path.
 The public gate creates its own private schema-4 database, upgrades it through
 real single-worker Gunicorn, and exercises 10,000 observations across three
-synthetic organizations. Version 3 of the gate checks schema 4 to 7 cache
+synthetic organizations. Version 3 of the gate checks schema 4 to 8 cache
 reconciliation, then deliberately restores the owned fixture's stale caches
 before traversal. These are repeated observations of 12 synthetic assets,
 not 10,000 deployments or a model-sensitivity measurement.
@@ -65,8 +65,8 @@ for mode in ('normal', 'optimized'):
              and value.get('format_version') == 'inventory-acceptance-v3'
              and value.get('observation_count') == 10000
              and value.get('schema_before') == 4
-             and value.get('schema_after') == 7
-             and value.get('schema_target') == 7
+             and value.get('schema_after') == 8
+             and value.get('schema_target') == 8
              and value.get('runtime', {}).get('source_revision') == revision
              and value.get('runtime', {}).get('tracked_source_modified') is False
              and value.get('server_exits') == [
@@ -79,8 +79,8 @@ PY
 
 Also capture normal and optimized
 [backup/restore acceptance](jobs.md#disposable-backuprestore-acceptance) on this
-same revision. Both commands must accept all fourteen cases, including frozen
-schema-5 and schema-6 sources and a genuinely initialized schema-7 source.
+same revision. Both commands must accept all fifteen cases, including frozen
+schema-5, schema-6 and schema-7 sources and a genuinely initialized schema-8 source.
 
 ## What the gate establishes
 
@@ -92,7 +92,7 @@ cursors. It verifies archives, existing row fields, an operator-style index,
 recognized generation definitions, and absence of admitted work. Before restoring
 stale test caches it checks canonical risk for all 12 scan summaries and 10,000
 observations. It then proves exact original stale rows, archive preservation and
-unchanged schema-6 restart, so traversal still exercises contradictory caches.
+unchanged schema-8 restart, so traversal still exercises contradictory caches.
 
 Real process exits and final assertion identities are part of the result. Privacy
 checks cover the mandatory synthetic/runtime secret set, HTTP response bodies and

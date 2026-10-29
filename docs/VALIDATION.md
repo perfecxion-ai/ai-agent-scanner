@@ -1907,6 +1907,122 @@ occurrences, not independent vulnerabilities. This does not establish model
 sensitivity, principal/credential equivalence, deployed storage or power-loss
 durability, PostgreSQL/distributed support, release approval or enterprise readiness.
 
+### Indexed group risk local acceptance
+
+R1.4b2a adds normalized `risk_level` filtering to the authenticated group list.
+It matches only the latest canonical observation, preserving null unknown scores,
+supported assessed zero and earlier confirmation history. History rejects filters;
+the observation API retains its existing alias-based eligibility. Grouped risk
+also requires matching snapshot target selectors, so mismatched historical
+snapshots can differ between those views. See the [contract](asset-groups.md).
+
+Schema 8 adds six nullable derived facts and one partial risk index. Independent
+frozen schema-7 fixtures preserve populated publications, staged rows, original
+fields, archives, scalar caches, generations, schedules and accepted indexes.
+Four injected migration failures roll back columns, index and version together.
+Stopped backup/restore and idempotent restart preserve the same source data. The
+public backup gate now has distinct historical v7 and current v8 cases, fifteen
+total; both normal and optimized modes pass.
+
+The complete source/publication readiness proof runs before SQL filtering.
+Published cache changes cannot hide a matching high row by restoring publication
+metadata: ordinary edits unseal it and produce an unavailable operation. Selected
+rows reopen their saved sources and compare all six facts. Bounded SQL selectors
+distinguish genuine nulls from refused oversized or wrongly typed values.
+The independent review caught an oversized non-null policy value being interpreted
+as null; explicit null flags and regressions close it. Another actual-plan review
+found that continuation predicates could rescan earlier matching heads. A redundant
+timestamp upper bound preserves the original tie predicate and enables the risk
+index's range search without a temporary sort on SQLite 3.40.1, 3.45.1 and 3.53.1.
+The complete readiness counts remain O(N); this is not constant-time inventory or
+protection against full database forgery by a writer with equivalent filesystem
+access. Continuous writes can keep a projection unavailable.
+
+Local evidence includes 44 combined risk/schema cases, of which eight independent
+cases also pass separately on SQLite 3.40.1 and 3.45.1. The author passes 134 core
+cases and 148 compatibility/helper cases, with overlapping suites; these counts
+are not additive. A wider 154-case compatibility set passes on SQLite 3.40.1 and
+3.45.1 before the range-only follow-up, and all 29 risk cases pass afterward on
+all three engines. The integrated gate/retry helper set passes 71 cases with two
+real-server tests separately exercised by the full gate. Warnings are errors.
+
+The first integrated coverage run at `6346b0b` records 5,468 passes and seven
+failures in 774.23 seconds. Six failures come from the older inventory harness's
+schema-7 target constant; the seventh is an exact derived-index expectation that
+omits the new risk index. Correcting the harness target/assertion label and adding
+only the recognized index preserves the original source/cache/archive and DDL
+oracles. Forty inventory helper cases and both normal/optimized inventory server
+gates pass afterward; new controls still reject a missing or altered risk index.
+The integrated inventory/nullable regression set passes 74 cases in 72.47 seconds.
+The updated native guide includes these inventory and nullable-upgrade regressions.
+
+Both extended `asset-group-acceptance-v2` gates pass on an owned Python
+3.12.3/SQLite 3.40.1 compatibility runtime at clean `a781f64`, taking
+52.205/51.440 seconds. Each accepts all seventeen assertions under the unchanged
+180-second budget, upgrades schema 6 to 8, and preserves the original three-owner,
+10,000-observation/24-group oracle. A separate fourth owner has five observations
+and groups: three genuine controlled-pipeline 70/high targets, an assessed zero
+and an unknown. Exact filter sets and full-view digests match source-derived
+expectations across all four owners and six levels, including after restart.
+Each phase records zero pagination retries and clean server exits. Privacy checks
+cover eight known values plus the private reference; no arbitrary-secret or
+model-sensitivity conclusion follows.
+
+Independent recomputation over 79 scanner/CLI files yields
+`b852f471fee0621f8d67388e691a8e83dd41f56a78cb6495fd823d9f1cf2d6e5`.
+Both receipts match that source and the public driver digest
+`fb813eec07264c658a011553e27c6905c0f5ffb50677ed92057ce06a5c020d80`.
+The projection policy is
+`ad885702be3bb89a96a7fc36609f0a5f534e193a79719a6d4e939d075e0da2a4`;
+the group policy is
+`e57de72ee316f9f7a16a2ea208c82933c1df9fc84f08e45ef3f7ce72ffbbe889`.
+Ruff, the configured Bandit gate, package metadata and installed-wheel CLI recovery
+pass. All 79 runtime files in the wheel and source distribution match the tested
+checkout; the new module and regression files are included as appropriate.
+Full-suite and required PR/post-merge checks are tracked in
+[PR #89](https://github.com/perfecxion-ai/ai-agent-scanner/pull/89).
+
+Before the index refinement below, the complete local suite passes 5,477 cases
+in 826.19 seconds with 93% coverage and warnings as errors. CI run `40800251585`
+then passes five jobs and has plan failures in three jobs: Python 3.10.22 has one failure
+and 5,476 passes; Python 3.12.15 and 3.13 each have two failures and 5,475 passes.
+They select the older page index for filtered continuation ranges. The CI logs
+identify SQLAlchemy 2.0.55 and 2.1.6 but do not capture SQLite versions, so those
+versions cannot be inferred from the interpreters. These failed results remain
+recorded; correct result dictionaries alone do not close the access-plan issue.
+
+Controlled fresh-connection probes reproduce the choice by reversing valid
+index creation order on SQLite 3.40.1 and 3.45.1. When newer nonmatches are outside
+the timestamp range, the alternative plan is efficient. With 650 tied nonmatches
+and six matching heads, one probe consumes 7,570 SQLite VM steps rather than 519.
+The new, unmerged schema-8 index now includes the constant `is_latest` key before
+`risk_level`, while retaining the partial `WHERE is_latest = 1` predicate. It uses
+520 steps in both creation orders and all three timestamp distributions, without
+a planner hint. In a separate 656-head storage probe it adds 656 payload bytes and no allocated
+pages; this is a local measurement, not a production storage or latency promise.
+Source/row/field comparisons, read deadlines, continuation predicates and the
+180-second gate budget are unchanged. Exact migration and backup DDL oracles
+recognize only the refined definition.
+
+Six permanent cases exercise both index orders and older, tied and newer
+nonmatches through actual API pages. They retain complete canonical result and
+source-reopening checks, then explain the executed first and continuation SELECTs.
+Failures include the connected SQLite version and compile options. The focused
+123-case set passes on all three SQLite engines. The refined 79-file source digest is
+`bf1f96fe64b5e9f3dd711e9499ab01848e6c37d1e1a35ae288bded8486261831`;
+the projection policy is
+`2c28e632c518535a0b2993347475f9f9ef5fc57eea55c2af62347e41a56e84e1`
+and group policy is
+`e55b26e90a77b0ae777b1ed26fac163245e45e73fcd7035c8a46983792f748c2`.
+Final full-suite, packaging, refreshed compatibility gates and required delivery
+checks are recorded in PR #89.
+
+These are local compatibility and controlled-fixture results. The fresh
+[native gate](asset-groups-retest.md) at the final merged pin remains required;
+the accepted `1b164df` archive above covers the preceding schema-7 grouping slice.
+Indexed observation acceleration, dashboard grouping and logical-finding
+consolidation remain open, along with the remaining R2 through R4 work.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DDL, DateTime, Float, Index, Integer, JSON, MetaData, String, Table, Text, event
+from sqlalchemy import BigInteger, Boolean, Column, DDL, DateTime, Float, Index, Integer, JSON, MetaData, String, Table, Text, event
 
 
 BASE_TABLES = frozenset({'scan_session', 'discovered_agent'})
@@ -12,8 +12,46 @@ VERSION_THREE_TABLES = VERSION_TWO_TABLES | {'scan_schedule', 'scan_occurrence'}
 VERSION_FOUR_TABLES = VERSION_THREE_TABLES
 VERSION_FIVE_TABLES = VERSION_FOUR_TABLES | {'inventory_generation'}
 VERSION_SIX_TABLES = VERSION_FIVE_TABLES
+VERSION_SEVEN_TABLES = VERSION_SIX_TABLES | {'asset_group_index', 'asset_group_publication'}
 LAYOUTS = {0: BASE_TABLES, 1: VERSION_ONE_TABLES, 2: VERSION_TWO_TABLES, 3: VERSION_THREE_TABLES,
-           4: VERSION_FOUR_TABLES, 5: VERSION_FIVE_TABLES, 6: VERSION_SIX_TABLES}
+           4: VERSION_FOUR_TABLES, 5: VERSION_FIVE_TABLES, 6: VERSION_SIX_TABLES, 7: VERSION_SEVEN_TABLES}
+
+# Exact schema 7 group descriptors captured at 1b164df, without live registrations.
+SCHEMA_SEVEN_GROUP_COLUMNS = {
+    'asset_group_index': (
+        ('organization_id', 'VARCHAR(64)', False), ('build_id', 'VARCHAR(32)', False),
+        ('observation_id', 'VARCHAR(64)', False), ('scan_id', 'VARCHAR(64)', False),
+        ('report_asset_id', 'VARCHAR(256)', True), ('group_id', 'VARCHAR(64)', False),
+        ('identity_status', 'VARCHAR(16)', False), ('unmerged_reason', 'VARCHAR(64)', True),
+        ('target', 'JSON', True), ('observed_at_us', 'BIGINT', False),
+        ('agent_type', 'VARCHAR(100)', False), ('is_latest', 'BOOLEAN', False),
+        ('history_complete', 'BOOLEAN', False), ('group_history_complete', 'BOOLEAN', False),
+        ('supported_confirmation_count', 'INTEGER', True), ('archived_claim_count', 'INTEGER', True),
+        ('group_observation_count', 'INTEGER', False),
+        ('group_supported_confirmation_count', 'INTEGER', True),
+        ('group_archived_claim_count', 'INTEGER', True), ('publication_nonce', 'VARCHAR(32)', True),
+        ('source_generation', 'VARCHAR(32)', False), ('projection_policy', 'VARCHAR(64)', False),
+    ),
+    'asset_group_publication': (
+        ('organization_id', 'VARCHAR(64)', False), ('active_build_id', 'VARCHAR(32)', True),
+        ('active_generation', 'VARCHAR(32)', True), ('active_nonce', 'VARCHAR(32)', True),
+        ('active_policy', 'VARCHAR(64)', True), ('active_row_count', 'INTEGER', True),
+        ('active_group_count', 'INTEGER', True), ('building_build_id', 'VARCHAR(32)', True),
+        ('building_generation', 'VARCHAR(32)', True), ('building_policy', 'VARCHAR(64)', True),
+        ('after_scan_id', 'VARCHAR(64)', True), ('after_observation_id', 'VARCHAR(64)', True),
+        ('processed_count', 'INTEGER', False), ('error_code', 'VARCHAR(64)', True),
+    ),
+}
+SCHEMA_SEVEN_GROUP_INDEXES = (
+    'CREATE UNIQUE INDEX ux_asset_group_head ON asset_group_index (organization_id, build_id, group_id) WHERE is_latest = 1',
+    'CREATE INDEX ix_asset_group_head_page ON asset_group_index (organization_id, build_id, publication_nonce, source_generation, projection_policy, is_latest, observed_at_us DESC, group_id)',
+    'CREATE INDEX ix_asset_group_history ON asset_group_index (organization_id, build_id, publication_nonce, source_generation, projection_policy, group_id, observed_at_us DESC, observation_id)',
+)
+SCHEMA_SEVEN_GROUP_TRIGGERS = (
+    'CREATE TRIGGER aiscan_asset_group_index_insert AFTER INSERT ON asset_group_index WHEN NEW.publication_nonce IS NOT NULL OR EXISTS (SELECT 1 FROM asset_group_publication WHERE organization_id = NEW.organization_id AND active_build_id = NEW.build_id) BEGIN UPDATE asset_group_publication SET active_build_id = NULL, active_generation = NULL, active_nonce = NULL, active_policy = NULL, active_row_count = NULL, active_group_count = NULL WHERE organization_id = NEW.organization_id AND active_build_id = NEW.build_id;UPDATE asset_group_index SET publication_nonce = NULL WHERE organization_id = NEW.organization_id AND build_id = NEW.build_id AND observation_id = NEW.observation_id AND publication_nonce IS NOT NULL; END',
+    'CREATE TRIGGER aiscan_asset_group_index_update AFTER UPDATE ON asset_group_index WHEN OLD.publication_nonce IS NOT NULL OR EXISTS (SELECT 1 FROM asset_group_publication WHERE organization_id = OLD.organization_id AND active_build_id = OLD.build_id) OR EXISTS (SELECT 1 FROM asset_group_publication WHERE organization_id = NEW.organization_id AND active_build_id = NEW.build_id) BEGIN UPDATE asset_group_publication SET active_build_id = NULL, active_generation = NULL, active_nonce = NULL, active_policy = NULL, active_row_count = NULL, active_group_count = NULL WHERE organization_id = OLD.organization_id AND active_build_id = OLD.build_id;UPDATE asset_group_publication SET active_build_id = NULL, active_generation = NULL, active_nonce = NULL, active_policy = NULL, active_row_count = NULL, active_group_count = NULL WHERE organization_id = NEW.organization_id AND active_build_id = NEW.build_id;UPDATE asset_group_index SET publication_nonce = NULL WHERE organization_id = NEW.organization_id AND build_id = NEW.build_id AND observation_id = NEW.observation_id AND publication_nonce IS NOT NULL; END',
+    'CREATE TRIGGER aiscan_asset_group_index_delete AFTER DELETE ON asset_group_index WHEN OLD.publication_nonce IS NOT NULL OR EXISTS (SELECT 1 FROM asset_group_publication WHERE organization_id = OLD.organization_id AND active_build_id = OLD.build_id) BEGIN UPDATE asset_group_publication SET active_build_id = NULL, active_generation = NULL, active_nonce = NULL, active_policy = NULL, active_row_count = NULL, active_group_count = NULL WHERE organization_id = OLD.organization_id AND active_build_id = OLD.build_id; END',
+)
 
 # Exact schema 5 SQL captured at 6af7fa2, independent of current registrations.
 SCHEMA_FIVE_TRIGGERS = {
@@ -38,7 +76,7 @@ def historical_metadata(names=None, *, version=3):
     if version not in LAYOUTS:
         raise ValueError('Unsupported historical fixture version')
     selected = LAYOUTS[version] if names is None else frozenset(names)
-    if not selected <= VERSION_FIVE_TABLES:
+    if not selected <= VERSION_SEVEN_TABLES:
         raise ValueError('Unsupported historical fixture tables')
     metadata = MetaData()
     Table('scan_session', metadata,
@@ -140,13 +178,25 @@ def historical_metadata(names=None, *, version=3):
                           ('scan_occurrence', 'schedule_id')):
         Index(f'ix_{table}_{column}', metadata.tables[table].c[column])
     # Schema 6 changed the evidence policy, preserving the schema 5 physical DDL.
-    if version in {5, 6}:
+    if version in {5, 6, 7}:
         scans, agents = metadata.tables['scan_session'], metadata.tables['discovered_agent']
         Index('ix_inventory_scan_session_org_id', scans.c.organization_id, scans.c.id)
         Index('ix_inventory_observation_scan_order', agents.c.scan_id, agents.c.discovered_at.desc(), agents.c.id)
         Index('ix_inventory_observation_scan_type_order', agents.c.scan_id, agents.c.agent_type,
               agents.c.discovered_at.desc(), agents.c.id)
         for statement in SCHEMA_FIVE_TRIGGERS.values():
+            event.listen(metadata, 'after_create', DDL(statement))
+    if version == 7:
+        primary = {'asset_group_index': {'organization_id', 'build_id', 'observation_id'},
+                   'asset_group_publication': {'organization_id'}}
+        for name, columns in SCHEMA_SEVEN_GROUP_COLUMNS.items():
+            def old_type(kind):
+                return (String(int(kind[8:-1])) if kind.startswith('VARCHAR(')
+                        else {'BIGINT': BigInteger, 'BOOLEAN': Boolean, 'INTEGER': Integer, 'JSON': JSON}[kind]())
+            Table(name, metadata, *(Column(column, old_type(kind), nullable=nullable,
+                                          primary_key=column in primary[name])
+                                   for column, kind, nullable in columns))
+        for statement in SCHEMA_SEVEN_GROUP_INDEXES + SCHEMA_SEVEN_GROUP_TRIGGERS:
             event.listen(metadata, 'after_create', DDL(statement))
     for name in list(metadata.tables):
         if name not in selected:

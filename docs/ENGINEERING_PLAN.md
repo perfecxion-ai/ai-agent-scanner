@@ -41,7 +41,7 @@ proposed calls and observed actions are distinct outcomes.
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Initial controls merged in PR #64. V3 actual-request provenance/denial correction and schema-6 historical cache reconciliation merged in PR #79 with all eight PR/post-merge checks. Scoped native Python 3.11.2/SQLite 3.40.1 access, backup and inventory acceptance passes with recorded private-harness qualifications |
 | R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check and prompt/tenant/access receipts have qualified native acceptance. R1.2e CLI crash files merged in PR #83; PR #84 manual CI and current main pass all eight checks. Scoped native Python 3.11.2 acceptance passes 119 cases, packaging and installed recovery with recorded harness/privacy limits; future families and private API inputs remain separate |
 | R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Merged in PR #72 with all local, independent, and eight PR/post-merge CI gates passed; scoped native reconstructed-fixture upgrade/restart accepted with recorded qualifications |
-| R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a traversal and R1.4b1 grouping have qualified native acceptance. PR #87's corrected pin passes both unchanged 180-second modes on Python 3.11.2/SQLite 3.40.1 with all fourteen assertions, 10,000 observations and 24 groups. The original PR #86 native failures remain recorded. R1.4b2 authoritative risk indexes, dashboard group views and logical-finding consolidation remain open |
+| R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a traversal and R1.4b1 grouping have qualified native acceptance at PR #87's corrected pin; the original native failures remain recorded. R1.4b2a group risk indexes and filters pass focused, independent and local SQLite compatibility gates in PR #89; fresh native acceptance remains open. Indexed observation filtering, dashboard groups and logical findings remain separate |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | R1.5a development/content identity passes local and independent gates; required delivery CI is recorded on its PR. Release checksums, SBOM, dependency/build attestation and deployed upgrade acceptance remain open |
 | R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
 | R2.2 | Advanced model/evidence/suite setup depends on manual identifiers and JSON | Guided discovery-to-assessment flow and CLI setup/diagnostics/preview expose ready, unsupported, missing, and inapplicable prerequisites; secret references never become ordinary saved values | Planned |
@@ -188,6 +188,27 @@ source-bound risk indexes, dashboard group views and logical-finding consolidati
 need separate semantics and acceptance. Group IDs do not establish credential or
 principal equivalence; history counts occurrences rather than unique vulnerabilities.
 Keep release publication, artifact attestations and the rest of R1.5 separate.
+
+R1.4b2a adds `risk_level` filters for group lists through six canonical facts in
+the existing sealed publication. Schema 8 adds nullable columns and one partial
+index while preserving frozen schema-7 sources and cache fields. The complete
+readiness proof precedes SQL filtering; selected candidates are reopened and all
+six facts compared with their saved source. Unknown remains null, and earlier
+confirmed history never promotes the latest risk. Signed cursors bind normalized
+filters, and actual continuation plans use the timestamp range. Full readiness
+still counts all source/publication rows; this is not constant-time inventory.
+The partial risk index repeats the constant head flag as a key to avoid SQLite
+cost ties with the older page index on continuation ranges. Controlled regressions
+cover both valid index creation orders and older, tied and newer nonmatches.
+Focused and independent tests pass on SQLite 3.40.1, 3.45.1 and 3.53.1. The extended
+local compatibility gate retains the original 10,000-observation oracle and
+180-second budget, with separate positive risk controls. See
+[local acceptance](VALIDATION.md#indexed-group-risk-local-acceptance) and
+[delivery PR #89](https://github.com/perfecxion-ai/ai-agent-scanner/pull/89).
+A fresh pinned native run is required. The observation API retains its current
+alias-based eligibility; sharing the stricter grouped target binding with it needs
+an explicit compatibility decision before indexed observation acceleration.
+
 R1.5a uses canonical `1.2.0.dev0`, scoped deterministic source/catalog hashes,
 immutable new-run producer stamps and distinct exporter identity. Historical raw
 archives are not relabeled. Full local validation passes 4,142 cases, and

@@ -60,7 +60,7 @@ def test_complete_real_server_gate_isolated_from_operator_settings_and_alias_tmp
     assert output['assertions'] == list(gate.REQUIRED_ASSERTIONS)
     assert output['observation_count'] == 10000
     assert output['fixture_scope'] == 'repeated_observations_of_12_synthetic_assets'
-    assert output['schema_before'] == 4 and output['schema_after'] == output['schema_target'] == 7
+    assert output['schema_before'] == 4 and output['schema_after'] == output['schema_target'] == 8
     assert output['cache_policy_upgrade'] == {
         'scan_caches_reconciled': 12, 'observation_caches_reconciled': 10000,
         'original_stale_scan_caches_restored': 12, 'original_stale_observation_caches_restored': 10000}
@@ -368,7 +368,18 @@ def test_stale_restore_requires_exact_original_rows(policy_upgraded_fixture, mon
         gate.verify_upgrade_and_restore(directory, original, definitions, expected)
 
 
-def test_schema_six_restart_keeps_reintroduced_stale_caches_and_generations(policy_upgraded_fixture):
+@pytest.mark.parametrize('fault', ['missing', 'changed'])
+def test_schema_eight_requires_the_exact_derived_risk_index(policy_upgraded_fixture, fault):
+    directory, _, _, _, _, _ = policy_upgraded_fixture
+    with closing(gate.connection(directory, write=True)) as database, database:
+        database.execute('DROP INDEX ix_asset_group_head_risk_page')
+        if fault == 'changed':
+            database.execute('CREATE INDEX ix_asset_group_head_risk_page ON asset_group_index (risk_level)')
+    with pytest.raises(gate.GateFailure, match='^group_indexes_changed$'):
+        gate.check_schema(directory)
+
+
+def test_schema_eight_restart_keeps_reintroduced_stale_caches_and_generations(policy_upgraded_fixture):
     from src.core.schema import initialize_schema
     directory, original, definitions, expected, engine, metadata = policy_upgraded_fixture
     gate.verify_upgrade_and_restore(directory, original, definitions, expected)

@@ -52,7 +52,7 @@ def test_snapshot_quotes_hostile_fixture_identifiers():
         assert rows['audit_event'] == [(1,)]
 
 
-@pytest.mark.parametrize('version', [1, 2, 3, 4, 5, 6])
+@pytest.mark.parametrize('version', [1, 2, 3, 4, 5, 6, 7])
 def test_historical_seed_never_reads_live_orm_metadata(version):
     class UnavailableLiveMetadata:
         @property
@@ -67,7 +67,8 @@ def test_historical_seed_never_reads_live_orm_metadata(version):
                 assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == version
                 triggers = dict(connection.exec_driver_sql(
                     "SELECT name,sql FROM sqlite_master WHERE type='trigger'").all())
-                assert triggers == (TRIGGER_DEFINITIONS if version >= 5 else {})
+                assert triggers == (dict(TRIGGER_DEFINITIONS, **group_triggers) if version == 7 else
+                                    TRIGGER_DEFINITIONS if version >= 5 else {})
                 assert ('inventory_generation' in inspect(connection).get_table_names()) is (version >= 5)
                 for table, name in [('scan_session', 'overall_risk_score'), ('discovered_agent', 'risk_score')]:
                     column = next(value for value in inspect(connection).get_columns(table) if value['name'] == name)
@@ -87,10 +88,10 @@ def test_current_seed_uses_initializer_and_installs_recognized_triggers(monkeypa
         initialized.append(candidate)
         return original(engine, candidate)
     monkeypatch.setattr(schema, 'initialize_schema', initialize)
-    with owned_directory('v7') as directory:
+    with owned_directory('v8') as directory:
         engine = create_engine('sqlite:///' + str(directory / 'source.sqlite'))
         try:
-            acceptance.seed(server, engine, 7)
+            acceptance.seed(server, engine, 8)
             assert initialized == [metadata]
             with engine.connect() as connection:
                 assert connection.exec_driver_sql('SELECT version FROM schema_version').scalar_one() == schema.SCHEMA_VERSION

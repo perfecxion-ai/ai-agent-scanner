@@ -14,13 +14,14 @@ from src.core.inventory_generation import (
 )
 from src.core.asset_group_storage import (
     COLUMNS as ASSET_GROUP_COLUMNS, PRIMARY_KEYS as ASSET_GROUP_PRIMARY_KEYS,
+    SCHEMA_SEVEN_COLUMNS as ASSET_GROUP_SCHEMA_SEVEN_COLUMNS,
     TABLE_NAMES as ASSET_GROUP_TABLES, UNIQUE_HEAD_INDEX,
     INDEX_DEFINITIONS as ASSET_GROUP_INDEXES, AssetGroupSchemaError,
-    install_asset_group_storage, validate_asset_group_definitions,
+    install_asset_group_risk, install_asset_group_storage, validate_asset_group_definitions,
 )
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 BASE_TABLES = frozenset({"scan_session", "discovered_agent"})
 LEGACY_LAYOUTS = (BASE_TABLES, BASE_TABLES | {"scan_result"},
                   BASE_TABLES | {"scan_result", "scan_job"})
@@ -31,6 +32,7 @@ VERSION_FOUR_TABLES = VERSION_THREE_TABLES
 VERSION_FIVE_TABLES = VERSION_FOUR_TABLES | {INVENTORY_GENERATION_TABLE}
 VERSION_SIX_TABLES = VERSION_FIVE_TABLES
 VERSION_SEVEN_TABLES = VERSION_SIX_TABLES | ASSET_GROUP_TABLES
+VERSION_EIGHT_TABLES = VERSION_SEVEN_TABLES
 _NULLABLE_SCORES = {("scan_session", "overall_risk_score"), ("discovered_agent", "risk_score")}
 _INVALID_JSON = object()
 _DDL_QUOTES = re.compile(r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^\]]*\]|--[^\r\n]*|/\*[\s\S]*?\*/")
@@ -152,13 +154,14 @@ _PRIMARY.update({name: list(columns) for name, columns in ASSET_GROUP_PRIMARY_KE
 
 def _columns(name, version):
     if name in ASSET_GROUP_COLUMNS and version >= 7:
-        return {column: (kind, nullable) for column, kind, nullable in ASSET_GROUP_COLUMNS[name]}
+        columns = ASSET_GROUP_SCHEMA_SEVEN_COLUMNS if version == 7 else ASSET_GROUP_COLUMNS
+        return {column: (kind, nullable) for column, kind, nullable in columns[name]}
     return {column: (kind, True if version >= 4 and (name, column) in _NULLABLE_SCORES else nullable)
             for column, kind, nullable in _HISTORICAL[name]}
 
 
 def _validate_metadata(metadata, dialect):
-    if set(metadata.tables) != VERSION_SEVEN_TABLES:
+    if set(metadata.tables) != VERSION_EIGHT_TABLES:
         raise SchemaError("Unsupported application metadata")
     for name, table in metadata.tables.items():
         options = table.dialect_options['sqlite']
@@ -319,7 +322,7 @@ def initialize_schema(engine, metadata):
     if engine.dialect.name != "sqlite":
         raise SchemaError("Schema initialization currently supports SQLite only")
     _validate_metadata(metadata, engine.dialect)
-    expected = VERSION_SEVEN_TABLES
+    expected = VERSION_EIGHT_TABLES
     with engine.connect() as connection:
         connection.exec_driver_sql("BEGIN IMMEDIATE")
         try:
@@ -331,12 +334,13 @@ def initialize_schema(engine, metadata):
             if "schema_version" in names:
                 _validate_tables(connection, {"schema_version"}, 3)
                 rows = connection.execute(select(metadata.tables["schema_version"])).all()
-                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, 2, 3, 4, 5, 6, 7):
+                if len(rows) != 1 or rows[0][0] != 1 or rows[0][1] not in (1, 2, 3, 4, 5, 6, 7, 8):
                     raise SchemaError("Unsupported database schema version")
                 version = rows[0][1]
                 layouts = {1: VERSION_ONE_TABLES, 2: VERSION_TWO_TABLES,
                            3: VERSION_THREE_TABLES, 4: VERSION_FOUR_TABLES,
-                           5: VERSION_FIVE_TABLES, 6: VERSION_SIX_TABLES, 7: VERSION_SEVEN_TABLES}
+                           5: VERSION_FIVE_TABLES, 6: VERSION_SIX_TABLES, 7: VERSION_SEVEN_TABLES,
+                           8: VERSION_EIGHT_TABLES}
                 if names != layouts[version]:
                     raise SchemaError("Versioned database has missing or unexpected tables")
                 _validate_tables(connection, names, version)
@@ -360,6 +364,8 @@ def initialize_schema(engine, metadata):
                     _migrate_risk_values(connection, metadata)
                 if version < 7:
                     install_asset_group_storage(connection, metadata)
+                elif version == 7:
+                    install_asset_group_risk(connection, metadata)
                 if version < SCHEMA_VERSION:
                     connection.execute(update(metadata.tables["schema_version"]).where(
                         metadata.tables["schema_version"].c.id == 1).values(version=SCHEMA_VERSION))

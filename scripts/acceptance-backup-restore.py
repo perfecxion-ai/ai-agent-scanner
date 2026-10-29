@@ -21,7 +21,7 @@ import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = ("v1", "v2", "v3", "v4", "v5", "v6", "v7", "rollback1", "rollback2", "rollback3", "rollback5",
+CASES = ("v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "rollback1", "rollback2", "rollback3", "rollback5",
          "future", "incomplete", "lock")
 FILENAMES = {"source.sqlite", "backup.sqlite", "restore.sqlite", "old-copy.sqlite"}
 CACHE_OUTCOMES = {'assessed-zero': 'completed', 'assessed-high': 'completed',
@@ -32,7 +32,7 @@ CACHE_OUTCOMES = {'assessed-zero': 'completed', 'assessed-high': 'completed',
 def expected_assertions(case):
     assertions = ["stopped_readonly_backup_and_restore_integrity_schema_all_rows"]
     if case.startswith("v"):
-        if case in {"v4", "v5", "v6", "v7"}:
+        if case in {"v4", "v5", "v6", "v7", "v8"}:
             assertions.append("policy_refresh_preserves_sources_schema_and_unrelated_rows")
         assertions.extend(["upgrade_and_terminal_recovery", "queued_executed_once_without_active_replay",
                            "completed_evidence_audit_templates_preserved", "schedule_recovery_without_admission",
@@ -155,7 +155,7 @@ def seed(server, engine, version):
     from sqlalchemy import insert
     from src.core.schema import initialize_schema
     from tests.historical_schema import historical_metadata
-    if version < 7:
+    if version < 8:
         metadata = historical_metadata(version=version)
         metadata.create_all(engine)
     else:
@@ -163,7 +163,7 @@ def seed(server, engine, version):
         initialize_schema(engine, metadata)
     controlled = cache_fixtures()
     with engine.begin() as connection:
-        if version < 7:
+        if version < 8:
             connection.execute(insert(metadata.tables["schema_version"]).values(id=1, version=version))
         for identifier, status in (("completed", "completed"), ("queued", "queued"),
                                    ("running", "running"), ("cancel", "cancel_requested")):
@@ -252,6 +252,31 @@ def inventory_generation_state(server, engine):
     return generations
 
 
+def refresh_schema_preserved(before, after, version):
+    """Only schema 7's nullable derived facts and one risk index may be added."""
+    if version >= 8:
+        return before == after
+    if version < 7:
+        return set(map(tuple, before)) <= set(map(tuple, after))
+    old, new = {row[1]: tuple(row) for row in before}, {row[1]: tuple(row) for row in after}
+    risk_name = 'ix_asset_group_head_risk_page'
+    risk_sql = ('CREATE INDEX ix_asset_group_head_risk_page ON asset_group_index '
+                '(organization_id, build_id, publication_nonce, source_generation, '
+                'projection_policy, is_latest, risk_level, observed_at_us DESC, group_id) WHERE is_latest = 1')
+    if set(new) != set(old) | {risk_name} or new[risk_name] != (
+            'index', risk_name, 'asset_group_index', risk_sql):
+        return False
+    previous = old['asset_group_index']
+    additions = (', risk_score FLOAT, risk_level VARCHAR(20), risk_coverage_status VARCHAR(32), '
+                 'risk_assessment_status VARCHAR(32), risk_scoring_policy VARCHAR(64), security_status VARCHAR(32)')
+    marker = 'projection_policy VARCHAR(64) NOT NULL'
+    if previous[3].count(marker) != 1:
+        return False
+    expected = previous[:3] + (previous[3].replace(marker, marker + additions, 1),)
+    return new['asset_group_index'] == expected and all(new[name] == row for name, row in old.items()
+                                                       if name != 'asset_group_index')
+
+
 def exercise(server, engine, directory, version, case, baseline, deadline, checks):
     from sqlalchemy import event, inspect, select
     from src.core.jobs import DispatcherLock, JobDispatcher, JobStore, current_claim_owner
@@ -295,8 +320,7 @@ def exercise(server, engine, directory, version, case, baseline, deadline, check
                 result['schema_version'] = [(1, SCHEMA_VERSION)]
                 return result
             require(retained(upgraded['rows']) == retained(baseline['rows'])
-                    and (upgraded['schema'] == baseline['schema'] if version >= 7 else
-                         set(map(tuple, baseline['schema'])) <= set(map(tuple, upgraded['schema'])))
+                    and refresh_schema_preserved(baseline['schema'], upgraded['schema'], version)
                     and not any('DROP TABLE' in statement.upper() or '_aiscan_v4_' in statement
                                 for statement in statements),
                     'Policy refresh changed existing sources, schema, or unrelated rows')
