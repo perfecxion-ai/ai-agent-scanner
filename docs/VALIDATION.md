@@ -1998,7 +1998,7 @@ and six matching heads, one probe consumes 7,570 SQLite VM steps rather than 519
 The new, unmerged schema-8 index now includes the constant `is_latest` key before
 `risk_level`, while retaining the partial `WHERE is_latest = 1` predicate. It uses
 520 steps in both creation orders and all three timestamp distributions, without
-a planner hint. In that 656-head fixture it adds 656 payload bytes and no allocated
+a planner hint. In a separate 656-head storage probe it adds 656 payload bytes and no allocated
 pages; this is a local measurement, not a production storage or latency promise.
 Source/row/field comparisons, read deadlines, continuation predicates and the
 180-second gate budget are unchanged. Exact migration and backup DDL oracles
