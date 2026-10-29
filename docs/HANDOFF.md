@@ -289,7 +289,7 @@ index. Stale or unreadable sources return unavailable. See the
 [contract](asset-groups.md) and [local acceptance](VALIDATION.md#public-target-grouping-local-acceptance).
 
 PR #86 merged as `678fd717788d91a5062f4d3a723cc30979427871` with all eight PR and
-post-merge checks passing. The supplied native grouping gate remains failed:
+post-merge checks passing. The supplied native grouping gate at that revision failed:
 both 180-second modes time out, and SQLite 3.40.1 chooses a valid covering index
 that one focused assertion rejects. A separate 300-second diagnostic passes all
 fourteen assertions in 191.528 seconds without replacing those failed receipts.
@@ -307,10 +307,26 @@ documented retryable 503 can occur while a valid cursor remains usable. The gate
 now follows that narrow retry contract within its existing deadline and records
 phase retry counts, while retaining all negative controls and full-view checks.
 The original CI status was not captured, so its cause remains unproven; corrected
-delivery still requires all platform checks.
-These measurements do not replace the slower native runner. The [scoped native retest](asset-groups-retest.md)
-still needs a fresh pinned run after corrected-source delivery; it uses its own
-synthetic data and loopback Gunicorn API. R1.4b2 authoritative risk indexes, dashboard group views,
+delivery required all platform checks at that checkpoint.
+
+The corrected [scoped native retest](asset-groups-retest.md) now passes at PR #87's
+merged revision `1b164df8bdd4361dc92ef17b917bc1e63291fa91`. Both unchanged
+180-second modes accept all fourteen assertions, 10,000 observations and 24 groups
+in 129.273/135.675 seconds, with zero pagination retries and clean initial/restart
+server exits. Both fourteen-case backup modes and the expanded fourteen-file
+warnings-as-errors set pass (309 passed, two deselected). All five step exits,
+the driver and outer job exit are zero; the 37-record capture table reconciles.
+Native Python 3.11.2/SQLite 3.40.1 captures match the exact 78-file source digest
+and pinned component, policy and catalog hashes. See
+[native acceptance and qualifications](VALIDATION.md#supplied-native-asset-group-acceptance).
+This closes the R1.4b1 native correctness gate without replacing the failed
+`678fd71` receipts or historical CI failures. The Mac comparison and same-runner
+claims are producer attestations. Known-value/privacy sweeps cover supplied
+evidence; sanitized logs and absent raw databases/responses do not prove arbitrary
+secret absence. The private wrapper has setup, failure-propagation and cleanup
+limits, and its setup note understates the actual focused file count.
+
+R1.4b2 authoritative risk indexes, dashboard group views,
 credential/principal equivalence, logical-finding consolidation, and the remaining
 R2 through R4 work are separate. Group history counts occurrences, not independent
 vulnerabilities. No enterprise or release approval follows from these local gates.
