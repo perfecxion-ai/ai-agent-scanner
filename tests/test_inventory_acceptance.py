@@ -368,7 +368,18 @@ def test_stale_restore_requires_exact_original_rows(policy_upgraded_fixture, mon
         gate.verify_upgrade_and_restore(directory, original, definitions, expected)
 
 
-def test_schema_six_restart_keeps_reintroduced_stale_caches_and_generations(policy_upgraded_fixture):
+@pytest.mark.parametrize('fault', ['missing', 'changed'])
+def test_schema_eight_requires_the_exact_derived_risk_index(policy_upgraded_fixture, fault):
+    directory, _, _, _, _, _ = policy_upgraded_fixture
+    with closing(gate.connection(directory, write=True)) as database, database:
+        database.execute('DROP INDEX ix_asset_group_head_risk_page')
+        if fault == 'changed':
+            database.execute('CREATE INDEX ix_asset_group_head_risk_page ON asset_group_index (risk_level)')
+    with pytest.raises(gate.GateFailure, match='^group_indexes_changed$'):
+        gate.check_schema(directory)
+
+
+def test_schema_eight_restart_keeps_reintroduced_stale_caches_and_generations(policy_upgraded_fixture):
     from src.core.schema import initialize_schema
     directory, original, definitions, expected, engine, metadata = policy_upgraded_fixture
     gate.verify_upgrade_and_restore(directory, original, definitions, expected)

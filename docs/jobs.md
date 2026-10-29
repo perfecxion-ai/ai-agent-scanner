@@ -215,6 +215,13 @@ projection during idle maintenance; GET requests only read a current publication
 Unusable grouping evidence does not disable the scan queue. See
 [group semantics and limits](asset-groups.md).
 
+Schema 8 adds six nullable canonical risk facts to the derived group index and
+one partial risk-filter index. The schema-7 upgrade preserves existing source
+rows, cache fields, publication metadata and index/trigger definitions, adding
+only those columns and the recognized index in one transaction. Old publications
+remain unavailable under the new policy until idle maintenance rebuilds them.
+Current-schema restart validates storage without reclassifying source caches.
+
 Unknown tables, views, additional or altered triggers, expression indexes, additional constraints or unique indexes,
 `WITHOUT ROWID`/`STRICT` table options, explicit column collations or conflict policies,
 database column defaults, changed columns,
@@ -244,7 +251,7 @@ parent bounds child output, kills/reaps timed-out children, and removes the
 temporary databases after success or failure. JSON includes `accepted`, each
 case's assertions, and bounded failure details; failure returns nonzero.
 
-All fourteen cases include frozen schema 1/2/3/4/5/6 fixtures and a schema-7 fixture
+All fifteen cases include frozen schema 1/2/3/4/5/6/7 fixtures and a schema-8 fixture
 created through the real initializer. They contain completed evidence, agent snapshots, audit
 history, queued work, and previously active work. Templates and schedules are
 seeded where supported. After stopping and disposing seed connections, a read-only

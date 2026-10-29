@@ -35,7 +35,7 @@ from unittest.mock import AsyncMock, patch
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVATIONS = 10000
 FORMAT_VERSION = 'inventory-acceptance-v3'
-TARGET_SCHEMA_VERSION = 7
+TARGET_SCHEMA_VERSION = 8
 ORGANIZATIONS = ('inventory-a', 'inventory-b', 'inventory-c')
 CATEGORIES = ('high', 'zero', 'unknown', 'historical')
 RISK_FIELDS = ('risk_score', 'risk_level', 'risk_coverage_status', 'risk_scoring_policy',
@@ -45,7 +45,7 @@ OPERATOR_INDEX = ('CREATE INDEX operator_inventory_fixture ON discovered_agent '
 REQUIRED_ASSERTIONS = (
     'private_environment_and_owned_schema4_fixture',
     'genuine_controlled_access_high_zero_and_unassessed_sources',
-    'native_schema4_to7_policy_reconciliation_generation_indexes_and_triggers',
+    'native_schema4_to8_policy_reconciliation_generation_indexes_and_triggers',
     'complete_ordered_inventory_and_canonical_filters',
     'signed_cursor_tenant_tampering_and_invalid_limits',
     'committed_source_writes_invalidate_cursors',

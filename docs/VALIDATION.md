@@ -1946,6 +1946,16 @@ are not additive. A wider 154-case compatibility set passes on SQLite 3.40.1 and
 all three engines. The integrated gate/retry helper set passes 71 cases with two
 real-server tests separately exercised by the full gate. Warnings are errors.
 
+The first integrated coverage run at `6346b0b` records 5,468 passes and seven
+failures in 774.23 seconds. Six failures come from the older inventory harness's
+schema-7 target constant; the seventh is an exact derived-index expectation that
+omits the new risk index. Correcting the harness target/assertion label and adding
+only the recognized index preserves the original source/cache/archive and DDL
+oracles. Forty inventory helper cases and both normal/optimized inventory server
+gates pass afterward; new controls still reject a missing or altered risk index.
+The integrated inventory/nullable regression set passes 74 cases in 72.47 seconds.
+The updated native guide includes these inventory and nullable-upgrade regressions.
+
 Both extended `asset-group-acceptance-v2` gates pass on an owned Python
 3.12.3/SQLite 3.40.1 compatibility runtime at clean `a781f64`, taking
 52.205/51.440 seconds. Each accepts all seventeen assertions under the unchanged
