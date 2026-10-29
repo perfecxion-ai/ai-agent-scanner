@@ -331,6 +331,28 @@ credential/principal equivalence, logical-finding consolidation, and the remaini
 R2 through R4 work are separate. Group history counts occurrences, not independent
 vulnerabilities. No enterprise or release approval follows from these local gates.
 
+R1.4b2a implements indexed latest-risk filtering for group lists in
+[PR #89](https://github.com/perfecxion-ai/ai-agent-scanner/pull/89). Schema 8 adds
+six nullable derived facts and one partial index, preserving source records and
+existing schema-7 cache fields. Readiness checks cover the complete publication
+before filtering; selected rows must match a fresh canonical source projection.
+Prior confirmations remain in history, and unknown remains null. Filters bind
+signed cursors, including normalized equivalent values. Filtered continuation
+plans use a timestamp range while preserving tied-group ordering.
+
+Local focused/independent checks pass on SQLite 3.40.1, 3.45.1 and 3.53.1. Both
+extended gates pass on the owned Python 3.12.3/SQLite 3.40.1 compatibility runtime
+in 52.205/51.440 seconds, retaining the 180-second budget and original
+10,000-observation/24-group oracle plus five separate risk controls. Both backup
+modes pass all fifteen cases. See
+[local evidence](VALIDATION.md#indexed-group-risk-local-acceptance) and the PR for
+full-suite, packaging and required delivery checks. The
+[updated native gate](asset-groups-retest.md) needs a fresh merged pin on the
+original Python 3.11.2 runtime before this slice's native gate closes.
+Observation API risk indexing/eligibility, dashboard grouping and logical findings
+remain separate. Readiness remains O(N), and continuous writes can keep grouping
+unavailable; no broader deployment or sensitivity claim follows.
+
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
 operator retest only when a merged runtime change needs real-service validation,

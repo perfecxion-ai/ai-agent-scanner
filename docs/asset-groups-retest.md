@@ -60,6 +60,7 @@ ais_group_capture backup-optimized "$AIS_GROUP_PY" -O scripts/acceptance-backup-
 if "$AIS_GROUP_PY" -Werror -m pytest -o asyncio_default_fixture_loop_scope=function \
   tests/test_asset_identity.py tests/test_asset_group_schema.py \
   tests/test_asset_group_risk.py tests/test_asset_group_risk_schema.py \
+  tests/test_asset_group_risk_review.py \
   tests/test_asset_groups.py tests/test_asset_group_review.py \
   tests/test_asset_group_prepared_reads.py tests/test_asset_group_prepared_review.py \
   tests/test_asset_group_source_reads.py tests/test_asset_group_source_review.py \
