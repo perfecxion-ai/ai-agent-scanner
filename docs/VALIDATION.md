@@ -2110,6 +2110,78 @@ This fixture acceptance does not establish model sensitivity, principal/credenti
 equivalence, power-loss durability, PostgreSQL/distributed support, enterprise
 readiness or release approval.
 
+### Shared observation source binding local acceptance
+
+R1.4b2b1 closes a risk-attribution gap between observation inventory and public
+target groups. An alias could previously attach a supported score even when the
+saved snapshot's provider, model or endpoint referred to a different target.
+Both readers now use one safe-alias and target-binding implementation plus the
+same unique report-agent map and strict duplicate-member JSON decoder.
+
+A valid selector mismatch keeps the observation ID and displayed source alias,
+with null risk and `unknown`. Safe HTTP endpoint normalization retains supported
+high, partial and genuine zero scores. Valid bound sources can remain unmerged;
+credential, principal and complete cloud-resource equivalence are not inferred.
+Malformed JSON, duplicate members and refused selector scalars return a static
+503 incomplete operation, including for a filter that would otherwise be empty.
+Reads preserve original reports, rows and scalar caches. Schema 8, raw stored
+timestamp ordering, signed cursor scope, candidate/report/source/output limits
+and the five-second cooperative read deadline retain their contracts.
+
+Independent regression tests use unchanged frozen actual high/zero/partial
+archives, with only snapshots mutated for binding negatives. The corrected
+baseline has 29 failures and thirteen passes at `c12cead`; all 42 cases pass on
+the integrated correction on SQLite 3.53.1 and 3.40.1 with warnings as errors.
+They cover provider/model/endpoint and missing-selector mismatches, normalized
+endpoints, unique aliases, unmerged targets, duplicate JSON, scalar storage
+boundaries, raw timestamp order, sparse pages, source budgets and API errors.
+Five public-gate success/fault controls separately verify source restoration.
+Synthetic binding-component tests establish an assessed-risk precondition for
+unsafe aliases without relabeling modified historical receipts as actual runs.
+
+The full local coverage gate passes 5,563 tests in 887.76 seconds, with 93%
+coverage and warnings as errors. The author's 189 focused and 212 related cases
+overlap that suite and are not additive. Ruff and the configured Bandit gate
+pass. The small common error/timestamp module removes an import cycle while
+retaining the previous inventory imports for compatibility.
+
+Both real Gunicorn inventory modes return `inventory-acceptance-v4`, all fifteen
+exact assertions and genuine zero command/initial/restart exits. They retain
+10,000 observations across three owners, twelve original source assets and the
+unchanged 120-second shared budget. Both capture 673 HTTP responses. Aggregate
+filters retain 2,500 high, 2,500 minimal and 5,000 unknown observations, with no
+critical match; type and combined filters retain their original exact counts.
+Snapshot selectors now come from each original produced target. Temporary
+provider/model/endpoint mismatches withhold risk, a normalized default port
+retains high, duplicate report members return unavailable, and exact restoration
+preserves the original source/archive oracle before restart. Owned schema-4-to-8
+cache lifecycle checks still reconcile and restore twelve scan and 10,000
+observation caches. Seven known private values are checked across five surfaces.
+These local Python 3.10.20/SQLite 3.53.1 captures describe a modified integration
+tree based on `c12cead`, not a clean native execution of a later merge. Elapsed
+time was not captured; no timing claim follows from their successful exits.
+
+A fresh wheel and source distribution pass build and Twine checks. All eighty
+scanner/CLI runtime files match the tested source bytes in both artifacts, and
+both new regression files are present in the source distribution. The scoped
+source digest is
+`b9954fba110256d7f86ed18462109a24c04461b69f32693e02c52553cb7b28a1`;
+the projection policy is
+`2995b15cd8c99923be62414c208caf8bcb1a5cb9a9976d7ea9164d5af8f194d1`.
+The actual installed-wheel CLI smoke runs outside the checkout and preserves
+completed discovery and unknown risk through private checkpoint recovery.
+As before, the wheel contains the CLI/library; the web app and Gunicorn hooks
+require the checkout/container. This is not a standalone source-test-bundle
+certification or package publication. Required PR and post-merge platform checks
+are recorded on the delivery PR.
+
+The compatibility tightening does not rewrite historical evidence or establish
+remediation. Observation-index acceleration remains separate. The next product
+increment is the complete guided HTTP application workflow; combine its local
+operator acceptance into one pinned native retest after delivery. No separate
+GCP run is needed for this prerequisite. Model sensitivity, server target
+admission, broader R2 coverage and enterprise readiness remain open.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose

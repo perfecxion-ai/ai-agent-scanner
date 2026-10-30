@@ -377,6 +377,33 @@ privacy checks do not establish arbitrary-secret absence. No repeat is needed
 for this acceptance record; source-bound observation filtering is the next
 separate increment.
 
+R1.4b2b1 now makes observation risk attribution use the same safe unique alias
+and saved target selectors as group staging. Different valid provider, model or
+endpoint selectors leave the original observation visible with null risk.
+Strict duplicate-member decoding and bounded selector validation fail incomplete
+instead of borrowing another target's score. No archive, scalar-cache or schema
+rewrite is included. See [contract](inventory.md) and
+[local acceptance](VALIDATION.md#shared-observation-source-binding-local-acceptance).
+The complete local gate passes 5,563 tests with warnings as errors and 93%
+coverage. Independent review passes 42 cases on SQLite 3.40.1 and 3.53.1; both
+real-server inventory modes pass all fifteen assertions over 10,000 observations.
+Fresh package, metadata and installed-wheel recovery checks pass. The delivery
+PR records required platform checks before merge.
+
+The next product increment is the guided HTTP JSON application workflow
+(R2.1a/R2.2a), ahead of observation-index acceleration. Operators should create a
+private target profile, inspect an offline readiness plan and assess one
+authorized application without hand-editing agent JSON or choosing internal IDs.
+The approved scope is exact-path JSON POST, one response-text pointer, explicit
+credential/canary environment references, fresh sessions and seven prompt groups
+with at most 35 requests. Existing scan defaults and server admission retain
+their contracts. The new adapter must bind its identity through live receipts,
+both report views, scoring, checkpoints, exports and offline recovery. Setup and
+active assessment ship together after real HTTP/HTTPS and installed-CLI fixture
+acceptance. One scoped native retest follows that complete merged workflow; no
+interim GCP run is needed for this attribution correction. R1.4 indexing,
+dashboard groups, logical findings and the broader roadmap remain open.
+
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
 operator retest only when a merged runtime change needs real-service validation,
