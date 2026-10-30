@@ -416,7 +416,7 @@ coverage; the fixture correction then passes all 32 CLI cases under `umask 077`
 and its affected case under `022`. Eleven additional independent cache cases pass
 separately. The later Python 3.13 report-path failure now has an explicit
 read-only output preflight before preparation or probing, 104 integrated cases
-and seven independent path cases. Final CI collects 5,885 cases. The validation
+and seven independent path cases. PR #92 CI runs 5,885 cases. The validation
 record preserves these
 distinct runs. Both actual normal/optimized CLI gates pass. A fresh wheel,
 executed outside the checkout, accepts all eleven assertions over 77 HTTP/HTTPS
@@ -427,11 +427,23 @@ timeout with request-local prepared SQL and grouped-original identity reuse.
 Every row still validates its snapshot and reads fresh bounded source bytes;
 the 10,000-observation fixture and 120-second deadline remain unchanged. Hosted
 Python 3.10 passes all 5,865 cases on the preceding `bad4d109` head, including
-both inventory modes. The complete corrected-head matrix remains required.
+both inventory modes. The complete corrected-head matrix subsequently passed.
 
-Complete required delivery CI, then request one pinned
-[native retest](http-assessment-retest.md). Its fixtures need no existing lab
-models or operator configuration. R1.4 indexing, dashboard groups, logical
+PR #92 merged as `5a9ab356d2f68d1ff4a988dd9d17a26788a9141d` with all eight PR
+and all eight post-merge checks passing, including 5,885 tests per platform.
+The supplied native Linux/Python 3.11.2/SQLite 3.40.1 bundle supports the HTTP
+workflow: all six returned mode receipts match, and both focused runs pass 825
+cases with two public modes separately deselected. Its first complete wrapper
+fails the descendant watchdog (pinned block 1, enclosing job 7). The successful
+retry omits 46 mandatory captures. Preserve the failure and the unknown child
+cause; complete native process-cleanup acceptance remains open. See the
+[qualified native record](VALIDATION.md#supplied-native-http-application-retest-at-5a9ab35).
+
+The next [native task](http-assessment-retest.md) is the focused process-cleanup
+gate with diagnostics and complete raw capture retention. Existing HTTP evidence
+remains scoped to the unchanged runtime; no broad model or HTTP-mode repeat is
+required for the watchdog follow-up. Its fixtures need no existing lab models or
+operator configuration. R1.4 indexing, dashboard groups, logical
 findings, server target setup, stateful adapters and the broader roadmap remain
 open. This fixture acceptance does not establish general model sensitivity or
 enterprise readiness.
