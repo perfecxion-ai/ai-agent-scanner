@@ -346,9 +346,16 @@ in 52.205/51.440 seconds, retaining the 180-second budget and original
 10,000-observation/24-group oracle plus five separate risk controls. Both backup
 modes pass all fifteen cases. See
 [local evidence](VALIDATION.md#indexed-group-risk-local-acceptance) and the PR for
-full-suite, packaging and required delivery checks. The
-[updated native gate](asset-groups-retest.md) needs a fresh merged pin on the
-original Python 3.11.2 runtime before this slice's native gate closes.
+full-suite, packaging and required delivery checks. The supplied
+[native gate](asset-groups-retest.md) now passes at merged
+`c12ceadcc6c830d73e1d484f17b45c06f07c329b` on Python 3.11.2/SQLite 3.40.1:
+both modes accept all seventeen assertions in 150.237/150.768 seconds, both
+fifteen-case backup modes pass, and the twenty-file focused set passes 447 tests
+with two separately captured group gate cases deselected. All five step exits,
+the driver and outer job exits are zero. All 24 risk-filter counts and digests,
+the exact source, component and policy identities, and the available workstation
+expected-result manifest reconcile. See
+[native acceptance and qualifications](VALIDATION.md#supplied-native-indexed-group-risk-acceptance).
 Observation API risk indexing/eligibility, dashboard grouping and logical findings
 remain separate. Readiness remains O(N), and continuous writes can keep grouping
 unavailable; no broader deployment or sensitivity claim follows.
@@ -361,6 +368,14 @@ refinement changes no predicates, evidence semantics or execution budgets. Its
 79-file source digest is
 `bf1f96fe64b5e9f3dd711e9499ab01848e6c37d1e1a35ae288bded8486261831`.
 See PR #89 for final full-suite, refreshed compatibility receipts and required CI.
+
+This closes R1.4b2a's scoped native gate. The report's Mac comparison remains
+producer-attested; no Mac captures were supplied. The manifest was absent on the
+runner and was compared locally during review. Private-wrapper setup, status,
+sanitization and cleanup have recorded failure-propagation limits. Known-value
+privacy checks do not establish arbitrary-secret absence. No repeat is needed
+for this acceptance record; source-bound observation filtering is the next
+separate increment.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
