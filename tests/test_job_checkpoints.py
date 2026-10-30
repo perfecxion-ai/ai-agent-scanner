@@ -1,6 +1,7 @@
 """Checkpoint persistence uses real file-backed SQLite and explicit claims."""
 
 import json
+import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -237,19 +238,84 @@ def test_claim_context_is_scoped_and_reset_after_exception():
     assert current_claim_owner('a') is None
 
 
+def raw_busy_timeout(connection):
+    cursor = connection.cursor()
+    try:
+        return cursor.execute('PRAGMA busy_timeout').fetchone()[0]
+    finally:
+        cursor.close()
+
+
+@pytest.mark.parametrize('incoming', [5000, 0, 125])
+@pytest.mark.parametrize('failure', [False, True], ids=['commit', 'rollback'])
+def test_checkpoint_timeout_policy_caps_and_restores_the_actual_connection(checkpoint_store, incoming, failure):
+    store, _, _ = checkpoint_store
+    with store.engine.connect() as connection:
+        raw = connection.connection.driver_connection
+        connection.exec_driver_sql('PRAGMA busy_timeout = %d' % incoming)
+        connection.commit()
+    checked_in = []
+
+    def inspect_checkin(connection, record):
+        # Observe only; setting policy here could conceal a missing restore.
+        checked_in.append((connection, raw_busy_timeout(connection)))
+
+    def transaction():
+        with store._checkpoint_transaction() as connection:
+            assert connection.connection.driver_connection is raw
+            assert connection.exec_driver_sql('PRAGMA busy_timeout').scalar_one() == min(incoming, 1000)
+            assert connection.exec_driver_sql('SELECT 1').scalar_one() == 1
+            if failure:
+                raise RuntimeError('Owned checkpoint transaction failure')
+
+    event.listen(store.engine.pool, 'checkin', inspect_checkin)
+    try:
+        if failure:
+            with pytest.raises(RuntimeError, match='Owned checkpoint transaction failure'):
+                transaction()
+        else:
+            transaction()
+    finally:
+        event.remove(store.engine.pool, 'checkin', inspect_checkin)
+    assert checked_in == [(raw, incoming)]
+
+
 def test_sqlite_write_contention_is_bounded_and_timeout_restored(checkpoint_store):
     store, _, _ = checkpoint_store
     assert save(checkpoint_store, report())
+    attempted, checked_in = [], []
+
+    def inspect_write(connection, cursor, statement, parameters, context, many):
+        if statement.startswith('UPDATE scan_job'):
+            raw = connection.connection.driver_connection
+            attempted.append((raw, raw_busy_timeout(raw)))
+
+    def inspect_checkin(connection, record):
+        checked_in.append((connection, raw_busy_timeout(connection)))
+
     with store.engine.connect() as blocker:
         blocker.exec_driver_sql('BEGIN IMMEDIATE')
-        start = time.monotonic()
-        with pytest.raises(OperationalError, match='locked'):
-            save(checkpoint_store, report(2))
-        elapsed = time.monotonic() - start
+        # The separate policy test proves the production 1000-ms cap. Keep this
+        # real-contention case responsive under shared CI scheduling delays.
+        with store.engine.connect() as connection:
+            contender = connection.connection.driver_connection
+            connection.exec_driver_sql('PRAGMA busy_timeout = 125')
+            connection.commit()
+        event.listen(store.engine, 'before_cursor_execute', inspect_write)
+        event.listen(store.engine.pool, 'checkin', inspect_checkin)
+        try:
+            start = time.monotonic()
+            with pytest.raises(OperationalError, match='locked') as failure:
+                save(checkpoint_store, report(2))
+            elapsed = time.monotonic() - start
+        finally:
+            event.remove(store.engine, 'before_cursor_execute', inspect_write)
+            event.remove(store.engine.pool, 'checkin', inspect_checkin)
         blocker.rollback()
     assert elapsed < 2.5
-    with store.engine.connect() as connection:
-        assert connection.exec_driver_sql('PRAGMA busy_timeout').scalar_one() == 5000
+    assert isinstance(failure.value.orig, sqlite3.OperationalError)
+    assert attempted == [(contender, 125)]
+    assert checked_in == [(contender, 125)]
     assert result(store, 'checkpoint')['checkpoint']['sequence'] == 1
 
 

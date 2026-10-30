@@ -2145,6 +2145,20 @@ overlap that suite and are not additive. Ruff and the configured Bandit gate
 pass. The small common error/timestamp module removes an import cycle while
 retaining the previous inventory imports for compatibility.
 
+The first post-merge macOS run for documentation PR #90 and the first PR #91
+macOS run each fail the existing checkpoint contention wall-clock assertion:
+2.590072 and 2.614862 seconds against 2.5. They retain 5,482 and 5,562 passes,
+respectively. These failures are preserved. A test-only correction separates
+lock policy from contention timing: six cases observe the actual 1,000-ms cap,
+tighter incoming policies and restoration on the same DBAPI connection, through
+success and failure. The real SQLite contention case uses an incoming 125-ms
+policy while retaining its original 2.5-second assertion, real locked exception
+and unchanged stored checkpoint. No production code or timeout changes. All 46
+checkpoint-module cases pass; the seven policy/contention cases also pass on
+SQLite 3.40.1 and 3.45.1. The 5,563-case coverage run precedes these six additional
+policy cases; refreshed required CI covers the complete correction. This proves
+configured lock policy and transactional behavior, not hard scheduling latency.
+
 Both real Gunicorn inventory modes return `inventory-acceptance-v4`, all fifteen
 exact assertions and genuine zero command/initial/restart exits. They retain
 10,000 observations across three owners, twelve original source assets and the
