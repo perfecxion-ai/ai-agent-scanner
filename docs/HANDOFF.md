@@ -390,19 +390,36 @@ real-server inventory modes pass all fifteen assertions over 10,000 observations
 Fresh package, metadata and installed-wheel recovery checks pass. The delivery
 PR records required platform checks before merge.
 
-The next product increment is the guided HTTP JSON application workflow
-(R2.1a/R2.2a), ahead of observation-index acceleration. Operators should create a
-private target profile, inspect an offline readiness plan and assess one
-authorized application without hand-editing agent JSON or choosing internal IDs.
-The approved scope is exact-path JSON POST, one response-text pointer, explicit
-credential/canary environment references, fresh sessions and seven prompt groups
-with at most 35 requests. Existing scan defaults and server admission retain
-their contracts. The new adapter must bind its identity through live receipts,
-both report views, scoring, checkpoints, exports and offline recovery. Setup and
-active assessment ship together after real HTTP/HTTPS and installed-CLI fixture
-acceptance. One scoped native retest follows that complete merged workflow; no
-interim GCP run is needed for this attribution correction. R1.4 indexing,
-dashboard groups, logical findings and the broader roadmap remain open.
+PR #91 merged the attribution correction as
+`29b6e30d22aab0e7ad30c0667d7be987d916072e` after all eight PR checks passed. Its
+test-only contention follow-up retains the original deadline and production
+policy; earlier Mac failures remain recorded in validation.
+
+R2.1a/R2.2a now implement the guided HTTP JSON application workflow ahead of
+observation-index acceleration. Operators create a private selected profile,
+inspect an offline target/scope/readiness preview and assess one authorized app
+without hand-editing agent JSON or choosing internal IDs. The scope is exact-path
+JSON POST, one response-text pointer, pinned credential/canary environment
+references and seven protected prompt groups with at most 35 requests. Fresh
+client sessions do not prove independent server state or reset conversations.
+Existing scan defaults and server admission retain their contracts.
+
+The adapter identity is bound through actual request evidence, both report views,
+scoring, checkpoints, exports and offline recovery. Quiet output stays
+inconclusive; a supported receipt survives later failure without inventing a
+completed check. See [setup](http-application-assessment.md) and
+[local acceptance](VALIDATION.md#guided-http-application-local-acceptance).
+The complete local gate passes 5,843 cases in 1,095.06 seconds with warnings as
+errors and 93% coverage. Both actual normal/optimized CLI gates pass. A fresh
+wheel, executed outside the checkout, also accepts all eleven assertions over
+77 HTTP/HTTPS requests, including forced-kill recovery without replay.
+
+Complete required delivery CI, then request one pinned
+[native retest](http-assessment-retest.md). Its fixtures need no existing lab
+models or operator configuration. R1.4 indexing, dashboard groups, logical
+findings, server target setup, stateful adapters and the broader roadmap remain
+open. This fixture acceptance does not establish general model sensitivity or
+enterprise readiness.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned

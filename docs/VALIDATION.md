@@ -2196,6 +2196,103 @@ operator acceptance into one pinned native retest after delivery. No separate
 GCP run is needed for this prerequisite. Model sensitivity, server target
 admission, broader R2 coverage and enterprise readiness remain open.
 
+### Guided HTTP application local acceptance
+
+R2.1a/R2.2a add a complete CLI workflow for an application that accepts a JSON
+prompt field and returns generated text at a selected JSON pointer. Previously,
+the model-provider adapters required a model and could rewrite its route. Guided
+private setup, an offline target/scope/readiness preview and active assessment
+now share the existing pipeline without an invented model or manual asset IDs.
+See [setup and supported scope](http-application-assessment.md).
+
+The selected objective uses the unchanged `protected-disclosure-v1` catalog:
+seven groups, at most 35 POSTs, no hidden liveness/discovery request or unrelated
+GET checks. Defaults are 35 shared attempts, 180 seconds overall, ten seconds per
+request and 65,536 response bytes. Explicit networks, normal transport restrictions
+and remote Bearer TLS requirements remain enforced. A fresh client session does
+not reset application state; canary placement, generated-field mapping and public
+principal/context labels remain operator attestations.
+
+One strict extractor serves response usability, analysis and live receipt
+creation. It rejects duplicate members, invalid UTF-8, nonfinite values and
+excessive JSON work. Only the configured string field supplies evidence; metadata,
+unselected legacy fields and request reflection cannot confirm disclosure. Actual
+captured method, URL, JSON prompt and authentication must match the pinned target.
+New prompt receipt source `3.0` under existing ledger `3.0` and checkpoint `4.0`
+binds the public adapter throughout both views, scoring, exports and recovery.
+Legacy providers retain their existing source-2 semantics; reserved HTTP targets
+cannot use stripped or obsolete evidence contracts. No database migration or
+server profile-admission expansion is included. Imported HTTP observations need
+matching recorded adapter fields before receiving current numeric risk.
+
+Independent review closes two coverage edges: a genuine short partial sample
+cannot be relabeled as a completed five-response category or seven-category
+execution, and conflicting execution status fields are refused. Internal live
+receipt prefixes remain valid; saved views account for the seven planned rules
+through finalized checks and acknowledged unfinished receipts. Quiet output
+remains inconclusive/null. Later nondisclosure does not resolve earlier findings.
+
+| Local evidence | Observed result |
+| --- | --- |
+| Complete coverage gate | 5,843 passed, 1,095.06 seconds, 93% coverage, warnings as errors |
+| Combined focused integration | 249 passed, two full workflow modes separately deselected |
+| Independent policy/fixture cases | 125 fast cases pass after the final coverage/status guards |
+| Both public CLI modes in the complete gate | All eleven assertions; 77 actual POSTs and thirteen recorded CLI exits per mode |
+| Fresh installed-wheel workflow | All eleven assertions, 77 POSTs, 75.764 seconds, empty stderr |
+| Packaging/static checks | Fresh build, Twine, Ruff and configured Bandit pass; all 84 runtime files byte-match both artifacts |
+
+Author core/suite and CLI sets pass 353 and 103 cases, respectively; independent
+CLI/profile review also passes eighty cases. These overlap the complete suite
+and must not be added. The public fixture checks full 35-response HTTP disclosure
+and HTTPS defended runs, five one-request positive/negative controls, a zero-I/O
+request collision, and SIGKILL after acknowledged evidence before a later stalled
+response. Partial controls and offline recovery correctly exit 1; the killed CLI
+exits -9. Parent gate exits are zero. JSON/SARIF recovery retains the exact receipt
+without loading a profile, resolving credentials or replaying requests.
+
+The earlier two-parent-mode fixture run did not propagate optimization to child
+CLIs; it proves normal CLI behavior only. This validation gap remains recorded.
+The corrected driver explicitly forwards `-O`/`-OO`, and actual child-flag
+regressions accompany the final normal/optimized acceptance. Its final SHA-256 is
+`f6cc862458a4804f229d3ddbf78ca1d187cad66c214eff15c611926a488a569e`.
+
+The installed-wheel check copies that exact driver into an empty directory
+outside the repository. The installed interpreter runs its actual CLI children
+there; module origins are checked beneath the fresh environment's site-packages.
+No scanner function is replaced and no checkout scanner module is available in
+that directory. The real installed console entry point is checked too. The
+ordinary installed discovery/checkpoint smoke also passes. All five new HTTP
+regression files match the source distribution. The wheel remains CLI/library
+only, and this does not certify a standalone source-test bundle or publish a
+package.
+
+The reproducible 84-file source fingerprint is
+`61652242e0f986b50bea38e61611bd90e9422d9d00d8f860f2b38a107d890436`.
+The existing baseline and protected catalog hashes/pin are unchanged. The local
+wheel SHA-256 is
+`bbb37fad0a80ac47a06532d9c855c3c798b12f17b3df4a667892e8a692f78b5a`;
+the source-distribution SHA-256 is
+`3f22771ca3bd9d43b74b03d3d93f13419ca59a3aef68d97a6ab05d41595ff579`.
+These identify tested local artifacts, not signed build or dependency attestations.
+
+Profile creation is no-clobber and owner-only, including rollback after a late
+parent check; unrelated or replacement inodes are preserved. Partial terminal
+counts use acknowledged minima rather than reporting zero beside retained
+evidence. Each public gate checks five known private values and nine profile
+paths, including encoded forms, across output and all checkpoint contents.
+These sweeps do not establish arbitrary-secret absence. Git, Docker and source
+manifest exclusions cover `*.target.json`, `.aiscan-targets` directories and
+default assessment outputs. An actual isolated source build excludes seven deliberately included
+private fixture paths at root and arbitrary directory depth while retaining
+ordinary public JSON. No operator registry, database, private profile, live model,
+paid provider or cloud deployment was used for this acceptance.
+
+Required PR and post-merge checks remain delivery gates. One scoped pinned
+[native retest](http-assessment-retest.md) follows delivery, using owned loopback
+fixtures and selected compatibility tests. Native operator acceptance, server
+target setup, stateful session contracts, logical findings, representative model
+sensitivity and the remaining R2 through R4 work remain open.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose
