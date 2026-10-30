@@ -198,6 +198,8 @@ try:
         'test_api_risk_projection.py', 'test_prompt_suite_server.py', 'test_job_checkpoints.py',
         'test_prompt_suite_workflow.py', 'test_pipeline_http.py',
         'test_inventory_source_binding.py', 'test_inventory_source_binding_review.py',
+        'test_inventory_source_reuse.py',
+        'test_inventory_source_reuse_review.py',
         'test_asset_group_risk_review.py',
     ]
     run('focused-tests', [str(source_python), '-Werror', '-m', 'pytest',
@@ -247,7 +249,7 @@ print(json.dumps({'imports':{name:path.relative_to(library).as_posix() for name,
     run('http-installed', [str(installed_python), '-Werror', str(copied),
                           '--timeout-seconds', '240'], cwd=outside, structured=True)
     run('source-status', ['git', 'status', '--porcelain'])
-    expected_source = '61652242e0f986b50bea38e61611bd90e9422d9d00d8f860f2b38a107d890436'
+    expected_source = 'fcdbfb4031b7c31c233a6010245e0fa9516b0f3ed066910506d607245e32fdf8'
     source_identity = json.loads((captures / 'source-build.json').read_text())
     proof_receipt = json.loads((captures / 'installed-proof.json').read_text())
     tree = ast.parse(driver.read_text())

@@ -2196,6 +2196,32 @@ operator acceptance into one pinned native retest after delivery. No separate
 GCP run is needed for this prerequisite. Model sensitivity, server target
 admission, broader R2 coverage and enterprise readiness remain open.
 
+### Inventory reader performance follow-up
+
+PR #91's post-merge run `40998441572` passes seven jobs but fails both
+10,000-observation inventory acceptance modes on Python 3.10 at the unchanged
+120-second shared deadline. Initial traversal, source-binding controls and
+cursor checks complete; restart traversal times out. The failure is retained.
+
+Owned profiling attributes most repeated work to target identity construction
+and rebuilding bounded-source SQL. The correction prepares SQL once per page,
+binding each fresh identifier and remaining byte allowance. A decoded report
+memoizes only grouped original identities by unique alias and organization.
+Every observation still validates its own snapshot. Unmerged identities remain
+row-specific, and successful bindings return a fresh snapshot so callers cannot
+mutate a cached target dictionary. No source, report, cursor or verdict is cached
+across requests. Strict JSON parsing, selector matching, source reads, work limits
+and the 120-second acceptance deadline are unchanged.
+
+An owned Python 3.12 comparison measures 40.28 seconds before and 27.55 seconds
+after the initial optimization: the same 10,000 observations, fifteen assertions,
+673 HTTP responses and two zero server exits. This is local timing, not a Python
+3.10 or deployment performance claim. The final fresh-snapshot protection passes
+159 focused source/group cases; 279 broader cases also exercise both previously
+failing real-server modes. Eleven new regressions cover cache ownership, changed
+selectors and metadata, row-specific unmerged IDs, fresh report reads, current
+byte caps and returned-target mutation. Final integrated CI remains required.
+
 ### Guided HTTP application local acceptance
 
 R2.1a/R2.2a add a complete CLI workflow for an application that accepts a JSON
@@ -2234,11 +2260,14 @@ remains inconclusive/null. Later nondisclosure does not resolve earlier findings
 
 | Local evidence | Observed result |
 | --- | --- |
-| Complete coverage gate | 5,843 passed, 1,095.06 seconds, 93% coverage, warnings as errors |
+| Initial HTTP coverage gate | 5,843 passed, 1,095.06 seconds, 93% coverage, warnings as errors |
+| Frozen-runtime coverage refresh | 5,853 passed, one permission-fixture failure, 1,053.66 seconds, 93% coverage |
+| Corrected permission fixture | All 32 CLI cases pass under `umask 077`; affected case also passes under `022` |
+| Additional independent cache review | Eleven cases pass after the coverage run's collection |
 | Combined focused integration | 249 passed, two full workflow modes separately deselected |
 | Independent policy/fixture cases | 125 fast cases pass after the final coverage/status guards |
-| Both public CLI modes in the complete gate | All eleven assertions; 77 actual POSTs and thirteen recorded CLI exits per mode |
-| Fresh installed-wheel workflow | All eleven assertions, 77 POSTs, 75.764 seconds, empty stderr |
+| Both public CLI modes in the coverage refresh | All eleven assertions; 77 actual POSTs and thirteen recorded CLI exits per mode |
+| Fresh installed-wheel workflow | All eleven assertions, 77 POSTs, 75.919 seconds, empty stderr |
 | Packaging/static checks | Fresh build, Twine, Ruff and configured Bandit pass; all 84 runtime files byte-match both artifacts |
 
 Author core/suite and CLI sets pass 353 and 103 cases, respectively; independent
@@ -2249,6 +2278,15 @@ request collision, and SIGKILL after acknowledged evidence before a later stalle
 response. Partial controls and offline recovery correctly exit 1; the killed CLI
 exits -9. Parent gate exits are zero. JSON/SARIF recovery retains the exact receipt
 without loading a profile, resolving credentials or replaying requests.
+
+The refreshed invocation runs under `umask 077`. Its sole failure assumes that
+`mkdir(0755)` produces `0755`; the mask correctly produces `0700`, which the wizard
+preserves. The fixture now explicitly sets its intended `0755` mode before the
+wizard, retaining all permission assertions and production behavior. That CLI
+file passes all 32 cases under `077`, and the affected case passes under `022`.
+The eleven later independent review cases pass separately. Required CI collects
+the final 5,865 cases; the failed local invocation is not presented as a clean
+full-suite pass or combined arithmetically with overlapping reruns.
 
 The earlier two-parent-mode fixture run did not propagate optimization to child
 CLIs; it proves normal CLI behavior only. This validation gap remains recorded.
@@ -2262,18 +2300,22 @@ there; module origins are checked beneath the fresh environment's site-packages.
 No scanner function is replaced and no checkout scanner module is available in
 that directory. The real installed console entry point is checked too. The
 ordinary installed discovery/checkpoint smoke also passes. All five new HTTP
-regression files match the source distribution. The wheel remains CLI/library
+regression files and both inventory reuse files match the refreshed source
+distribution. The wheel remains CLI/library
 only, and this does not certify a standalone source-test bundle or publish a
 package.
 
 The reproducible 84-file source fingerprint is
-`61652242e0f986b50bea38e61611bd90e9422d9d00d8f860f2b38a107d890436`.
+`fcdbfb4031b7c31c233a6010245e0fa9516b0f3ed066910506d607245e32fdf8`.
 The existing baseline and protected catalog hashes/pin are unchanged. The local
 wheel SHA-256 is
-`bbb37fad0a80ac47a06532d9c855c3c798b12f17b3df4a667892e8a692f78b5a`;
+`12f75fd96801a8aa225c00c3ca1284ef763b94298cfbda2ac2bdfc086020bee2`;
 the source-distribution SHA-256 is
-`3f22771ca3bd9d43b74b03d3d93f13419ca59a3aef68d97a6ab05d41595ff579`.
-These identify tested local artifacts, not signed build or dependency attestations.
+`c5b77c3a2e9224075e892a9e75277bfa54436f9ede13cd821ccdfeacc1810440`.
+These identify local validation artifacts before this record's documentation
+edits. The wheel is the exact artifact used for the installed workflow; the
+source distribution was refreshed for all seven final regression files. They
+are not signed build or dependency attestations. Delivery CI builds the final tree.
 
 Profile creation is no-clobber and owner-only, including rollback after a late
 parent check; unrelated or replacement inodes are preserved. Partial terminal

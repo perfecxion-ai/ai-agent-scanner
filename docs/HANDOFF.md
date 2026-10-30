@@ -409,10 +409,20 @@ scoring, checkpoints, exports and offline recovery. Quiet output stays
 inconclusive; a supported receipt survives later failure without inventing a
 completed check. See [setup](http-application-assessment.md) and
 [local acceptance](VALIDATION.md#guided-http-application-local-acceptance).
-The complete local gate passes 5,843 cases in 1,095.06 seconds with warnings as
-errors and 93% coverage. Both actual normal/optimized CLI gates pass. A fresh
-wheel, executed outside the checkout, also accepts all eleven assertions over
-77 HTTP/HTTPS requests, including forced-kill recovery without replay.
+The initial complete local gate passes 5,843 cases. The corrected runtime's
+coverage refresh records 5,853 passes and one permission-fixture failure at 93%
+coverage; the fixture correction then passes all 32 CLI cases under `umask 077`
+and its affected case under `022`. Eleven additional independent cache cases pass
+separately. Final CI collects 5,865 cases. The validation record preserves these
+distinct runs. Both actual normal/optimized CLI gates pass. A fresh wheel,
+executed outside the checkout, accepts all eleven assertions over 77 HTTP/HTTPS
+requests, including forced-kill recovery without replay.
+
+An inventory performance follow-up addresses the preceding Python 3.10 CI
+timeout with request-local prepared SQL and grouped-original identity reuse.
+Every row still validates its snapshot and reads fresh bounded source bytes;
+the 10,000-observation fixture and 120-second deadline remain unchanged. Final
+hosted CI must confirm the improvement on Python 3.10.
 
 Complete required delivery CI, then request one pinned
 [native retest](http-assessment-retest.md). Its fixtures need no existing lab
