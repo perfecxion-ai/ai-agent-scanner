@@ -5,6 +5,10 @@ import os
 import re
 from urllib.parse import urlsplit, urlunsplit, quote, unquote
 from yarl import URL
+from src.core.http_application_policy import (
+    extract_http_json_generated, is_http_agent, validate_http_agent,
+)
+from src.core.http_application_runtime import get_http_target
 from src.core.redaction import contains_literal
 from src.core.request_provenance import known_request_excludes_canary
 from src.core.tenant_evidence import get_tenant_evidence
@@ -22,6 +26,9 @@ _DEFAULT_KEY = object()
 
 def resolve_api_key(agent):
     """Resolve explicit environment references; automatic keys stay on official HTTPS hosts."""
+    if is_http_agent(agent):
+        prepared = get_http_target(agent)
+        return prepared.credential if prepared is not None else None
     context = get_tenant_evidence(agent)
     if context is not None:
         return context.tested_api_key
@@ -93,8 +100,30 @@ def extract_response_text(response_text):
     return ''
 
 
+def extract_agent_response_text(agent, response_text):
+    """Custom HTTP output has exactly one selected field and no legacy fallback."""
+    if is_http_agent(agent):
+        try:
+            return extract_http_json_generated(response_text, validate_http_agent(agent))
+        except (TypeError, ValueError, KeyError):
+            return ''
+    return extract_response_text(response_text)
+
+
 def construct_agent_request(agent, payload, *, api_key=_DEFAULT_KEY):
     """Return a supported POST request or None when execution lacks required configuration."""
+    if is_http_agent(agent):
+        prepared = get_http_target(agent)
+        if (prepared is None or api_key is not _DEFAULT_KEY or not isinstance(payload, str)
+                or not payload or len(payload) > 128 * 1024):
+            return None
+        public = validate_http_agent(agent)
+        headers = {'Content-Type': 'application/json'}
+        if prepared.credential is not None:
+            headers['Authorization'] = 'Bearer ' + prepared.credential
+        request = {'method': 'POST', 'url': public['endpoint'], 'headers': headers,
+                   'json': {public['request_prompt_field']: payload}}
+        return request if known_request_excludes_canary(request, prepared.canary) else None
     context = get_tenant_evidence(agent)
     if 'tenant_evidence' in agent and context is None:
         return None

@@ -15,6 +15,7 @@ from src.core.contracts import (
     has_evidence_contract, is_supported_evidence_version, tenant_evidence_views_match,
     validate_check_evidence, validate_scan_result,
 )
+from src.core.http_application_policy import HTTP_PUBLIC_FIELDS, http_views_match, is_http_agent
 from src.core.inventory_common import InventoryError, _timestamp
 from src.core.redaction import collect_secrets, redact_secrets
 from src.core.risk_projection import project_agent_risk, project_report_risk
@@ -126,7 +127,7 @@ def _supported_source(report, agent):
         if len(sources) != 1:
             return False, set()
         source = sources[0]
-        if source.get('status') != agent.get('security_status') or source.get('status') not in {
+        if not http_views_match(agent, source) or source.get('status') != agent.get('security_status') or source.get('status') not in {
                 'completed', 'partial', 'failed'}:
             return False, set()
         shared = ('check_evidence_schema_version', 'check_evidence_run_id', 'provider', 'model')
@@ -214,6 +215,8 @@ def bind_observation_source(row, metadata, source, organization):
         and original.target.get('endpoint') == snapshot.target.get('endpoint'))
     exact = (row.provider == agent.get('provider') and row.model_name == agent.get('model')
              and (row.endpoint_url == agent.get('endpoint') or same_http_endpoint))
+    if is_http_agent(agent):
+        exact = exact and all(metadata.get(name) == agent.get(name) for name in HTTP_PUBLIC_FIELDS)
     if not exact:
         return ObservationBinding(alias, None, GroupIdentity(singleton.group_id, 'unmerged',
                                   'snapshot_target_mismatch', None), unknown)

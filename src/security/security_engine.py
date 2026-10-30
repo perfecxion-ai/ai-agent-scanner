@@ -2,6 +2,10 @@ from datetime import datetime, timezone
 from copy import deepcopy
 from typing import List, Dict, Any, Optional, Callable
 import logging
+from src.core.http_application_policy import (
+    HTTP_OBJECTIVE, http_public_fields, is_http_agent, objective_rules,
+)
+from src.core.http_application_runtime import get_http_target, http_application_secrets
 from src.core.transport import current_budget
 from src.core.access_evidence import access_evidence_context, access_secrets, get_access_evidence
 from src.core.tenant_evidence import get_tenant_evidence, tenant_evidence_context, tenant_secrets
@@ -22,7 +26,11 @@ from .prompt_suites import validate_prompt_suite_agents
 class SecurityTestEngine:
     """Comprehensive security testing for discovered AI agents"""
     
-    def __init__(self, *, prompt_suite=None):
+    def __init__(self, *, prompt_suite=None, assessment_objective=None):
+        self.planned_rules = objective_rules(assessment_objective)
+        self.assessment_objective = assessment_objective
+        if assessment_objective == HTTP_OBJECTIVE and prompt_suite is None:
+            prompt_suite = 'protected-disclosure-v1'
         self.prompt_tester = PromptInjectionTester(prompt_suite=prompt_suite)
         self.prompt_suite = self.prompt_tester.prompt_suite
         self.access_tester = AccessControlTester()
@@ -32,7 +40,7 @@ class SecurityTestEngine:
 
     def checkpoint_secrets(self, agents):
         """Collect pinned tenant and predictable protected-access credentials."""
-        secrets = set(tenant_secrets()) | set(access_secrets())
+        secrets = set(tenant_secrets()) | set(access_secrets()) | http_application_secrets()
         if not any(agent.get('authentication_required') is True
                    and agent.get('protected_response_marker') for agent in agents):
             return secrets
@@ -43,6 +51,12 @@ class SecurityTestEngine:
     async def test_agents(self, agents: List[Dict[str, Any]], 
                          progress_callback: Optional[Callable] = None) -> List[Dict[str, Any]]:
         """Test all discovered agents for security vulnerabilities"""
+        custom = [agent for agent in agents if is_http_agent(agent)]
+        if self.assessment_objective == HTTP_OBJECTIVE:
+            if len(agents) != 1 or len(custom) != 1 or get_http_target(agents[0]) is None:
+                raise ValueError('HTTP assessment requires one prepared target')
+        elif custom:
+            raise ValueError('HTTP application requires its explicit assessment objective')
         with tenant_evidence_context(agents), access_evidence_context(agents):
             return await self._test_prepared_agents(agents, progress_callback)
 
@@ -112,7 +126,8 @@ class SecurityTestEngine:
                             'Authentication checks require explicit issued credentials, a protected response marker, and successful authorized/denied controls.'],
             'overall_risk_score': None
         }
-        if get_tenant_evidence(agent) is not None or get_access_evidence(agent) is not None:
+        test_results.update(http_public_fields(agent))
+        if is_http_agent(agent) or get_tenant_evidence(agent) is not None or get_access_evidence(agent) is not None:
             test_results['endpoint'] = agent['endpoint']
             test_results['evidence_context_id'] = agent['evidence_context_id']
         test_results['check_schema_version'] = CHECK_SCHEMA_VERSION
@@ -128,7 +143,7 @@ class SecurityTestEngine:
         if not agent.get('endpoint'):
             test_results['status'] = 'skipped'
             test_results['reason'] = 'No accessible endpoint'
-            test_results['checks'] = missing_checks([], test_results['reason'])
+            test_results['checks'] = missing_checks([], test_results['reason'], rules=self.planned_rules)
             return test_results
         
         async def run_tester(tester):
@@ -143,7 +158,7 @@ class SecurityTestEngine:
                 test_results['status'] = 'skipped'
                 test_results['reason'] = (missing_credential_reason(agent) or
                     'Unsupported provider or invalid/missing model configuration')
-                test_results['checks'] = missing_checks([], test_results['reason'])
+                test_results['checks'] = missing_checks([], test_results['reason'], rules=self.planned_rules)
                 return test_results
             budget = current_budget()
             errors_before = budget.failures + budget.rejections if budget else 0
@@ -151,13 +166,11 @@ class SecurityTestEngine:
             prompt_results = await run_tester(self.prompt_tester)
             test_results['vulnerabilities'].extend(prompt_results)
             
-            # Test 2: Access Control Issues
-            access_results = await run_tester(self.access_tester)
-            test_results['vulnerabilities'].extend(access_results)
-            
-            # Test 3: Data Privacy Violations
-            privacy_results = await run_tester(self.privacy_tester)
-            test_results['vulnerabilities'].extend(privacy_results)
+            if self.assessment_objective is None:
+                access_results = await run_tester(self.access_tester)
+                test_results['vulnerabilities'].extend(access_results)
+                privacy_results = await run_tester(self.privacy_tester)
+                test_results['vulnerabilities'].extend(privacy_results)
             self._attach_evidence(test_results, evidence)
             test_results['observations'] = [finding for finding in test_results['vulnerabilities']
                                             if finding.get('evidence_status') in ('heuristic', 'inconclusive')]
@@ -171,6 +184,8 @@ class SecurityTestEngine:
             
             test_results['status'] = 'completed'
             incomplete_checks = any(check['status'] == 'failed' for check in test_results['checks'])
+            if self.assessment_objective is not None:
+                incomplete_checks |= {check['rule_id'] for check in test_results['checks']} != set(self.planned_rules)
             no_evaluated_checks = not any(check['responses_evaluated'] for check in test_results['checks'])
             if incomplete_checks or no_evaluated_checks or (budget and budget.failures + budget.rejections > errors_before):
                 test_results['status'] = 'partial'
@@ -194,7 +209,7 @@ class SecurityTestEngine:
             test_results['vulnerabilities'] = [
                 finding for finding in test_results['vulnerabilities']
                 if finding.get('evidence_status') not in ('heuristic', 'inconclusive')]
-        test_results['checks'].extend(missing_checks(test_results['checks'], 'Probe did not execute'))
+        test_results['checks'].extend(missing_checks(test_results['checks'], 'Probe did not execute', rules=self.planned_rules))
         
         return test_results
     

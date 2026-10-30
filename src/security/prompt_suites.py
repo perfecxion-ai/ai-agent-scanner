@@ -7,6 +7,10 @@ import re
 
 from yarl import URL
 
+from src.core.http_application_policy import (
+    HTTP_PUBLIC_DESCRIPTORS, HTTP_PUBLIC_FIELDS, http_prompt_probe_version, is_http_agent, validate_http_public_privacy,
+)
+from src.core.http_application_runtime import get_http_target
 from src.core.redaction import contains_literal, sensitive_key
 from src.core.contracts import PLANNED_RULES
 from src.core.prompt_catalog import candidate_payloads as frozen_candidate_payloads
@@ -24,6 +28,7 @@ _SEMANTICS = 'nondisclosure-inconclusive-v2'
 # Fixed JSON, risk/framework, check, pattern, and SARIF descriptors can appear as
 # keys or tuples, which ordinary value redaction intentionally does not rewrite.
 _PUBLIC_DESCRIPTOR = (
+    *HTTP_PUBLIC_DESCRIPTORS,
     *PUBLIC_EVIDENCE_FIELDS,
     *PUBLIC_ACCESS_FIELDS,
     ACCESS_CONTROL_VERSION, '0123456789abcdef',
@@ -119,6 +124,8 @@ def _public_inventory(value):
 def _adapter_target(agent):
     # A reflected canary must not make an otherwise supported adapter look skipped.
     try:
+        if is_http_agent(agent):
+            return get_http_target(agent) is not None
         transient = {key: value for key, value in agent.items() if key != 'system_prompt_canary'}
         return construct_agent_request(transient, 'configuration check') is not None
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
@@ -162,7 +169,8 @@ def validate_prompt_suite_agents(agents, *, require_target=True):
                 rule = 'prompt_injection.' + category
                 identity = [{'semantics': _SEMANTICS, 'payloads': payloads},
                             agent.get('provider'), agent.get('model')]
-                version = '1:' + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+                version = (http_prompt_probe_version(identity[0], agent) if is_http_agent(agent) else
+                           '1:' + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest())
                 versions.extend([category, rule, rule + '.sample', version])
                 versions.append('AIS-PROMPT-INJECTION-' + category.upper().replace('_', '-'))
                 for payload in payloads:
@@ -171,6 +179,9 @@ def validate_prompt_suite_agents(agents, *, require_target=True):
                         raise PromptSuiteError()
                     requests.append([request, str(URL(request['url']))])
         credentials = [key for agent in agents if (key := resolve_api_key(agent))]
+        if any(is_http_agent(agent) for agent in agents):
+            validate_http_public_privacy([public, reserved, versions, HTTP_PUBLIC_FIELDS],
+                                         [*markers, *credentials])
         for marker in markers:
             if contains_literal([public, reserved, versions, requests, credentials], marker):
                 raise PromptSuiteError()

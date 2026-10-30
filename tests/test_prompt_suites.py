@@ -183,7 +183,9 @@ def test_descriptor_guard_audits_current_output_source_constants():
              'src/security/prompt_injection_tests.py', 'src/security/access_control_tests.py',
              'src/security/data_privacy_tests.py', 'src/risk/risk_assessor.py',
              'src/reporting/sarif_output.py', 'src/frameworks/owasp_llm_top10.py',
-             'src/frameworks/mitre_atlas.py', 'src/security/prompt_suites.py')
+             'src/frameworks/mitre_atlas.py', 'src/security/prompt_suites.py',
+             'src/core/http_application_policy.py', 'src/core/http_prompt_evidence_policy.py',
+             'src/core/http_application_runtime.py')
     root = Path(__file__).resolve().parents[1]
     markers = set()
     for path in paths:

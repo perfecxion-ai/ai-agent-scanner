@@ -4,6 +4,7 @@ from collections import Counter
 import json
 from math import isfinite
 
+from src.core.http_application_policy import http_views_match
 from src.core.contracts import (
     CHECK_SCHEMA_VERSION, confirmed_findings,
     risk_assessment_eligible, validate_scan_result, is_supported_evidence_version,
@@ -97,7 +98,7 @@ def project_report_risk(report):
         if not is_supported_evidence_version(evidence_version):
             return evidence_version is not _UNSPECIFIED or not has_evidence_contract(agent)
         source = sources.get(agent['id'])
-        if not source or source.get('status') != agent.get('security_status'):
+        if not source or source.get('status') != agent.get('security_status') or not http_views_match(agent, source):
             return False
         if not tenant_evidence_views_match(agent, source) or not access_evidence_views_match(agent, source):
             return False

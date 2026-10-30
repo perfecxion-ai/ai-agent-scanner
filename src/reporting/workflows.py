@@ -5,6 +5,7 @@ import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
+from src.core.http_application_policy import is_http_agent, validate_http_agent
 from src.core.contracts import proves_absence, validate_scan_result
 
 
@@ -21,7 +22,11 @@ def asset_identity(agent):
     endpoint = agent.get("endpoint")
     metadata = agent.get("metadata", {})
     resource = metadata.get("resource_id")
-    if isinstance(resource, str) and resource.strip() and len(resource) <= 2048 and metadata.get("cloud") in {"aws", "azure", "gcp"}:
+    if is_http_agent(agent):
+        validate_http_agent(agent)
+        basis = ['http_application_contract', agent['http_target_binding']]
+        quality = 'http_application_contract'
+    elif isinstance(resource, str) and resource.strip() and len(resource) <= 2048 and metadata.get("cloud") in {"aws", "azure", "gcp"}:
         basis = ["cloud_resource", metadata["cloud"], agent.get("provider"), resource]
         quality = "cloud_resource"
     elif endpoint:

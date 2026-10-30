@@ -13,7 +13,12 @@ import uuid
 from typing import Literal, TypedDict
 
 from src.core.transport import current_budget
-from src.utils.request_builder import extract_response_text
+from src.utils.request_builder import extract_response_text, extract_agent_response_text
+from src.core.http_application_policy import (
+    HTTP_FAILURE_REASONS, http_json_request_matches_capture, http_prompt_payloads,
+    http_prompt_probe_version, http_views_match, is_http_agent,
+)
+from src.core.http_application_runtime import get_http_target
 from src.core.access_probe_policy import (
     PROTECTED_ACCESS_RULES, protected_access_pass, protected_access_confirmation,
     ACCESS_CONTROL_STATUS, ACCESS_EVIDENCE_SOURCE, AUTHENTICATION_SAMPLES,
@@ -152,6 +157,7 @@ class _Execution:
     findings: list = field(default_factory=list)
     tenant_state: object = None
     access_state: object = None
+    http_diagnostic: str | None = None
 
 
 _records = ContextVar("security_check_records", default=None)
@@ -227,6 +233,12 @@ def record_prompt_failure(*, legacy=True):
         fail_request()
 
 
+def record_http_diagnostic(code):
+    execution = _execution.get()
+    if execution is not None and code in HTTP_FAILURE_REASONS and execution.http_diagnostic is None:
+        execution.http_diagnostic = code
+
+
 async def publish_prompt_evidence(response, finding, *, agent, category, payload):
     state = _evidence.get()
     ensure_evidence_active()
@@ -254,19 +266,26 @@ async def _publish_prompt_evidence(response, finding, *, agent, category, payloa
             or finding.get('evidence_status') != 'confirmed'):
         return
     identity = trace.identity
-    payloads = prompt_probe_payloads(*identity[:3], provider=agent.get('provider'), model=agent.get('model'))
+    custom_http = is_http_agent(agent)
+    payloads = (http_prompt_payloads(*identity[:3], agent) if custom_http else
+                prompt_probe_payloads(*identity[:3], provider=agent.get('provider'), model=agent.get('model')))
     index = trace.sample[0]
     if (payloads is None or type(index) is not int or not 0 <= index < len(payloads)
             or payload != payloads[index] or agent != state.agent):
         return
     canary = agent.get('system_prompt_canary')
-    text = token.body.decode('utf-8', errors='replace')
-    if (not usable_model_response(text) or not isinstance(canary, str) or len(canary) < 16
-            or canary in payload or canary not in extract_response_text(text)
+    text = token.body if custom_http else token.body.decode('utf-8', errors='replace')
+    if (not usable_model_response(text, agent=agent) or not isinstance(canary, str) or len(canary) < 16
+            or canary in payload or canary not in extract_agent_response_text(agent, text)
             or not request_excludes_canary(token.request_evidence, canary)
             or type(token.status) is not int or not 200 <= token.status < 300
             or finding.get('status_code') != token.status):
         return
+    if custom_http:
+        prepared = get_http_target(agent)
+        if prepared is None or not http_json_request_matches_capture(
+                token.request_evidence, agent, payload, prepared.credential):
+            return
     if (len(state.receipts) >= MAX_CHECK_EVIDENCE or sum(
             receipt['source'] == EVIDENCE_SOURCE for receipt in state.receipts) >= MAX_PROMPT_CHECK_EVIDENCE):
         raise CheckpointError()
@@ -280,6 +299,9 @@ async def _publish_prompt_evidence(response, finding, *, agent, category, payloa
         'request_ordinal': token.ordinal, 'requests_attempted': trace.requests,
         'responses_evaluated': trace.evaluated, 'source': EVIDENCE_SOURCE, 'source_version': '2.0',
     }
+    if custom_http:
+        receipt['source_version'] = '3.0'
+        receipt['http_target_binding'] = finding['http_target_binding'] = agent['http_target_binding']
     candidate = dict(state.agent, provider=state.agent.get('provider'), model=state.agent.get('model'),
                      check_evidence_schema_version=state.schema_version,
                      check_evidence_run_id=state.run_id, check_evidence=[*state.receipts, receipt],
@@ -519,8 +541,10 @@ def has_canary(agent, field):
     return isinstance(value, str) and len(value) >= 16
 
 
-def usable_model_response(text):
+def usable_model_response(text, *, agent=None):
     """Supported adapters return JSON with nonempty generated text."""
+    if is_http_agent(agent):
+        return bool(extract_agent_response_text(agent, text).strip())
     try:
         body = json.loads(text)
     except (ValueError, TypeError):
@@ -545,7 +569,8 @@ def checked(rule, spec, prerequisite=None, oracle=None, coverage=None, absence_r
             identity = [definition, agent.get("provider"), agent.get("model")]
             if coverage:
                 identity.append(coverage(self, agent, *args, **kwargs))
-            version = "1:" + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+            version = (http_prompt_probe_version(definition, agent) if is_http_agent(agent) else
+                       "1:" + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest())
             probe_id = rule_id + ".sample"
             reason = prerequisite(agent) if prerequisite else None
             execution = _Execution()
@@ -595,6 +620,8 @@ def checked(rule, spec, prerequisite=None, oracle=None, coverage=None, absence_r
                     status = "failed"
                     outcome = "confirmed" if "confirmed" in evidence and execution.evaluated else "inconclusive"
                     reason = (CHECK_INTERRUPTED_REASON if interrupted else
+                              execution.http_diagnostic + ': ' + HTTP_FAILURE_REASONS[execution.http_diagnostic]
+                              if execution.http_diagnostic else
                               "Required model interaction denied authorization (HTTP 401/403); verify credentials and access policy"
                               if execution.authorization_denied else
                               "Some required interactions failed or returned unusable responses")
@@ -643,11 +670,11 @@ def validate_checks(checks):
         seen.add(identity)
 
 
-def missing_checks(records, reason):
+def missing_checks(records, reason, *, rules=None):
     recorded = {record["rule_id"] for record in records}
     return [CheckRecord(rule, rule + ".sample", "1:unexecuted", "skipped",
                         "not_evaluated", reason=reason).to_dict()
-            for rule in PLANNED_RULES if rule not in recorded]
+            for rule in (PLANNED_RULES if rules is None else rules) if rule not in recorded]
 
 
 def _access_context(asset):
@@ -927,6 +954,8 @@ def _validate_evidence_views(result):
             raise ValueError('Observation evidence views disagree')
         if not tenant_evidence_views_match(agent, security):
             raise ValueError('Observation tenant target bindings disagree')
+        if not http_views_match(agent, security):
+            raise ValueError('Observation HTTP application target bindings disagree')
         if not access_evidence_views_match(agent, security):
             raise ValueError('Observation access target bindings disagree')
         if agent.get('security_status') != security.get('status'):
@@ -967,12 +996,12 @@ def validate_scan_result(result, *, validate_evidence=True):
                 if "evidence_status" in finding and finding["evidence_status"] not in {
                         "confirmed", "heuristic", "inconclusive"}:
                     raise ValueError("Invalid finding evidence status")
-        if validate_evidence and has_evidence_contract(agent):
+        if validate_evidence and (is_http_agent(agent) or has_evidence_contract(agent)):
             if evidence_version != agent.get('check_evidence_schema_version'):
                 raise ValueError('Conflicting observation schema versions')
             validate_check_evidence(agent, strict=False)
     for security in result.get('security_results', []):
-        if validate_evidence and has_evidence_contract(security):
+        if validate_evidence and (is_http_agent(security) or has_evidence_contract(security)):
             if evidence_version != security.get('check_evidence_schema_version'):
                 raise ValueError('Conflicting observation schema versions')
             validate_check_evidence(security, strict=False)
