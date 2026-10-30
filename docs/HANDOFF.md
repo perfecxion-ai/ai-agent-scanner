@@ -439,6 +439,16 @@ retry omits 46 mandatory captures. Preserve the failure and the unknown child
 cause; complete native process-cleanup acceptance remains open. See the
 [qualified native record](VALIDATION.md#supplied-native-http-application-retest-at-5a9ab35).
 
+The watchdog follow-up now has a bounded natural-exit/reaping phase within the
+existing five-second child cleanup deadline, fresh identity checks and private
+per-step diagnostics. Forced cleanup and unresolved probes remain failures.
+Local verification passes 27 helper regressions, ten overlapping independent
+cases and the real 852-case focused command under the guide's watchdog. The
+CLI/library and public HTTP driver fingerprints are unchanged; required CI
+collects 5,912 cases. The new focused native mode requires complete evidence,
+including separate pinned-block and enclosing-job exits. It does not replace
+the old failed gate or establish its cause.
+
 The next [native task](http-assessment-retest.md) is the focused process-cleanup
 gate with diagnostics and complete raw capture retention. Existing HTTP evidence
 remains scoped to the unchanged runtime; no broad model or HTTP-mode repeat is
