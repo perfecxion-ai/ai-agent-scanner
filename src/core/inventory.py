@@ -10,7 +10,7 @@ import re
 import time
 
 from itsdangerous import BadSignature, TimestampSigner
-from sqlalchemy import LargeBinary, String, and_, case, cast, func, literal, or_, select
+from sqlalchemy import Integer, LargeBinary, String, and_, bindparam, case, cast, func, literal, or_, select
 
 from src.core.asset_group_projection import ReportSource, bind_observation_source, decode_source, public_text
 from src.core.inventory_common import InventoryError, _timestamp
@@ -169,12 +169,23 @@ def _query_deadline(session, deadline):
             raw.set_progress_handler(None, 0)
 
 
-def _raw_source(session, column, predicate, *, allowance=MAX_STORED_RISK_BYTES):
-    """Bound bytes in SQL before fetching text or invoking JSON deserializers."""
-    binary = cast(column, LargeBinary)
-    size = func.length(binary)
-    return session.execute(select(size, case(
-        (size <= min(allowance, MAX_STORED_RISK_BYTES), binary), else_=None)).where(predicate)).first()
+class _SourceStatements:
+    """Reuse SQL structure within one page, with fresh reads and byte limits."""
+
+    def __init__(self, session):
+        self.session, self.statements = session, {}
+
+    def read(self, column, selector_column, identifier, *, allowance=MAX_STORED_RISK_BYTES):
+        key = (column, selector_column)
+        if key not in self.statements:
+            binary = cast(column, LargeBinary)
+            size = func.length(binary)
+            self.statements[key] = select(size, case(
+                (size <= bindparam('inventory_source_allowance', type_=Integer), binary),
+                else_=None)).where(selector_column == bindparam('inventory_source_identifier'))
+        return self.session.execute(self.statements[key], {
+            'inventory_source_identifier': identifier,
+            'inventory_source_allowance': min(allowance, MAX_STORED_RISK_BYTES)}).first()
 
 
 def _decode_source(raw):
@@ -226,6 +237,7 @@ def inventory_page(session, parsed, secret, observations, scans, reports, genera
             if candidates and generation is None:
                 raise _unavailable()
             projected, cache, evaluated, report_bytes, source_bytes, response_bytes, last = [], {}, 0, 0, 0, 0, None
+            sources = _SourceStatements(session)
             for candidate in candidates[:MAX_CANDIDATES]:
                 _check_deadline(deadline)
                 if (not isinstance(candidate.id, str) or not 1 <= len(candidate.id) <= 64
@@ -245,8 +257,8 @@ def inventory_page(session, parsed, secret, observations, scans, reports, genera
                 if candidate.scan_id not in cache:
                     if len(cache) >= MAX_REPORTS:
                         break
-                    source = _raw_source(session, reports.c.result, reports.c.scan_id == candidate.scan_id,
-                                         allowance=remaining - candidate.metadata_bytes)
+                    source = sources.read(reports.c.result, reports.c.scan_id, candidate.scan_id,
+                                          allowance=remaining - candidate.metadata_bytes)
                     size = source[0] if source else 0
                     if source and (size is None or size > MAX_STORED_RISK_BYTES):
                         raise _unavailable()
@@ -255,8 +267,8 @@ def inventory_page(session, parsed, secret, observations, scans, reports, genera
                     cache[candidate.scan_id] = ReportSource.from_value(_decode_source(source[1]) if source else None)
                     report_bytes += size
                     source_bytes += size
-                source = _raw_source(session, observations.c.metadata, observations.c.id == candidate.id,
-                                     allowance=MAX_SOURCE_BYTES - source_bytes)
+                source = sources.read(observations.c.metadata, observations.c.id, candidate.id,
+                                      allowance=MAX_SOURCE_BYTES - source_bytes)
                 if source is None or source[0] is None or source[1] is None:
                     raise _unavailable()
                 metadata = _decode_source(source[1])

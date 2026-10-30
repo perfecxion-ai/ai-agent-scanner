@@ -153,6 +153,7 @@ class ReportSource:
     agents: dict
     risks: dict
     _support: dict[str, tuple[bool, frozenset[int]]] = field(default_factory=dict, repr=False)
+    _grouped_identities: dict[tuple[str, str], GroupIdentity] = field(default_factory=dict, repr=False)
 
     def support(self, alias):
         # This decoded source belongs to one reader and is never mutated. Row
@@ -200,15 +201,24 @@ def bind_observation_source(row, metadata, source, organization):
     except InventoryError:
         alias = None
     agent = source.agents.get(alias)
-    singleton = target_group_identity({}, organization_id=organization, observation_id=row.id)
-    unknown = project_agent_risk()
+
+    def unmerged(reason):
+        singleton = target_group_identity({}, organization_id=organization, observation_id=row.id)
+        return GroupIdentity(singleton.group_id, 'unmerged', reason, None)
+
     if agent is None:
-        return ObservationBinding(alias, None, GroupIdentity(singleton.group_id, 'unmerged',
-                                  'unmatched_asset_alias', None), unknown)
+        return ObservationBinding(alias, None, unmerged('unmatched_asset_alias'), project_agent_risk())
     # Public snapshot selectors must actually refer to this archived target.
     selected = {'endpoint': row.endpoint_url, 'provider': row.provider, 'model': row.model_name,
                 'evidence_context_id': agent.get('evidence_context_id'), 'metadata': metadata}
-    original = target_group_identity(agent, organization_id=organization, observation_id=row.id)
+    key = (organization, alias)
+    original = source._grouped_identities.get(key)
+    if original is None:
+        original = target_group_identity(agent, organization_id=organization, observation_id=row.id)
+        # A grouped original depends only on this immutable source and owner.
+        # Unmerged IDs depend on the current observation and are never cached.
+        if original.status == 'grouped':
+            source._grouped_identities[key] = original
     snapshot = target_group_identity(selected, organization_id=organization, observation_id=row.id)
     same_http_endpoint = (original.status == snapshot.status == 'grouped'
         and original.target.get('kind') == snapshot.target.get('kind') == 'http_target'
@@ -218,14 +228,14 @@ def bind_observation_source(row, metadata, source, organization):
     if is_http_agent(agent):
         exact = exact and all(metadata.get(name) == agent.get(name) for name in HTTP_PUBLIC_FIELDS)
     if not exact:
-        return ObservationBinding(alias, None, GroupIdentity(singleton.group_id, 'unmerged',
-                                  'snapshot_target_mismatch', None), unknown)
+        return ObservationBinding(alias, None, unmerged('snapshot_target_mismatch'), project_agent_risk())
     if original.status != 'grouped' or snapshot.status != 'grouped' or original.target != snapshot.target:
-        identity = GroupIdentity(singleton.group_id, 'unmerged',
-                                 original.reason or snapshot.reason or 'snapshot_target_mismatch', None)
+        identity = unmerged(original.reason or snapshot.reason or 'snapshot_target_mismatch')
     else:
-        identity = original
-    return ObservationBinding(alias, agent, identity, source.risks.get(alias, unknown))
+        # Keep the cached target dictionary private to this immutable source.
+        identity = snapshot
+    risk = source.risks[alias] if alias in source.risks else project_agent_risk()
+    return ObservationBinding(alias, agent, identity, risk)
 
 
 @dataclass
