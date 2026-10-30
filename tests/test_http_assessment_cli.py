@@ -1,6 +1,8 @@
 """Guided CLI setup and planning without target or operator configuration I/O."""
 
 import json
+import os
+from pathlib import Path
 import socket
 import sys
 from unittest.mock import Mock
@@ -98,6 +100,7 @@ def test_plan_is_json_and_performs_no_execution_output_or_checkpoint_work(profil
     blocked = Mock(side_effect=AssertionError('Plan cannot execute or write a report'))
     monkeypatch.setattr(scanner_cli, '_execute', blocked)
     monkeypatch.setattr(scanner_cli, 'write_private_text', blocked)
+    monkeypatch.setattr(scanner_cli, '_validate_assessment_output', blocked)
     monkeypatch.setattr(socket, 'socket', blocked)
     monkeypatch.setattr(socket, 'getaddrinfo', blocked)
     output, checkpoint = tmp_path / 'report.json', tmp_path / 'checkpoint'
@@ -180,13 +183,106 @@ def test_missing_profile_path_and_report_alias_errors_do_not_echo_private_paths(
     assert profile.read_bytes() == before
 
 
-def test_report_path_resolution_failure_has_a_static_error(profile, tmp_path):
+@pytest.mark.parametrize('suppress_nonstrict_loop_error', [False, True])
+def test_report_path_resolution_failure_has_a_static_error(profile, tmp_path, monkeypatch,
+                                                         suppress_nonstrict_loop_error):
+    import src.core.http_target_profiles as profiles
     loop = tmp_path / CANARY
     loop.symlink_to(loop)
+    if suppress_nonstrict_loop_error:
+        original_resolve = Path.resolve
+
+        def resolve(path, strict=False):
+            if path == loop and not strict:
+                return path.absolute()
+            return original_resolve(path, strict=strict)
+
+        monkeypatch.setattr(Path, 'resolve', resolve)
+    blocked = Mock(side_effect=AssertionError('Invalid output must fail before preparation or execution'))
+    monkeypatch.setattr(profiles, 'prepare_http_profile', blocked)
+    monkeypatch.setattr(scanner_cli, '_execute', blocked)
     result = CliRunner().invoke(scanner_cli.cli, ['assess', '--profile', str(profile), '--output', str(loop),
                                                 '--allow-loopback'])
     assert result.exit_code != 0 and CANARY not in result.output and str(loop) not in result.output
     assert 'Target profile is unavailable or unsafe' in result.output
+    blocked.assert_not_called()
+
+
+@pytest.mark.parametrize('kind', ['dangling-symlink', 'file-symlink', 'directory', 'fifo',
+                                 'missing-parent', 'loop-parent', 'file-parent'])
+def test_invalid_report_destinations_fail_before_preparation_or_execution(profile, tmp_path, monkeypatch, kind):
+    import src.core.http_target_profiles as profiles
+    destination = tmp_path / CANARY
+    if kind == 'dangling-symlink':
+        destination.symlink_to(tmp_path / 'absent')
+    elif kind == 'file-symlink':
+        existing = tmp_path / 'existing.json'
+        existing.write_text('Existing report')
+        destination.symlink_to(existing)
+    elif kind == 'directory':
+        destination.mkdir()
+    elif kind == 'fifo':
+        os.mkfifo(destination)
+    else:
+        if kind == 'loop-parent':
+            destination.symlink_to(destination)
+        elif kind == 'file-parent':
+            destination.write_text('Existing file')
+        destination = destination / 'report.json'
+    blocked = Mock(side_effect=AssertionError('Invalid output must fail before preparation or execution'))
+    monkeypatch.setattr(profiles, 'prepare_http_profile', blocked)
+    monkeypatch.setattr(scanner_cli, '_execute', blocked)
+    result = CliRunner().invoke(scanner_cli.cli, ['assess', '--profile', str(profile), '--output', str(destination),
+                                                '--allow-loopback'])
+    assert result.exit_code != 0 and CANARY not in result.output and str(destination) not in result.output
+    assert 'Target profile is unavailable or unsafe' in result.output
+    blocked.assert_not_called()
+    if kind == 'file-symlink':
+        assert existing.read_text() == 'Existing report'
+
+
+@pytest.mark.parametrize('existing', [False, True])
+@pytest.mark.parametrize('parent_alias', [False, True])
+def test_assessment_accepts_new_and_regular_reports_with_canonical_parent_aliases(profile, tmp_path, monkeypatch,
+                                                                               existing, parent_alias):
+    parent = tmp_path / 'reports'
+    parent.mkdir()
+    if parent_alias:
+        alias = tmp_path / 'report-parent-alias'
+        alias.symlink_to(parent, target_is_directory=True)
+        parent = alias
+    destination = parent / 'report.json'
+    if existing:
+        destination.write_text('Previous report')
+    executed = []
+
+    async def execute(scope, agents, output, *args, **kwargs):
+        executed.append(output)
+        scanner_cli.write_private_text(output, 'Replacement report')
+
+    monkeypatch.setattr(scanner_cli, '_execute', execute)
+    result = CliRunner().invoke(scanner_cli.cli, ['assess', '--profile', str(profile), '--output', str(destination),
+                                                '--allow-loopback'])
+    assert result.exit_code == 0, result.output
+    assert executed == [str(destination)]
+    assert destination.read_text() == 'Replacement report'
+    assert destination.stat().st_mode & 0o777 == 0o600
+
+
+def test_report_alias_through_canonical_parent_cannot_replace_profile(profile, tmp_path, monkeypatch):
+    import src.core.http_target_profiles as profiles
+    alias = tmp_path / 'profile-parent-alias'
+    alias.symlink_to(profile.parent, target_is_directory=True)
+    before = profile.read_bytes()
+    blocked = Mock(side_effect=AssertionError('Profile aliases must fail before preparation or execution'))
+    monkeypatch.setattr(profiles, 'prepare_http_profile', blocked)
+    monkeypatch.setattr(scanner_cli, '_execute', blocked)
+    result = CliRunner().invoke(scanner_cli.cli, ['assess', '--profile', str(profile),
+                                                '--output', str(alias / profile.name), '--allow-loopback'])
+    assert result.exit_code != 0 and str(alias) not in result.output and str(profile) not in result.output
+    assert 'Target profile is unavailable or unsafe' in result.output
+    blocked.assert_not_called()
+    assert profile.read_bytes() == before
 
 
 def test_new_entrypoint_passes_only_the_selected_target_and_explicit_budget(profile, monkeypatch, tmp_path):

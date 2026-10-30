@@ -6,6 +6,7 @@ import json
 import re
 import ipaddress
 import math
+import stat
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -327,6 +328,23 @@ def target_init(name, output):
         raise click.ClickException('Unable to create the private target profile') from None
 
 
+def _validate_assessment_output(profile, output):
+    destination = Path(output)
+    parent = destination.parent.resolve(strict=True)
+    if not stat.S_ISDIR(parent.stat().st_mode):
+        raise ValueError('Invalid report destination')
+    destination = parent / destination.name
+    try:
+        identity = destination.lstat()
+    except FileNotFoundError:
+        pass
+    else:
+        if not stat.S_ISREG(identity.st_mode):
+            raise ValueError('Invalid report destination')
+    if Path(profile).resolve(strict=True) == destination:
+        raise ValueError('Invalid report destination')
+
+
 @cli.command('assess')
 @click.option('--profile', required=True, help='Explicit private HTTP target profile')
 @click.option('--plan', is_flag=True, help='Print a JSON readiness plan without network requests')
@@ -359,11 +377,9 @@ def assess_command(profile, plan, output, fmt, checkpoint_dir, max_requests, max
             return
         output = output or 'assessment-results.json'
         try:
-            same_output = Path(profile).resolve() == Path(output).resolve()
+            _validate_assessment_output(profile, output)
         except (OSError, ValueError, RuntimeError):
             raise TargetProfileError('target_profile_unavailable') from None
-        if same_output:
-            raise TargetProfileError('target_profile_unavailable')
         prepared = prepare_http_profile(selected, profile, allow_loopback=allow_loopback)
         with http_application_context(prepared):
             asyncio.run(_execute(None, [prepared.agent], output, fmt, 'security_only', False,
