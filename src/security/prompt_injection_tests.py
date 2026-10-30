@@ -18,6 +18,8 @@ you own or have explicit permission to test.
 """
 
 import asyncio
+from asyncio import TimeoutError as AsyncTimeoutError
+import aiohttp
 from src.core.transport import SafeSession, model_request_timeout, record_response_failure
 import logging
 import re
@@ -25,10 +27,14 @@ from typing import List, Dict, Any, Optional
 import uuid
 from datetime import datetime, timezone
 
-from src.utils.request_builder import construct_agent_request, extract_response_text
+from src.utils.request_builder import construct_agent_request, extract_agent_response_text
+from src.core.http_application_policy import http_json_request_matches_capture, http_response_failure, is_http_agent
+from src.core.http_application_runtime import get_http_target
+from src.core.transport import current_budget, TransportPolicyError
 from src.core.contracts import (
     CheckpointError, checked, ensure_evidence_active, publish_prompt_evidence, record_prompt_failure,
     record_prompt_response, usable_model_response,
+    record_http_diagnostic,
 )
 from src.core.prompt_catalog import baseline_payloads
 from src.core.request_evidence import prompt_sample
@@ -153,6 +159,8 @@ class PromptInjectionTester:
         endpoint = agent.get('endpoint')
         if not endpoint:
             return []
+        if is_http_agent(agent) and self.prompt_suite != 'protected-disclosure-v1':
+            raise ValueError('HTTP application requires the protected prompt objective')
         if self.prompt_suite is not None:
             if not _adapter_target(agent):
                 return []
@@ -166,6 +174,9 @@ class PromptInjectionTester:
                 agent, category, payloads
             )
             vulnerabilities.extend(category_vulns)
+            budget = current_budget()
+            if is_http_agent(agent) and budget is not None and budget.requests >= budget.max_requests:
+                break
         
         return vulnerabilities
     
@@ -189,7 +200,11 @@ class PromptInjectionTester:
                 if vuln:
                     vulnerabilities.append(vuln)
                     
-                # Add delay between requests to be respectful
+                budget = current_budget()
+                if is_http_agent(agent) and budget is not None and budget.requests >= budget.max_requests:
+                    if sample_index + 1 < len(test_payloads):
+                        record_prompt_failure(legacy=False)
+                    break
                 await asyncio.sleep(1)
                 
             except CheckpointError:
@@ -205,7 +220,10 @@ class PromptInjectionTester:
                                  category: str, payload: str) -> Optional[Dict[str, Any]]:
         """Test a single injection payload against an agent"""
         
-        async with SafeSession(timeout=model_request_timeout()) as session:
+        options = {'timeout': model_request_timeout()}
+        if is_http_agent(agent):
+            options['cookie_jar'] = aiohttp.DummyCookieJar()
+        async with SafeSession(**options) as session:
             # Try to construct request based on agent type
             request_data = self._construct_request(agent, payload)
             
@@ -221,13 +239,26 @@ class PromptInjectionTester:
                     data=request_data.get('data')
                 ) as response:
                     if not 200 <= response.status < 300:
+                        if is_http_agent(agent):
+                            record_http_diagnostic(http_response_failure(None, agent['http_target'], response.status))
                         record_prompt_response(response, False, status_code=response.status)
                         record_response_failure(response.status)
                         return None
-                    response_text = await response.text()
-                    usable = usable_model_response(response_text)
+                    response_text = await response.read() if is_http_agent(agent) else await response.text()
+                    usable = usable_model_response(response_text, agent=agent)
+                    if is_http_agent(agent):
+                        prepared = get_http_target(agent)
+                        captured = response._request_evidence
+                        provenance = (prepared is not None and http_json_request_matches_capture(
+                            captured, agent, payload, prepared.credential)
+                            and request_excludes_canary(captured, prepared.canary))
+                        if not provenance:
+                            record_http_diagnostic('request_provenance_invalid')
+                        usable = usable and provenance
                     record_prompt_response(response, usable)
                     if not usable:
+                        if is_http_agent(agent):
+                            record_http_diagnostic(http_response_failure(response_text, agent['http_target'], response.status))
                         return None
                     
                     # Analyze response for vulnerability indicators
@@ -242,7 +273,15 @@ class PromptInjectionTester:
                     
             except CheckpointError:
                 raise
-            except Exception:
+            except Exception as error:
+                if is_http_agent(agent):
+                    code = ('target_tls_untrusted' if isinstance(error, aiohttp.ClientConnectorCertificateError)
+                            else 'target_request_timeout' if isinstance(error, (TimeoutError, AsyncTimeoutError))
+                            else 'response_too_large' if isinstance(error, TransportPolicyError)
+                            and str(error) == 'Response exceeded scan body limit'
+                            else 'target_scope_refused' if isinstance(error, TransportPolicyError)
+                            else 'target_unreachable')
+                    record_http_diagnostic(code)
                 record_prompt_failure()
                 self.logger.debug("Model request failed")
                 return None
@@ -257,12 +296,16 @@ class PromptInjectionTester:
         
         if not response_text or not 200 <= status_code < 300:
             return None
-        response_text = extract_response_text(response_text)
+        response_text = extract_agent_response_text(agent, response_text)
         response_lower = response_text.lower()
         # Only a secret configured outside the attack establishes disclosure.
         canary = agent.get('system_prompt_canary')
         confirmed = (isinstance(canary, str) and len(canary) >= 16 and canary not in payload
                      and canary in response_text and request_excludes_canary(request_evidence, canary))
+        if confirmed and is_http_agent(agent):
+            prepared = get_http_target(agent)
+            confirmed = bool(prepared is not None and http_json_request_matches_capture(
+                request_evidence, agent, payload, prepared.credential))
         detected_patterns = []
         if confirmed:
             detected_patterns.append(('protected_canary', 'Configured system canary disclosed'))

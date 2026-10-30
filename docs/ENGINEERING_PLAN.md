@@ -43,8 +43,8 @@ proposed calls and observed actions are distinct outcomes.
 | R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Merged in PR #72 with all local, independent, and eight PR/post-merge CI gates passed; scoped native reconstructed-fixture upgrade/restart accepted with recorded qualifications |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a traversal, R1.4b1 grouping and R1.4b2a group risk indexes have qualified native acceptance. R1.4b2b1 shares strict observation/group risk attribution and passes the 5,563-case local gate. Observation-index acceleration is deferred behind the guided HTTP workflow; dashboard groups and logical findings remain separate |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | R1.5a development/content identity passes local and independent gates; required delivery CI is recorded on its PR. Release checksums, SBOM, dependency/build attestation and deployed upgrade acceptance remain open |
-| R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | R2.1a is the next increment: one CLI/Python HTTP JSON prompt-disclosure workflow with an exact POST mapping, selected response field and versioned evidence. Server admission, stateful sessions and broader extension contracts remain open |
-| R2.2 | Advanced model/evidence/suite setup depends on manual identifiers and JSON | Guided discovery-to-assessment flow and CLI setup/diagnostics/preview expose ready, unsupported, missing, and inapplicable prerequisites; secret references never become ordinary saved values | R2.2a accompanies the HTTP adapter: guided private target setup, offline readiness preview and assessment without manual agent JSON or asset IDs. Dashboard and server configuration remain open |
+| R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | R2.1a implements one HTTP JSON prompt-disclosure path with exact POST mapping and versioned evidence. Guided CLI, independent HTTP/HTTPS/recovery checks and the installed-wheel workflow pass locally. Final delivery CI and scoped native acceptance remain required; server admission, stateful sessions and broader extension contracts remain open |
+| R2.2 | Advanced model/evidence/suite setup depends on manual identifiers and JSON | Guided discovery-to-assessment flow and CLI setup/diagnostics/preview expose ready, unsupported, missing, and inapplicable prerequisites; secret references never become ordinary saved values | R2.2a implements guided private target setup, an offline target/scope/readiness preview and active assessment without manual agent JSON or asset IDs. Local and installed-wheel acceptance pass; native, dashboard and server configuration gates remain open |
 | R2.3 | Findings and exits need clearer remediation and policy meaning | Logical findings preserve occurrences, explain boundary/evidence/control/verification, and avoid uncalibrated numeric confidence; offline CI evaluation distinguishes policy violations, missing required coverage, and invalid reports | Planned |
 | R3.1 | Private, narrow cohorts do not establish general detection performance | Public reproducible vulnerable/defended pairs, held-out targets, fixed budgets, executed-driver identities, preserved captures, real exit codes, and explicit model/state provenance; no pooled heterogeneous accuracy | Planned |
 | R3.2 | Offline replay and MCP inventory do not test live retrieval or actions | Add one deeply supported agent integration and controlled MCP actions with per-objective positive/negative fixtures; missing traces cannot prove defenses; no uncontrolled external effects | Planned |
@@ -231,7 +231,7 @@ See [acceptance](VALIDATION.md#shared-observation-source-binding-local-acceptanc
 Required delivery checks are recorded on the implementation PR. This is a
 schema-8 compatibility correction, without observation-index acceleration.
 
-After this correction, prioritize the complete R2.1a/R2.2a guided HTTP workflow.
+After this correction, the delivery priority moved to R2.1a/R2.2a guided HTTP assessment.
 The current inventory path has native 10,000-observation acceptance; easier
 application assessment addresses the larger operator usability and coverage gap.
 Keep observation-index acceleration as a separate R1.4 follow-up. The first new
@@ -245,6 +245,26 @@ complete workflow passes local and required CI gates, rather than a separate
 cloud run for the attribution correction. Model sensitivity remains a separate
 frozen-cohort question; this sequence does not close R2 or establish enterprise
 readiness.
+
+The complete CLI workflow now passes local acceptance. `target init` creates a
+private selected profile; `assess --plan` shows its public mapping, network scope,
+prerequisites and budgets without a target request; `assess` runs the seven
+protected prompt groups. It supports one exact JSON POST and a selected string
+response, without a model placeholder or provider-specific path rewriting.
+Credentials and canaries resolve from declared references once. The new HTTP
+receipt source binds the adapter through reports, scoring, checkpoints and
+recovery; ordinary scan defaults and existing provider evidence retain their
+contracts. See [operator setup](http-application-assessment.md) and
+[local acceptance](VALIDATION.md#guided-http-application-local-acceptance).
+The fresh installed wheel passes the complete 77-request fixture workflow outside
+the checkout. A narrow inventory-reader correction reuses SQL and original
+target identities without weakening per-row binding or work limits. The
+validation record retains the original full pass, refreshed coverage run and
+corrected permission-fixture and output-preflight results separately. Required CI
+collects 5,885 cases;
+it and the scoped
+[native operator retest](http-assessment-retest.md) remain delivery gates.
+This closes neither full R2 CLI/API parity nor representative detection accuracy.
 
 R1.5a uses canonical `1.2.0.dev0`, scoped deterministic source/catalog hashes,
 immutable new-run producer stamps and distinct exporter identity. Historical raw

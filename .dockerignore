@@ -23,3 +23,7 @@ ai-scanner-env
 **/.claude
 lab.toml
 docs/images/scan-demo.png
+**/*.target.json
+**/.aiscan-targets
+**/assessment-results.json
+**/assessment-results.sarif

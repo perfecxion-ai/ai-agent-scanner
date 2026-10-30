@@ -390,19 +390,51 @@ real-server inventory modes pass all fifteen assertions over 10,000 observations
 Fresh package, metadata and installed-wheel recovery checks pass. The delivery
 PR records required platform checks before merge.
 
-The next product increment is the guided HTTP JSON application workflow
-(R2.1a/R2.2a), ahead of observation-index acceleration. Operators should create a
-private target profile, inspect an offline readiness plan and assess one
-authorized application without hand-editing agent JSON or choosing internal IDs.
-The approved scope is exact-path JSON POST, one response-text pointer, explicit
-credential/canary environment references, fresh sessions and seven prompt groups
-with at most 35 requests. Existing scan defaults and server admission retain
-their contracts. The new adapter must bind its identity through live receipts,
-both report views, scoring, checkpoints, exports and offline recovery. Setup and
-active assessment ship together after real HTTP/HTTPS and installed-CLI fixture
-acceptance. One scoped native retest follows that complete merged workflow; no
-interim GCP run is needed for this attribution correction. R1.4 indexing,
-dashboard groups, logical findings and the broader roadmap remain open.
+PR #91 merged the attribution correction as
+`29b6e30d22aab0e7ad30c0667d7be987d916072e` after all eight PR checks passed. Its
+test-only contention follow-up retains the original deadline and production
+policy; earlier Mac failures remain recorded in validation.
+
+R2.1a/R2.2a now implement the guided HTTP JSON application workflow ahead of
+observation-index acceleration. Operators create a private selected profile,
+inspect an offline target/scope/readiness preview and assess one authorized app
+without hand-editing agent JSON or choosing internal IDs. The scope is exact-path
+JSON POST, one response-text pointer, pinned credential/canary environment
+references and seven protected prompt groups with at most 35 requests. Fresh
+client sessions do not prove independent server state or reset conversations.
+Existing scan defaults and server admission retain their contracts.
+
+The adapter identity is bound through actual request evidence, both report views,
+scoring, checkpoints, exports and offline recovery. Quiet output stays
+inconclusive; a supported receipt survives later failure without inventing a
+completed check. See [setup](http-application-assessment.md) and
+[local acceptance](VALIDATION.md#guided-http-application-local-acceptance).
+The initial complete local gate passes 5,843 cases. The coverage refresh before
+the output-preflight correction records 5,853 passes and one permission-fixture
+failure at 93%
+coverage; the fixture correction then passes all 32 CLI cases under `umask 077`
+and its affected case under `022`. Eleven additional independent cache cases pass
+separately. The later Python 3.13 report-path failure now has an explicit
+read-only output preflight before preparation or probing, 104 integrated cases
+and seven independent path cases. Final CI collects 5,885 cases. The validation
+record preserves these
+distinct runs. Both actual normal/optimized CLI gates pass. A fresh wheel,
+executed outside the checkout, accepts all eleven assertions over 77 HTTP/HTTPS
+requests, including forced-kill recovery without replay.
+
+An inventory performance follow-up addresses the preceding Python 3.10 CI
+timeout with request-local prepared SQL and grouped-original identity reuse.
+Every row still validates its snapshot and reads fresh bounded source bytes;
+the 10,000-observation fixture and 120-second deadline remain unchanged. Hosted
+Python 3.10 passes all 5,865 cases on the preceding `bad4d109` head, including
+both inventory modes. The complete corrected-head matrix remains required.
+
+Complete required delivery CI, then request one pinned
+[native retest](http-assessment-retest.md). Its fixtures need no existing lab
+models or operator configuration. R1.4 indexing, dashboard groups, logical
+findings, server target setup, stateful adapters and the broader roadmap remain
+open. This fixture acceptance does not establish general model sensitivity or
+enterprise readiness.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned

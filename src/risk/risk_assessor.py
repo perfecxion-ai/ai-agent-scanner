@@ -16,6 +16,7 @@ and understand the business impact of AI security vulnerabilities.
 """
 
 import logging
+from src.core.http_application_policy import is_http_agent
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime, timezone
 import statistics
@@ -149,7 +150,7 @@ class RiskAssessment:
         agent_id = agent_results.get('agent_id')
         agent_name = agent_results.get('agent_name')
         vulnerabilities = agent_results.get('vulnerabilities', [])
-        if 'check_schema_version' in agent_results:
+        if is_http_agent(agent_results) or 'check_schema_version' in agent_results:
             if not risk_assessment_eligible(agent_results):
                 raise ValueError('Current risk assessment requires supported evidence')
             vulnerabilities = confirmed_findings(agent_results)

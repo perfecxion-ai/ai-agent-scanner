@@ -1,5 +1,7 @@
 """Versioned complete-ledger dispatch, with frozen legacy prompt semantics."""
 
+from src.core.http_application_policy import is_http_agent
+from src.core.http_prompt_evidence_policy import validate_http_prompt_evidence
 from src.core.prompt_evidence_policy import (
     EVIDENCE_SOURCE, _FIELDS as PROMPT_RECEIPT_FIELDS, _uuid, has_evidence_contract,
     validate_prompt_evidence,
@@ -32,6 +34,9 @@ def checkpoint_evidence_version(value):
 def validate_observation_evidence(asset, *, strict=True):
     """Validate every source and link before any source-specific projection."""
     try:
+        # Reserve this provider before the legacy no-ledger compatibility path.
+        if is_http_agent(asset):
+            return validate_http_prompt_evidence(asset)
         if not has_evidence_contract(asset):
             return asset
         version = asset.get('check_evidence_schema_version')

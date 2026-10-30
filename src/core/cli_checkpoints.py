@@ -16,6 +16,7 @@ try:
 except ImportError:  # The optional store requires the supported POSIX filesystem.
     fcntl = None
 
+from src.core.http_application_policy import HTTP_PUBLIC_FIELDS
 from src.core.build_identity import saved_identity
 from src.core.contracts import (
     MAX_CHECKPOINT_BYTES, MAX_CHECKPOINTS, MAX_CHECKPOINT_TOTAL_BYTES,
@@ -184,7 +185,8 @@ def _report(value, *, terminal):
 
 
 def _extends(previous, current):
-    for key in ('schema_version', 'check_schema_version', 'check_evidence_schema_version', 'scan_type', 'producer_identity'):
+    for key in ('schema_version', 'check_schema_version', 'check_evidence_schema_version', 'scan_type',
+                'producer_identity', 'assessment_objective', 'assessment_contract_version'):
         if (key in previous) != (key in current) or _encoded(previous.get(key)) != _encoded(current.get(key)):
             return False
     if any(previous['checkpoint'][key] != current['checkpoint'][key] for key in ('version', 'coverage')):
@@ -195,7 +197,7 @@ def _extends(previous, current):
         if not preserves_observation_eligibility(old, new):
             return False
         for key in ('id', 'name', 'type', 'provider', 'model', 'endpoint', 'endpoint_redacted', 'metadata',
-                    'evidence_context_id', 'check_evidence_schema_version', 'check_evidence_run_id'):
+                    'evidence_context_id', 'check_evidence_schema_version', 'check_evidence_run_id', *HTTP_PUBLIC_FIELDS):
             if key == 'check_evidence_run_id' and key not in old:
                 continue
             if _encoded(old.get(key)) != _encoded(new.get(key)):

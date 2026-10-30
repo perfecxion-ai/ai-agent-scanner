@@ -1,5 +1,8 @@
 # Local assistant instructions and lab setup never belong in distributions.
 global-exclude AGENTS.md AGENTS.*.md CLAUDE.md claude.md
+global-exclude *.target.json assessment-results.json assessment-results.sarif
+prune .aiscan-targets
+prune **/.aiscan-targets
 exclude lab.toml
 exclude docs/images/scan-demo.png
 prune .codex

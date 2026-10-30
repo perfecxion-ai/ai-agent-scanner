@@ -10,6 +10,10 @@ from inspect import getattr_static
 import json
 from urllib.parse import urlsplit, urlunsplit
 from src.core.build_identity import current_identity, public_identity, validate_identity_fields
+from src.core.http_application_policy import (
+    HTTP_OBJECTIVE, HTTP_PUBLIC_FIELDS, http_public_fields, is_http_agent, objective_rules,
+)
+from src.core.http_application_runtime import get_http_target, http_application_secrets
 from src.core.transport import current_budget, scan_transport, ScanBudget
 from src.core.redaction import collect_secrets, redact_secrets
 from src.core.risk_projection import project_agent_risk
@@ -94,7 +98,15 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
     """Keep prepared tenant credentials private and stable through every checkpoint."""
     prompt_suite = (PROTECTED_DISCLOSURE_SUITE
                     if getattr(security, "prompt_suite", None) == PROTECTED_DISCLOSURE_SUITE else None)
+    assessment_objective = getattr_static(security, 'assessment_objective', None)
+    planned_rules = objective_rules(assessment_objective)
+    if assessment_objective == HTTP_OBJECTIVE:
+        if len(observations) != 1 or get_http_target(observations[0]) is None:
+            raise ValueError('HTTP assessment requires one prepared target')
+    elif any(is_http_agent(agent) for agent in observations):
+        raise ValueError('HTTP application requires its explicit assessment objective')
     secrets = collect_secrets(observations)
+    secrets.update(http_application_secrets())
     secrets.update(tenant_secrets())
     secrets.update(key for agent in observations if (key := resolve_api_key(agent)))
     security_results = []
@@ -174,6 +186,7 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
             result['provider'], result['model'] = agent.get('provider'), agent.get('model')
             result['endpoint'] = agent.get('endpoint')
             result['evidence_context_id'] = agent.get('evidence_context_id')
+            result.update(http_public_fields(agent))
             supplied_evidence = has_evidence_contract(result)
             if supplied_evidence:
                 validate_check_evidence(result, strict=not isinstance(security, SecurityTestEngine))
@@ -208,7 +221,7 @@ async def _run_observations(security, risk, scan_type, observations, agent_valid
                 except (TypeError, ValueError):
                     result.update(status="failed", error="Invalid security check result", vulnerabilities=[], checks=[])
             else:
-                result["checks"] = missing_checks([], "No check-level evidence supplied")
+                result["checks"] = missing_checks([], "No check-level evidence supplied", rules=planned_rules)
             if result.get("status") == "completed" and not any(
                     check["responses_evaluated"] for check in result["checks"]):
                 result.update(status="partial", reason="No security checks evaluated a response")
@@ -293,6 +306,7 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
     for original in observations:
         agent = {key: original[key] for key in ("id", "name", "type", "provider", "model", "endpoint", "discovery_method", "confidence", "evidence_context_id") if key in original}
         agent['provider'], agent['model'] = original.get('provider'), original.get('model')
+        agent.update(http_public_fields(original))
         agent["metadata"] = public_metadata(original.get("metadata", {}))
         if agent.get("endpoint"):
             endpoint = urlsplit(agent["endpoint"])
@@ -307,7 +321,8 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
         agent["security_status"] = test.get("status", "not_tested")
         agent["vulnerabilities"] = test.get("vulnerabilities", [])
         agent["observations"] = test.get("observations", [])
-        agent["checks"] = test.get("checks", missing_checks([], "Security testing was not requested"))
+        agent["checks"] = test.get("checks", missing_checks([], "Security testing was not requested", rules=objective_rules(
+            original.get('assessment_objective'))))
         if evidence_enabled:
             agent['check_evidence_schema_version'] = test.get(
                 'check_evidence_schema_version', evidence_schema_version)
@@ -335,6 +350,8 @@ def _project_report(observations, security_results, risks, risk_status, scan_typ
         **({'check_evidence_schema_version': evidence_schema_version} if evidence_enabled else {}),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": scan_type,
+        **({'assessment_objective': HTTP_OBJECTIVE, 'assessment_contract_version': '1.0'}
+           if any(is_http_agent(agent) for agent in observations) else {}),
         **({"prompt_suite": prompt_suite} if prompt_suite is not None and scan_type != "discovery_only" else {}),
         "status": "partial" if incomplete or failed or partial or skipped or transport_incomplete or risk_status == "failed" else "completed",
         "transport_incomplete": transport_incomplete,
@@ -391,6 +408,7 @@ class _CheckpointState:
             "endpoint": agent.get("endpoint"),
             "evidence_context_id": agent.get("evidence_context_id"),
             "metadata": public_metadata(agent.get("metadata", {})),
+            **http_public_fields(agent),
             "check_schema_version": CHECK_SCHEMA_VERSION, "status": "partial",
             "vulnerabilities": [], "observations": [], "checks": [],
             **({'check_evidence_schema_version': self.evidence_schema_version, 'check_evidence': []}
@@ -530,6 +548,7 @@ class _CheckpointState:
             "endpoint": result.get("endpoint"),
             "evidence_context_id": result.get("evidence_context_id"),
             "metadata": result.get("metadata", {}),
+            **http_public_fields(result),
             "vulnerabilities": confirmed_findings(result),
         })
 
@@ -571,7 +590,8 @@ class _CheckpointState:
         for result in results:
             unfinished = {identity[0] for identity in unfinished_evidence_checks(result)}
             result["checks"].extend(check for check in missing_checks(
-                result["checks"], "No finalized check evidence at checkpoint") if check['rule_id'] not in unfinished)
+                result["checks"], "No finalized check evidence at checkpoint", rules=objective_rules(
+                    result.get('assessment_objective'))) if check['rule_id'] not in unfinished)
         risks = self._current_risks()
         if risks:
             risk_status = "partial" if any(item["coverage_status"] == "partial" for item in risks) else "completed"
@@ -593,7 +613,7 @@ class _CheckpointState:
         for previous, current in zip(self.last["agents"], report["agents"]):
             if not preserves_observation_eligibility(previous, current):
                 raise CheckpointError()
-            fields = ("id", "name", "type", "provider", "model", "endpoint", "endpoint_redacted", "metadata", "evidence_context_id")
+            fields = ("id", "name", "type", "provider", "model", "endpoint", "endpoint_redacted", "metadata", "evidence_context_id", *HTTP_PUBLIC_FIELDS)
             if any(previous.get(key) != current.get(key) for key in fields):
                 raise CheckpointError()
             if any(check not in current["checks"] for check in previous["checks"]
@@ -680,6 +700,10 @@ def to_sarif(result):
         report['runs'][0]['properties']['check_evidence_schema_version'] = result['check_evidence_schema_version']
         report['runs'][0]['properties']['check_evidence'] = [
             {'agent_id': agent['id'],
+             **http_public_fields(agent),
+             **({'provider': agent['provider'], 'model': agent['model'], 'endpoint': agent['endpoint'],
+                 'evidence_context_id': agent['evidence_context_id']}
+                if is_http_agent(agent) else {}),
              **({'check_evidence_run_id': agent['check_evidence_run_id']}
                 if 'check_evidence_run_id' in agent else {}),
              'check_evidence': deepcopy(agent.get('check_evidence', []))}
