@@ -338,7 +338,7 @@ views and checkpoint 4.0. JSON/SARIF recovery preserves the acknowledged receipt
 and sends no request. Fresh client sessions do not establish a server-side reset
 or independent stochastic samples.
 
-The twenty-three-file focused command includes the five new HTTP files, frozen legacy
+The focused command includes the five new HTTP files, frozen legacy
 prompt/tenant/access compatibility, application API projections and genuine
 checkpoint/process recovery. It also covers the shared observation/group source
 binding prerequisite, so this combined native run needs no separate attribution
