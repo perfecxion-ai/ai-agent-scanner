@@ -2357,6 +2357,112 @@ fixtures and selected compatibility tests. Native operator acceptance, server
 target setup, stateful session contracts, logical findings, representative model
 sensitivity and the remaining R2 through R4 work remain open.
 
+### Supplied native HTTP application retest at 5a9ab35
+
+The supplied `aiscan-http-assessment-5a9ab35.tar.gz` supports scoped native CLI
+and HTTP application behavior. Native process-cleanup acceptance remains open.
+Its SHA-256 is
+`d9cfeabfd32779b83813d1be9bc90bd2b69e74e57307347f37495b2849906f04`.
+Two independent data-only reviews checked the safely extracted files against the
+expectations frozen before execution. No supplied script, scanner, lab service,
+operator configuration or database was executed or loaded for that review.
+
+| Returned evidence | Verified result |
+| --- | --- |
+| Pinned revision | `5a9ab356d2f68d1ff4a988dd9d17a26788a9141d`, PR #92 |
+| Captured runtime | Linux, Python 3.11.2, SQLite 3.40.1 |
+| Executed source | The expected 84-file scanner digest `70299904...`; full public driver digest `f6cc8624...` and all 26 focused file hashes match |
+| First-run capture set | All 55 required files present; mandatory `source-status.log` is present and empty |
+| HTTP modes, both runs | All six receipts match eleven ordered assertions, 77 fixture POSTs, thirteen mixed CLI exits, private-value/path counts and producer identities |
+| Optimization | Normal, optimized and installed modes record parent/child flags 0, 1 and 0 respectively |
+| Focused pytest | 825 passed, two separately captured public modes deselected; 190.36/191.81 seconds |
+| First-run command exits | All sixteen actual step exit files are zero, including build, Twine and installed import/source proof |
+| First-run wrapper | Failed: `focused-tests_surviving_owned_child`; driver and pinned-block exits 1 |
+| First enclosing job | `lab-jobs/EXIT` records 7; this differs from the pinned block's exit 1 |
+| Retry | Wrapper claims success and pinned-block exit 0; only nine of 55 mandatory captures are returned |
+
+The first complete run's source and installed identities agree. The installed
+proof records the expected relative scanner module paths under its checked
+site-packages origin. The public fixture validates supported 70/high disclosure,
+truthful null/incomplete controls and acknowledged crash recovery without replay.
+Raw generated reports and built distributions are deliberately absent, so the
+review relies on the pinned driver's assertions, identity reconciliation and
+captured build checks rather than independently inspecting those private reports
+or distribution bytes.
+
+The failed wrapper is preserved as failed. It flagged a descendant after pytest
+exited, attempted forced cleanup, and reported no remaining unreaped-child failure. No PID, state
+or timing diagnostics identify that child. A harmless race, zombie or test
+teardown leak cannot be distinguished from these files. The report's attribution
+to a slower-runner race and its exclusion of a feature regression are not
+established. [psutil documents](https://psutil.readthedocs.io/stable/#psutil.Process.is_running)
+that its running check also includes zombies; that is a possible classification
+issue to test locally, not a diagnosis of this captured failure.
+
+The retry omits 46 mandatory files, including actual step exits, per-mode stderr,
+runtime, installed proof, cleanup and the mandatory source-status file. Its
+twenty-check summary was produced before selective sharing; it cannot replace
+those absent captures or the absent enclosing runner EXIT. The local macOS pass
+is narrative-only in this archive. Existing platform CI is separate evidence.
+
+The primary capture inventory has 54 entries, excluding itself. Fifty returned
+files match; four log copies differ in the declared sanitization class. The
+outer helper deletes the original capture directory without a demonstrated
+private raw-log backup, so those transformations cannot be reconstructed from
+the bundle. Eight retry inventory entries match the shared subset; 46 are absent.
+All 87 AppleDouble files are packaging metadata. Exported directory/file modes
+do not establish the original capture directory's permissions.
+
+Each public driver records its bounded five-value/nine-profile-path privacy
+check. The separate helper's nine swept names include four populated lab-secret references,
+two static references and three PII patterns; it omits hexadecimal forms and runs
+before several final shared outputs exist. Review screens found no apparent
+credentials or personal private values. Those observations do not establish
+arbitrary-secret absence or full privacy coverage of every transformation.
+
+The follow-up targets the focused suite and process lifecycle diagnostics while
+preserving this HTTP evidence and the first failure. Scanner/library/CLI runtime
+behavior and model-detection claims remain unchanged. Complete native acceptance
+requires the instrumented cleanup result, complete captures and genuine exits at
+both the pinned block and enclosing job levels.
+
+#### Watchdog follow-up and local verification
+
+The guide now uses the separately hashed `scripts/native_retest_watchdog.py`.
+It allows up to one second of natural exit/reaping inside the existing shared
+five-second child cleanup budget. A living child needing forced cleanup still
+fails, as do PID reuse, unknown probes, signal/wait errors, unreaped processes
+and diagnostic-limit exhaustion. Fresh process identities precede signals;
+zombies require actual reaping or verified disappearance. Main-command failures,
+timeouts and output limits remain failures. Diagnostics omit command arguments,
+environment, paths and exception messages. Tracking covers observed descendants;
+it is not an adversarial process-containment guarantee.
+
+The helper SHA-256 is
+`8d9c509676267fdfc03fde507ea7f637180f8d0eb3a8672542335d2d4b329295`.
+Twenty-seven committed regressions pass in 1.71 seconds with warnings as errors;
+ten private independent cases also pass. The guide's exact `run()` function,
+executing the real 27-file focused command locally on Python 3.10.20, passes 852
+tests with two full HTTP modes deselected in 133.57 seconds. It tracks 23 owned
+descendants and 71 state events; all end gone, with no forced kills, probe errors
+or cleanup failures. This is local command/watchdog integration evidence, not a
+new native full-wrapper run. These test sets overlap and are not additive.
+
+The CLI/library fingerprint remains `70299904...`, covering the same 84 runtime
+files, and public HTTP driver `f6cc8624...` is unchanged. No scanner, scoring,
+transport, database or catalog behavior changes. Required CI collects 5,912
+cases, including the new helper regressions.
+
+The focused native follow-up keeps the original 26 files plus the helper tests,
+and omits the three full HTTP modes and wheel work. It requires exact mode,
+helper/current revision, source/runtime compatibility with the original complete
+baseline, all eight actual step exits and diagnostics, empty source status,
+checked cleanup and both block/job exits. Dependency differences are recorded
+as qualifications. Retain raw captures privately; sanitize only separate shared
+copies with explicit original/shared hashes. This changes the cleanup protocol
+prospectively and cannot reclassify the original failed run as passed. The
+instrumented native result remains required.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose
