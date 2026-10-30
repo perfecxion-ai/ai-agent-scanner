@@ -3,7 +3,6 @@
 import base64
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
@@ -13,8 +12,9 @@ import time
 from itsdangerous import BadSignature, TimestampSigner
 from sqlalchemy import LargeBinary, String, and_, case, cast, func, literal, or_, select
 
-from src.core.risk_projection import project_agent_risk, project_report_risk
-from src.core.stored_risk import MAX_STORED_RISK_BYTES, stored_json_text
+from src.core.asset_group_projection import ReportSource, bind_observation_source, decode_source, public_text
+from src.core.inventory_common import InventoryError, _timestamp
+from src.core.stored_risk import MAX_STORED_RISK_BYTES
 
 
 MAX_PAGE_LIMIT = 100
@@ -30,7 +30,7 @@ MAX_CURSOR_BYTES = 4096
 ORDERING = 'discovered_at_desc_id_asc'
 # Bump when pagination or projection semantics change. The source fingerprint
 # also invalidates cursors after any packaged Python source deployment.
-INVENTORY_PROJECTION_VERSION = 'inventory-risk-v2'
+INVENTORY_PROJECTION_VERSION = 'inventory-risk-v3'
 _RISK_LEVELS = {'critical', 'high', 'medium', 'low', 'minimal', 'unknown'}
 _DECIMAL = re.compile(r'[0-9]+\Z')
 _GENERATION = re.compile(r'[0-9a-f]{32}\Z')
@@ -48,14 +48,6 @@ def _source_policy():
 
 
 PROJECTION_POLICY = _source_policy()
-
-
-class InventoryError(ValueError):
-    """Only static text crosses the public error boundary."""
-
-    def __init__(self, status, code, message):
-        super().__init__(message)
-        self.status, self.code, self.message = status, code, message
 
 
 def _invalid_request():
@@ -76,20 +68,6 @@ def _unavailable():
 
 def _signer(secret):
     return TimestampSigner(secret, salt='aiscan-inventory-v1', digest_method=hashlib.sha256)
-
-
-def _timestamp(value):
-    if not isinstance(value, str) or not value or len(value.encode('utf-8')) > 64:
-        raise ValueError('Invalid timestamp')
-    # Normalize only display parsing for Python 3.10, which requires three or
-    # six fractional digits and an explicit UTC offset. The sort key stays raw.
-    normalized = re.sub(r'([0-9]{2}:[0-9]{2}:[0-9]{2})[.,]([0-9]+)',
-                        lambda match: match[1] + '.' + match[2][:6].ljust(6, '0'), value)
-    if normalized.endswith('Z'):
-        if not re.search(r'[0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?Z\Z', normalized):
-            raise ValueError('Invalid UTC timestamp')
-        normalized = normalized[:-1] + '+00:00'
-    return datetime.fromisoformat(normalized)
 
 
 @dataclass(frozen=True)
@@ -200,17 +178,10 @@ def _raw_source(session, column, predicate, *, allowance=MAX_STORED_RISK_BYTES):
 
 
 def _decode_source(raw):
-    text = stored_json_text(raw)
-    if text is None:
-        raise _unavailable()
     try:
-        return json.loads(text, parse_constant=lambda _: _reject_constant())
-    except (ValueError, TypeError, RecursionError, OverflowError):
+        return decode_source(raw)
+    except InventoryError:
         raise _unavailable() from None
-
-
-def _reject_constant():
-    raise ValueError('Non-JSON numeric constant')
 
 
 def _bounded_field(column, maximum):
@@ -240,12 +211,16 @@ def inventory_page(session, parsed, secret, observations, scans, reports, genera
             candidates = session.execute(select(
                 _bounded_field(observations.c.id, 256), _bounded_field(observations.c.scan_id, 256),
                 _bounded_field(observations.c.agent_name, 1020), _bounded_field(observations.c.agent_type, 400),
-                _bounded_field(observations.c.provider, 400), case((and_(
+                _bounded_field(observations.c.provider, 400),
+                _bounded_field(observations.c.model_name, 1020),
+                _bounded_field(observations.c.endpoint_url, 16384), case((and_(
                     func.typeof(observations.c.discovered_at) == 'text',
                     func.length(cast(observations.c.discovered_at, LargeBinary)) <= 64),
                     cast(observations.c.discovered_at, String())), else_=None).label('stored_timestamp'),
                 func.length(cast(observations.c.metadata, LargeBinary)).label('metadata_bytes'),
                 observations.c.provider.is_(None).label('provider_is_null'),
+                observations.c.model_name.is_(None).label('model_name_is_null'),
+                observations.c.endpoint_url.is_(None).label('endpoint_url_is_null'),
             ).join(scans, observations.c.scan_id == scans.c.id).where(*conditions).order_by(
                 observations.c.discovered_at.desc(), observations.c.id).limit(MAX_CANDIDATES + 1)).all()
             if candidates and generation is None:
@@ -257,9 +232,12 @@ def inventory_page(session, parsed, secret, observations, scans, reports, genera
                         or not isinstance(candidate.scan_id, str) or not 1 <= len(candidate.scan_id) <= 64
                         or candidate.agent_name is None or candidate.agent_type is None
                         or candidate.stored_timestamp is None
-                        or (candidate.provider is None and not candidate.provider_is_null)
+                        or any(getattr(candidate, name) is None and not getattr(candidate, name + '_is_null')
+                               for name in ('provider', 'model_name', 'endpoint_url'))
                         or candidate.metadata_bytes is None or candidate.metadata_bytes > MAX_STORED_RISK_BYTES):
                     raise _unavailable()
+                for name, maximum in (('provider', 100), ('model_name', 255), ('endpoint_url', 4096)):
+                    public_text(getattr(candidate, name), maximum, nullable=True)
                 displayed_stamp = _timestamp(candidate.stored_timestamp).isoformat()
                 remaining = MAX_SOURCE_BYTES - source_bytes
                 if candidate.metadata_bytes > remaining:
@@ -274,7 +252,7 @@ def inventory_page(session, parsed, secret, observations, scans, reports, genera
                         raise _unavailable()
                     if size + candidate.metadata_bytes > remaining:
                         break
-                    cache[candidate.scan_id] = project_report_risk(_decode_source(source[1]) if source else None)[1]
+                    cache[candidate.scan_id] = ReportSource.from_value(_decode_source(source[1]) if source else None)
                     report_bytes += size
                     source_bytes += size
                 source = _raw_source(session, observations.c.metadata, observations.c.id == candidate.id,
@@ -286,7 +264,10 @@ def inventory_page(session, parsed, secret, observations, scans, reports, genera
                 metadata = metadata if isinstance(metadata, dict) else {}
                 asset_id = metadata.get('asset_id', candidate.id)
                 asset_id = asset_id if isinstance(asset_id, str) and asset_id else None
-                risk = cache[candidate.scan_id].get(asset_id, project_agent_risk())
+                # Preserve the displayed alias while canonical risk uses the
+                # same bounded target binding as the derived publication.
+                risk = bind_observation_source(candidate, metadata, cache[candidate.scan_id],
+                                               parsed.organization).risk
                 _check_deadline(deadline)
                 if parsed.risk_level is None or risk['risk_level'] == parsed.risk_level:
                     item = {'id': candidate.id, 'asset_id': asset_id, 'name': candidate.agent_name,
@@ -317,7 +298,9 @@ def inventory_page(session, parsed, secret, observations, scans, reports, genera
                     'risk_level_filter_scope': 'tenant_type_assets_cursor_pages',
                     'warning': None if search_complete else 'Inventory search continues on the next cursor page.',
                 }}
-    except InventoryError:
+    except InventoryError as error:
+        if error.status == 503:
+            raise _unavailable() from None
         raise
     except Exception:
         # SQL, JSON and canonical projection failures share a static boundary.

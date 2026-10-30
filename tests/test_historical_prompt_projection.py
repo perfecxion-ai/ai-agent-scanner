@@ -29,7 +29,9 @@ def seed_archived(module, document, *, scan_id='fixture', tenant='tenant-a'):
             snapshot = module.DiscoveredAgentModel(
                 id=identifier, scan_id=scan_id, agent_name='Archive fixture',
                 agent_type='assistant', discovery_method='fixture', risk_score=99,
-                risk_level='critical', metadata_json={'asset_id': asset['id']})
+                risk_level='critical', metadata_json={'asset_id': asset['id']},
+                provider=asset.get('provider'), model_name=asset.get('model'),
+                endpoint_url=asset.get('endpoint'))
             module.db.session.add(snapshot)
         else:
             snapshot = module.db.session.get(module.DiscoveredAgentModel, identifier)

@@ -13,6 +13,21 @@ The endpoint reads current canonical risk from saved reports. Database score and
 level columns never exclude candidates. Unsupported historical evidence remains
 unknown, and supported assessed zero remains numeric zero.
 
+Risk attribution requires one unique saved report agent matching the observation's
+alias and saved provider, model and endpoint selectors. Missing selectors must
+match as missing; a different valid selector leaves the observation and alias in
+the list with null risk and `unknown`. HTTP endpoint comparison allows the same
+safe normalization used by target grouping. A valid target can remain unmerged
+and still retain supported risk. This binding does not establish credential,
+principal or complete cloud-resource equivalence.
+
+The same bounded alias eligibility and target-binding implementation serves group
+staging and observation reads. The displayed `asset_id` remains a source reference;
+its presence alone does not establish risk eligibility. Malformed JSON, duplicate
+object members and refused selector scalars make the operation unavailable rather
+than silently skipping a possible match. Saved reports and scalar caches remain
+unchanged by reads. This compatibility tightening needs no schema migration.
+
 ## Pages and filters
 
 | Parameter | Meaning |

@@ -79,8 +79,12 @@ def populate(module, count=10000):
             agent = deepcopy(templates['high' if case == 5 else 'zero'])
             agent['id'] = identifier
             reports[scan].append(agent)
+        # Snapshot selectors come from the same archived target, including
+        # missing selectors on deliberately unmergeable legacy fixtures.
+        target = agent if case in {5, 6} else templates.get(alias, {})
         observations.append({'id': identifier, 'scan_id': scan, 'agent_name': identifier,
-                             'agent_type': kind, 'provider': 'fixture', 'discovery_method': 'fixture',
+                             'agent_type': kind, 'provider': target.get('provider'), 'model_name': target.get('model'),
+                             'endpoint_url': target.get('endpoint'), 'discovery_method': 'fixture',
                              'risk_score': 99 if risk['risk_score'] != 70 else 0,
                              'risk_level': 'critical', 'metadata': metadata, 'discovered_at': when})
         expected.append({'id': identifier, 'asset_id': alias, 'type': kind,
@@ -553,13 +557,13 @@ def test_deadline_failure_is_explicit_and_clears_owned_sqlite_progress_handler(a
     module, client = api
     populate(module, 1)
     clock = [0.0]
-    original = inventory.project_report_risk
+    original = inventory.ReportSource.from_value
     def stalled_projection(value):
         result = original(value)
         clock[0] = inventory.PAGE_TIMEOUT_SECONDS + 1
         return result
     monkeypatch.setattr(inventory.time, 'monotonic', lambda: clock[0])
-    monkeypatch.setattr(inventory, 'project_report_risk', stalled_projection)
+    monkeypatch.setattr(inventory.ReportSource, 'from_value', stalled_projection)
     response = client.get('/api/agents', headers=headers(module))
     assert response.status_code == 503, response.json
     assert response.json['code'] == 'inventory_projection_unavailable'

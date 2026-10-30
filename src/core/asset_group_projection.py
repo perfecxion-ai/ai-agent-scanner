@@ -15,7 +15,7 @@ from src.core.contracts import (
     has_evidence_contract, is_supported_evidence_version, tenant_evidence_views_match,
     validate_check_evidence, validate_scan_result,
 )
-from src.core.inventory import InventoryError, _timestamp
+from src.core.inventory_common import InventoryError, _timestamp
 from src.core.redaction import collect_secrets, redact_secrets
 from src.core.risk_projection import project_agent_risk, project_report_risk
 from src.core.stored_risk import MAX_STORED_RISK_BYTES, stored_json_text
@@ -182,6 +182,49 @@ class ReportSource:
         return cls(report, agents, risks)
 
 
+@dataclass(frozen=True)
+class ObservationBinding:
+    asset_id: str | None
+    agent: dict | None
+    identity: GroupIdentity
+    risk: dict
+
+
+def bind_observation_source(row, metadata, source, organization):
+    """Bind one safe unique report alias to its saved snapshot target selectors."""
+    alias = metadata.get('asset_id', row.id)
+    alias = alias if isinstance(alias, str) and alias else None
+    try:
+        alias = public_text(alias, 256, nullable=True, identifier=True)
+    except InventoryError:
+        alias = None
+    agent = source.agents.get(alias)
+    singleton = target_group_identity({}, organization_id=organization, observation_id=row.id)
+    unknown = project_agent_risk()
+    if agent is None:
+        return ObservationBinding(alias, None, GroupIdentity(singleton.group_id, 'unmerged',
+                                  'unmatched_asset_alias', None), unknown)
+    # Public snapshot selectors must actually refer to this archived target.
+    selected = {'endpoint': row.endpoint_url, 'provider': row.provider, 'model': row.model_name,
+                'evidence_context_id': agent.get('evidence_context_id'), 'metadata': metadata}
+    original = target_group_identity(agent, organization_id=organization, observation_id=row.id)
+    snapshot = target_group_identity(selected, organization_id=organization, observation_id=row.id)
+    same_http_endpoint = (original.status == snapshot.status == 'grouped'
+        and original.target.get('kind') == snapshot.target.get('kind') == 'http_target'
+        and original.target.get('endpoint') == snapshot.target.get('endpoint'))
+    exact = (row.provider == agent.get('provider') and row.model_name == agent.get('model')
+             and (row.endpoint_url == agent.get('endpoint') or same_http_endpoint))
+    if not exact:
+        return ObservationBinding(alias, None, GroupIdentity(singleton.group_id, 'unmerged',
+                                  'snapshot_target_mismatch', None), unknown)
+    if original.status != 'grouped' or snapshot.status != 'grouped' or original.target != snapshot.target:
+        identity = GroupIdentity(singleton.group_id, 'unmerged',
+                                 original.reason or snapshot.reason or 'snapshot_target_mismatch', None)
+    else:
+        identity = original
+    return ObservationBinding(alias, agent, identity, source.risks.get(alias, unknown))
+
+
 @dataclass
 class ObservationSource:
     row: object
@@ -318,41 +361,15 @@ class SourceReader:
         metadata = decode_source(raw)
         self.source_bytes += size
         metadata = metadata if isinstance(metadata, dict) else {}
-        alias = metadata.get('asset_id', row.id)
-        alias = alias if isinstance(alias, str) and alias else None
-        try:
-            alias = public_text(alias, 256, nullable=True, identifier=True)
-        except InventoryError:
-            alias = None
         source = self.reports[row.scan_id]
-        agent = source.agents.get(alias)
-        singleton = target_group_identity({}, organization_id=organization, observation_id=row.id)
-        unknown = project_agent_risk()
+        binding = bind_observation_source(row, metadata, source, organization)
+        alias, agent, identity = binding.asset_id, binding.agent, binding.identity
         if agent is None:
-            return ObservationSource(row, GroupIdentity(singleton.group_id, 'unmerged', 'unmatched_asset_alias', None),
-                                     alias, None, unknown, [], frozenset(), False, micros, displayed)
-        # Public snapshot selectors must actually refer to this archived target.
-        selected = {'endpoint': row.endpoint_url, 'provider': row.provider, 'model': row.model_name,
-                    'evidence_context_id': agent.get('evidence_context_id'), 'metadata': metadata}
-        original = target_group_identity(agent, organization_id=organization, observation_id=row.id)
-        snapshot = target_group_identity(selected, organization_id=organization, observation_id=row.id)
-        same_http_endpoint = (original.status == snapshot.status == 'grouped'
-            and original.target.get('kind') == snapshot.target.get('kind') == 'http_target'
-            and original.target.get('endpoint') == snapshot.target.get('endpoint'))
-        exact = (row.provider == agent.get('provider') and row.model_name == agent.get('model')
-                 and (row.endpoint_url == agent.get('endpoint') or same_http_endpoint))
-        if not exact:
-            return ObservationSource(row, GroupIdentity(singleton.group_id, 'unmerged',
-                                     'snapshot_target_mismatch', None), alias, None, unknown,
+            return ObservationSource(row, identity, alias, None, binding.risk,
                                      [], frozenset(), False, micros, displayed)
-        if (original.status != 'grouped' or snapshot.status != 'grouped' or original.target != snapshot.target):
-            identity = GroupIdentity(singleton.group_id, 'unmerged',
-                                     original.reason or snapshot.reason or 'snapshot_target_mismatch', None)
-        else:
-            identity = original
         claims = agent.get('vulnerabilities', [])
         claim_shape = isinstance(claims, list) and all(isinstance(value, dict) for value in claims)
         claims = claims if claim_shape else []
         complete, supported = source.support(alias)
-        risk = source.risks.get(alias, unknown)
+        risk = binding.risk
         return ObservationSource(row, identity, alias, agent, risk, claims, supported, complete, micros, displayed)

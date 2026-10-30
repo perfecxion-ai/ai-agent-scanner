@@ -97,7 +97,7 @@ def test_filter_seeks_matching_singletons_beyond_500_other_groups(database, monk
     assert source_rows(database) == before
 
 
-def test_group_target_binding_does_not_change_observation_alias_projection(database):
+def test_group_and_observation_target_binding_withhold_the_same_mismatched_risk(database):
     seed(database, 'target-mismatch')
     engine, tables = database
     with engine.begin() as connection:
@@ -113,8 +113,16 @@ def test_group_target_binding_does_not_change_observation_alias_projection(datab
     with Session(engine) as session:
         observed = inventory_page(session, parsed, SECRET, tables['observations'], tables['scans'],
                                   tables['reports'], tables['generations'])
+    assert observed['agents'] == []
+    parsed = parse_inventory_request(MultiDict([('risk_level', 'unknown')]), 'tenant-a', SECRET)
+    with Session(engine) as session:
+        observed = inventory_page(session, parsed, SECRET, tables['observations'], tables['scans'],
+                                  tables['reports'], tables['generations'])
     assert len(observed['agents']) == 1
-    assert observed['agents'][0]['risk_score'] == 70
+    assert observed['agents'][0]['risk_score'] is None
+    assert observed['agents'][0]['asset_id'] == grouped[0]['latest_observation']['asset_id']
+    assert {name: observed['agents'][0][name] for name in grouped[0]['latest_observation_risk']} == (
+        grouped[0]['latest_observation_risk'])
     assert source_rows(database) == before
 
 
