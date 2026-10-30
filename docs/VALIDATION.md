@@ -2017,11 +2017,98 @@ and group policy is
 Final full-suite, packaging, refreshed compatibility gates and required delivery
 checks are recorded in PR #89.
 
-These are local compatibility and controlled-fixture results. The fresh
-[native gate](asset-groups-retest.md) at the final merged pin remains required;
+These are local compatibility and controlled-fixture results. The supplied
+[native gate](asset-groups-retest.md) at the final merged pin is accepted below;
 the accepted `1b164df` archive above covers the preceding schema-7 grouping slice.
 Indexed observation acceleration, dashboard grouping and logical-finding
 consolidation remain open, along with the remaining R2 through R4 work.
+
+### Supplied native indexed group risk acceptance
+
+Data-only independent review accepts `aiscan-asset-group-c12cead.tar.gz` for the
+scoped [native correctness gate](asset-groups-retest.md) at PR #89's merged
+`c12ceadcc6c830d73e1d484f17b45c06f07c329b`. Its archive SHA-256 is
+`0bbac1492c19d1ee241608c31814ee904d3d763bba251255b009042fdb659908`.
+No supplied driver was executed and no operator database, registry, configuration
+or lab secret was accessed during review. Earlier failed native and CI receipts
+retain their recorded outcomes.
+
+Captures identify Linux, Python 3.11.2, SQLite 3.40.1, Gunicorn 26.2.0,
+SQLAlchemy 2.1.6 and scanner `1.2.0.dev0`. Debian 12 and the original runner are
+producer attestations. The reported Mac Python 3.13.5/SQLite 3.45.3 run has no
+returned captures; its 447-test and 45-check claims are not independently accepted.
+
+| Capture | Observed result |
+| --- | --- |
+| Normal group gate | Accepted, 150.237 seconds, 915 checked HTTP responses |
+| Optimized group gate | Accepted, 150.768 seconds, 913 checked HTTP responses |
+| Both group modes | `asset-group-acceptance-v2`; all seventeen exact pinned assertions; schema before 6, after/target 8; unchanged 180-second deadline |
+| Original traversal oracle | 10,000 observations across three organizations, eight groups each; separate risk controls add five observations and five groups |
+| Positive risk controls | Three high, one minimal and one unknown group; zero critical, medium or low groups |
+| Both pagination phases in each mode | Zero recorded pagination retries; initial and restart server exits zero |
+| Normal and optimized backups | Both accepted; all fifteen exact case names and per-case assertion arrays match the pinned script |
+| Focused warnings-as-errors tests | 447 passed, two deselected, 273.06 seconds; twenty files in the actual driver |
+| Exit captures | All five step exits, driver exit and outer job exit zero; `captured_gate_failure=0` |
+| Capture reconciliation | All 45 records true; revision matches; source-status capture exists and is empty |
+
+The original fourteen assertions remain, with the schema-preservation name
+advanced to `schema6_to8_preserves_source_rows_caches_archives_and_definitions`.
+Three added assertions check independent latest-risk filter sets, normalized
+signed-filter continuation and restart preservation. All 24 owner/level counts
+and full-view digests match normal and optimized captures, and the earlier local
+SQLite 3.40.1 compatibility receipts. Fresh fixture history digests differ between
+separate runs because finding IDs are generated; each gate checks its complete
+history digest again after restart. This is not cross-run history byte identity.
+
+Independent recomputation over the pinned 79 scanner/CLI files yields
+`bf1f96fe64b5e9f3dd711e9499ab01848e6c37d1e1a35ae288bded8486261831`.
+Both captures match the refined projection/group policies above, complete build
+and catalog identities, and all four app/driver/helper/Gunicorn component hashes.
+The expected-result manifest was absent on the runner. Its available workstation
+copy was compared locally against the returned receipts, closing that comparison
+without another native run. These are pin-consistency checks, not authenticated
+execution, dependency or build attestations.
+
+Backup cases are `v1` through `v8`, `rollback1/2/3/5`, `future`, `incomplete` and
+`lock`. The public receipts cover stopped synthetic backup/upgrade/recovery and
+fresh empty derived tables. The report attributes populated publication-cache
+preservation to those receipts too broadly: that coverage comes from the included
+`test_asset_group_backup.py` focused test, not a public backup receipt assertion.
+The two deselected cases are the separately captured group real-server modes;
+both inventory real-server modes remain in the focused set.
+
+Privacy review keeps known-value checks separate from arbitrary-secret claims.
+Each group receipt records eight private fixture values and one private reference
+checked across response, log and fixture surfaces. The on-runner sweep reports
+zero violations over 23 files and ten named sets. Six are static fixture/PII sets;
+four lab-value sets were available, so it does not prove all eight optional lab
+variables were set. Lab-value absence remains producer-attested. An independent
+sweep of 27 returned evidence text files finds none of the six checked-in fixture/PII values,
+their raw, URL, JSON, hex or base64 forms, RFC1918 addresses or checked private
+runner prefixes. All 33 substantive files are UTF-8; separate known-value byte
+checks of 37 AppleDouble files find no hits. The expected manifest's workstation
+path remains intentionally recorded, so this is not absence of every local path.
+Tooling sources contain detection patterns and are excluded from evidence sweeps.
+Sanitized logs and omitted raw databases/responses do not prove original-output
+authenticity or arbitrary-secret absence.
+
+The private wrapper preserves real command exits but retains unchecked setup,
+sanitization, copy, permission, source-status and outer cleanup operations. The
+checker would treat a missing source-status file as empty; review separately
+verified the actual empty capture exists. Inner fixture/socket cleanup and process
+reaping are asserted, while outer checkout/venv removal lacks a checked result.
+A stale driver header names `678fd71` and the final console line says fourteen
+backup cases; the operational pin and complete fifteen-case receipts are correct.
+These qualifications do not invalidate the complete scoped capture set.
+
+R1.4b2a's native gate is closed. No repeat is needed for this documentation record.
+The measured runs leave 29.763/29.232 seconds under the unchanged gate budget,
+not a production latency promise. Readiness remains O(N), and continuous writes
+can keep grouping unavailable. Source-bound observation indexing, dashboard group
+views, logical findings, private server inputs and R2 through R4 remain separate.
+This fixture acceptance does not establish model sensitivity, principal/credential
+equivalence, power-loss durability, PostgreSQL/distributed support, enterprise
+readiness or release approval.
 
 ### Protected-access request-provenance prerequisite
 

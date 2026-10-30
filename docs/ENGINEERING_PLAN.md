@@ -41,7 +41,7 @@ proposed calls and observed actions are distinct outcomes.
 | R1.1 | Generic authentication checks accept denied requests without a successful authorized resource baseline | Always-denied, unseeded, unavailable, and stale-credential controls cannot pass or resolve findings; valid positive/negative controls permit only bounded sampled claims; changed evidence semantics are versioned and private | Initial controls merged in PR #64. V3 actual-request provenance/denial correction and schema-6 historical cache reconciliation merged in PR #79 with all eight PR/post-merge checks. Scoped native Python 3.11.2/SQLite 3.40.1 access, backup and inventory acceptance passes with recorded private-harness qualifications |
 | R1.2 | Outer deadlines can discard findings produced before a later stage stalls | Sanitized check/asset checkpoints survive later timeout, cancellation, and process recovery; terminal writes are transactional; unfinished checks remain incomplete; no active probe replay | Completed-check and prompt/tenant/access receipts have qualified native acceptance. R1.2e CLI crash files merged in PR #83; PR #84 manual CI and current main pass all eight checks. Scoped native Python 3.11.2 acceptance passes 119 cases, packaging and installed recovery with recorded harness/privacy limits; future families and private API inputs remain separate |
 | R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Merged in PR #72 with all local, independent, and eight PR/post-merge CI gates passed; scoped native reconstructed-fixture upgrade/restart accepted with recorded qualifications |
-| R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a traversal and R1.4b1 grouping have qualified native acceptance at PR #87's corrected pin; the original native failures remain recorded. R1.4b2a group risk indexes and filters pass focused, independent and local SQLite compatibility gates in PR #89; fresh native acceptance remains open. Indexed observation filtering, dashboard groups and logical findings remain separate |
+| R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a traversal and R1.4b1 grouping have qualified native acceptance at PR #87's corrected pin; the original native failures remain recorded. R1.4b2a group risk indexes and filters have qualified native acceptance at PR #89's merged c12cead pin. Indexed observation filtering, dashboard groups and logical findings remain separate |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | R1.5a development/content identity passes local and independent gates; required delivery CI is recorded on its PR. Release checksums, SBOM, dependency/build attestation and deployed upgrade acceptance remain open |
 | R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | Planned |
 | R2.2 | Advanced model/evidence/suite setup depends on manual identifiers and JSON | Guided discovery-to-assessment flow and CLI setup/diagnostics/preview expose ready, unsupported, missing, and inapplicable prerequisites; secret references never become ordinary saved values | Planned |
@@ -205,9 +205,18 @@ local compatibility gate retains the original 10,000-observation oracle and
 180-second budget, with separate positive risk controls. See
 [local acceptance](VALIDATION.md#indexed-group-risk-local-acceptance) and
 [delivery PR #89](https://github.com/perfecxion-ai/ai-agent-scanner/pull/89).
-A fresh pinned native run is required. The observation API retains its current
-alias-based eligibility; sharing the stricter grouped target binding with it needs
-an explicit compatibility decision before indexed observation acceleration.
+The supplied native run at merged
+`c12ceadcc6c830d73e1d484f17b45c06f07c329b` closes R1.4b2a's scoped gate on
+Python 3.11.2/SQLite 3.40.1. Normal/optimized modes accept all seventeen assertions
+in 150.237/150.768 seconds under the unchanged 180-second budget. Both fifteen-case
+backup modes, 447 focused tests (two deselected), all real exits and all 24
+risk-filter digests pass; source and expected-result manifest checks reconcile
+locally. See [native acceptance](VALIDATION.md#supplied-native-indexed-group-risk-acceptance)
+for absent Mac captures, private-wrapper, privacy and backup-scope qualifications.
+The observation API retains its current alias-based eligibility; sharing the
+stricter grouped target binding with it needs an explicit compatibility decision
+before indexed observation acceleration. This acceptance does not close that
+separate slice or the remaining roadmap work.
 
 R1.5a uses canonical `1.2.0.dev0`, scoped deterministic source/catalog hashes,
 immutable new-run producer stamps and distinct exporter identity. Historical raw
