@@ -101,6 +101,19 @@ ai-agent-scanner diff --before baseline.json --after results.json --output chang
 ai-agent-scanner triage --report results.json --policy suppressions.json --output triaged.json
 ```
 
+For a custom HTTP chatbot, the [guided application workflow](docs/http-application-assessment.md)
+creates a private target profile without hand-written agent JSON or asset IDs:
+
+```bash
+ai-agent-scanner target init support-bot --output ../private-targets/support-bot.json
+ai-agent-scanner assess --profile ../private-targets/support-bot.json --plan
+ai-agent-scanner assess --profile ../private-targets/support-bot.json --output assessment.json
+```
+
+It runs only protected prompt-disclosure checks against the configured JSON POST
+endpoint. Configure an out-of-band synthetic canary first. Quiet responses stay
+inconclusive with null risk; this is not a full application security assessment.
+
 For CLI process-crash recovery, opt in with `--checkpoint-dir NEW_DIRECTORY` on
 `scan` or `discover`, then use `recover` to export saved evidence offline.
 See [checkpoint setup and limits](docs/cli-checkpoints.md).

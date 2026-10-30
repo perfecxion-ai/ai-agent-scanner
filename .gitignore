@@ -60,6 +60,10 @@ log/
 secrets.txt
 api_keys.txt
 credentials.json
+*.target.json
+.aiscan-targets/
+assessment-results.json
+assessment-results.sarif
 
 # Test coverage
 htmlcov/

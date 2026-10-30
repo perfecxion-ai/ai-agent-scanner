@@ -4,6 +4,9 @@
 import asyncio
 import json
 import re
+import ipaddress
+import math
+import sys
 from copy import deepcopy
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -241,6 +244,139 @@ def scan(network, domain, repository, traffic, config, output, fmt, verbose, ski
                          request_timeout_seconds, prompt_suite=prompt_suite, checkpoint_dir=checkpoint_dir))
 
 
+class _PrivateIntRange(click.IntRange):
+    def fail(self, message, param=None, ctx=None):
+        super().fail('Expected an integer within the documented bounds', param, ctx)
+
+
+class _PrivateFloatRange(click.FloatRange):
+    def convert(self, value, param, ctx):
+        converted = super().convert(value, param, ctx)
+        if not math.isfinite(converted):
+            self.fail('Expected a finite number', param, ctx)
+        return converted
+
+    def fail(self, message, param=None, ctx=None):
+        super().fail('Expected a number within the documented bounds', param, ctx)
+
+
+class _PrivateChoice(click.Choice):
+    def fail(self, message, param=None, ctx=None):
+        super().fail('Choose one of the documented formats', param, ctx)
+
+
+def _profile_prompt(label, default=None):
+    if sys.stdin.isatty():
+        return click.prompt(label, default=default, type=str, hide_input=True, show_default=False)
+    click.echo(label + ': ', nl=False)
+    value = sys.stdin.readline(4097)
+    if not value:
+        raise click.Abort()
+    if len(value) > 4096:
+        from src.core.http_target_profiles import TargetProfileError
+        raise TargetProfileError()
+    value = value.rstrip('\r\n')
+    return default if not value and default is not None else value
+
+
+@cli.group('target')
+def target_command():
+    """Configure a private HTTP application target."""
+
+
+@target_command.command('init')
+@click.argument('name')
+@click.option('--output', required=True, help='New profile file in an owned private directory')
+def target_init(name, output):
+    """Create a private target profile without contacting its endpoint."""
+    from src.core.http_target_profiles import TargetProfileError, create_http_target_profile
+    try:
+        click.echo('Enter the target mapping and environment reference names. Inputs are not echoed.')
+        endpoint = _profile_prompt('Exact HTTP application endpoint')
+        try:
+            address = ipaddress.ip_address(urlsplit(endpoint).hostname)
+            default_network = str(ipaddress.ip_network(str(address) + ('/32' if address.version == 4 else '/128')))
+        except (TypeError, ValueError):
+            default_network = ''
+        networks = _profile_prompt('Allowed network CIDRs, comma separated', default_network)
+        field = _profile_prompt('Prompt JSON field (default: question)', 'question')
+        pointer = _profile_prompt('Generated response JSON pointer (default: /answer)', '/answer')
+        scheme = _profile_prompt('Authentication scheme: none or bearer (default: none)', 'none')
+        if scheme not in {'none', 'bearer'}:
+            raise TargetProfileError()
+        credential = _profile_prompt('Bearer credential environment reference') if scheme == 'bearer' else None
+        principal = (_profile_prompt('Public principal label', 'authorized-test-principal-v1')
+                     if scheme == 'bearer' else 'anonymous')
+        canary = _profile_prompt('Protected canary environment reference', 'AIS_TARGET_CANARY')
+        context = _profile_prompt('Public protected fixture context label', name + '-v1')
+        if _profile_prompt('Synthetic canary seeded outside user input? yes/no', 'no').lower() not in {'y', 'yes'}:
+            raise click.ClickException('Seed a synthetic protected canary before creating an assessment profile')
+        create_http_target_profile(output, {
+            'schema_version': '1.0', 'name': name,
+            'http_target': {'adapter_id': 'http-json', 'adapter_version': '1.0', 'endpoint': endpoint,
+                            'method': 'POST', 'request_prompt_field': field, 'response_text_pointer': pointer,
+                            'auth_scheme': scheme, 'principal_label': principal, 'context_label': context,
+                            'session_mode': 'fresh-per-prompt-v1'},
+            'allowed_networks': [value.strip() for value in networks.split(',') if value.strip()],
+            'credential_env': credential, 'canary_env': canary, 'canary_seeded': True,
+        })
+        click.echo('Private target profile created.')
+    except TargetProfileError as error:
+        raise click.ClickException(str(error)) from None
+    except (OSError, ValueError, UnicodeError):
+        raise click.ClickException('Unable to create the private target profile') from None
+
+
+@cli.command('assess')
+@click.option('--profile', required=True, help='Explicit private HTTP target profile')
+@click.option('--plan', is_flag=True, help='Print a JSON readiness plan without network requests')
+@click.option('--output', '-o', help='Private report destination; default: assessment-results.json')
+@click.option('--format', '-f', 'fmt', type=_PrivateChoice(['json', 'sarif']), default='json')
+@click.option('--checkpoint-dir', help='New private directory for crash-recoverable public checkpoints')
+@click.option('--max-requests', type=_PrivateIntRange(1, 35), default=35, show_default=True,
+              help='Shared request attempt budget, with at most 35 prompt samples')
+@click.option('--max-response-bytes', type=_PrivateIntRange(1, 16777216), default=65536, show_default=True)
+@click.option('--timeout-seconds', type=_PrivateIntRange(1, 3600), default=180, show_default=True)
+@click.option('--request-timeout-seconds', type=_PrivateFloatRange(1, 300), default=10, show_default=True)
+@click.option('--allow-loopback', is_flag=True, help='Explicitly permit literal local loopback targets')
+def assess_command(profile, plan, output, fmt, checkpoint_dir, max_requests, max_response_bytes,
+                   timeout_seconds, request_timeout_seconds, allow_loopback):
+    """Assess protected prompt disclosure on one configured HTTP application."""
+    from src.core.http_application_policy import HTTP_OBJECTIVE
+    from src.core.http_application_runtime import http_application_context
+    from src.core.http_target_profiles import (
+        TargetProfileError, load_http_target_profile, plan_http_profile, prepare_http_profile,
+    )
+    try:
+        selected = load_http_target_profile(profile)
+        if plan:
+            preview = plan_http_profile(selected, profile, allow_loopback=allow_loopback,
+                                       max_requests=max_requests, max_response_bytes=max_response_bytes,
+                                       timeout_seconds=timeout_seconds, request_timeout_seconds=request_timeout_seconds)
+            click.echo(json.dumps(preview, indent=2, allow_nan=False))
+            if preview['configuration_status'] != 'ready':
+                raise click.exceptions.Exit(2)
+            return
+        output = output or 'assessment-results.json'
+        try:
+            same_output = Path(profile).resolve() == Path(output).resolve()
+        except (OSError, ValueError, RuntimeError):
+            raise TargetProfileError('target_profile_unavailable') from None
+        if same_output:
+            raise TargetProfileError('target_profile_unavailable')
+        prepared = prepare_http_profile(selected, profile, allow_loopback=allow_loopback)
+        with http_application_context(prepared):
+            asyncio.run(_execute(None, [prepared.agent], output, fmt, 'security_only', False,
+                                 max_requests, max_response_bytes, timeout_seconds, allow_loopback,
+                                 request_timeout_seconds=request_timeout_seconds,
+                                 prompt_suite='protected-disclosure-v1', checkpoint_dir=checkpoint_dir,
+                                 assessment_objective=HTTP_OBJECTIVE, allowed_networks=selected.allowed_networks))
+    except TargetProfileError as error:
+        raise click.ClickException(str(error)) from None
+    except OSError:
+        raise click.ClickException('HTTP application assessment files are unavailable') from None
+
+
 def _checkpoint_output_conflicts(checkpoint_dir, output):
     checkpoint = Path(checkpoint_dir).expanduser().resolve()
     destination = Path(output).resolve()
@@ -263,11 +399,13 @@ def _checkpoint_output_conflicts(checkpoint_dir, output):
 
 async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
                    max_response_bytes=1048576, timeout_seconds=300, allow_loopback=False,
-                   selections=None, request_timeout_seconds=30, prompt_suite=None, checkpoint_dir=None):
+                   selections=None, request_timeout_seconds=30, prompt_suite=None, checkpoint_dir=None, *,
+                   assessment_objective=None, allowed_networks=None):
     if not checkpoint_dir:
         return await _execute_with_store(scope, agents, output, fmt, mode, verbose, max_requests,
                                          max_response_bytes, timeout_seconds, allow_loopback, selections,
-                                         request_timeout_seconds, prompt_suite, None)
+                                         request_timeout_seconds, prompt_suite, None,
+                                         assessment_objective=assessment_objective, allowed_networks=allowed_networks)
     from src.core.cli_checkpoints import CheckpointStore, CLICheckpointError
 
     try:
@@ -278,14 +416,16 @@ async def _execute(scope, agents, output, fmt, mode, verbose, max_requests=500,
                 raise CLICheckpointError()
             await _execute_with_store(scope, agents, output, fmt, mode, verbose, max_requests,
                                       max_response_bytes, timeout_seconds, allow_loopback, selections,
-                                      request_timeout_seconds, prompt_suite, store)
+                                      request_timeout_seconds, prompt_suite, store,
+                                      assessment_objective=assessment_objective, allowed_networks=allowed_networks)
     except (CLICheckpointError, OSError, ValueError, RuntimeError):
         raise click.ClickException('Unable to preserve CLI checkpoint; use a new private checkpoint directory') from None
 
 
 async def _execute_with_store(scope, agents, output, fmt, mode, verbose, max_requests,
                               max_response_bytes, timeout_seconds, allow_loopback, selections,
-                              request_timeout_seconds, prompt_suite, store):
+                              request_timeout_seconds, prompt_suite, store, *,
+                              assessment_objective=None, allowed_networks=None):
     latest_checkpoint = None
     interruption = None
     cancelled = False
@@ -298,12 +438,15 @@ async def _execute_with_store(scope, agents, output, fmt, mode, verbose, max_req
         latest_checkpoint = candidate
 
     try:
-        with scan_transport(ScanBudget(max_requests=max_requests, max_response_bytes=max_response_bytes,
+        with scan_transport(ScanBudget(allowed_networks=allowed_networks,
+                                       max_requests=max_requests, max_response_bytes=max_response_bytes,
                                        allow_loopback=allow_loopback,
                                        request_timeout_seconds=request_timeout_seconds)):
-            security = SecurityTestEngine(prompt_suite=prompt_suite) if prompt_suite is not None else SecurityTestEngine()
+            security = (SecurityTestEngine(prompt_suite=prompt_suite, assessment_objective=assessment_objective)
+                        if assessment_objective is not None else
+                        SecurityTestEngine(prompt_suite=prompt_suite) if prompt_suite is not None else SecurityTestEngine())
             result = await asyncio.wait_for(
-                run_pipeline(DiscoveryEngine(), security, RiskAssessment(),
+                run_pipeline(None if assessment_objective is not None else DiscoveryEngine(), security, RiskAssessment(),
                              scope, mode, agents=agents,
                              agent_validator=(lambda values: apply_model_overrides(values, selections))
                              if selections else None,
@@ -347,7 +490,10 @@ async def _execute_with_store(scope, agents, output, fmt, mode, verbose, max_req
         serialized = json.dumps(report, indent=2, allow_nan=False)
         if output:
             write_private_text(output, serialized + '\n')
-            click.echo(f"Report saved to {output}")
+            if assessment_objective is None:
+                click.echo(f"Report saved to {output}")
+            else:
+                _assessment_summary(result)
         else:
             click.echo(serialized)
     except (OSError, ValueError, TypeError) as exc:
@@ -361,10 +507,38 @@ async def _execute_with_store(scope, agents, output, fmt, mode, verbose, max_req
         raise asyncio.CancelledError
     if interruption is not None:
         raise click.ClickException(interruption)
+    if assessment_objective is not None:
+        if result['status'] != 'completed':
+            raise click.ClickException('HTTP application assessment is incomplete; inspect the report')
+        return
     if mode != 'discovery_only' and result.get('agents') and not result.get('summary', {}).get('checks_completed'):
         raise click.ClickException('No security checks completed; configure an explicit model or inspect skipped prerequisites')
     if result['status'] != 'completed':
         raise click.ClickException("Scan completed with failed phases; inspect report")
+
+
+def _assessment_summary(result):
+    attempted = evaluated = 0
+    for source in result.get('security_results', []):
+        counters = {}
+        for record in [*source.get('checks', []), *source.get('check_evidence', [])]:
+            identity = tuple(record.get(key) for key in ('rule_id', 'probe_id', 'probe_version', 'evidence_context_id'))
+            values = counters.setdefault(identity, [0, 0])
+            for index, key in enumerate(('requests_attempted', 'responses_evaluated')):
+                value = record.get(key, 0)
+                if type(value) is int and value >= 0:
+                    values[index] = max(values[index], value)
+        attempted += sum(value[0] for value in counters.values())
+        evaluated += sum(value[1] for value in counters.values())
+    confirmed = any(finding.get('evidence_status') == 'confirmed'
+                    for source in result.get('security_results', []) for finding in source.get('vulnerabilities', []))
+    outcome = 'Confirmed disclosure' if confirmed else ('Inconclusive' if result['status'] == 'completed'
+                                                       else 'Assessment incomplete')
+    partial = '; partial assessment' if confirmed and result['status'] != 'completed' else ''
+    minimum = 'known minimum ' if result['status'] != 'completed' else ''
+    responses = 'response' if evaluated == 1 else 'responses'
+    attempts = 'attempt' if attempted == 1 else 'attempts'
+    click.echo(f'{outcome}{partial}: {minimum}{evaluated} {responses} evaluated from {attempted} {attempts}. Report written.')
 
 
 @cli.command('recover')
