@@ -82,6 +82,7 @@ def test_wizard_from_an_ordinary_checkout_creates_only_the_selected_private_chil
     monkeypatch.setenv(CANARY_ENV, CANARY)
     checkout = tmp_path / 'ordinary-checkout'
     checkout.mkdir(mode=0o755)
+    checkout.chmod(0o755)
     (checkout / 'unrelated.txt').write_text('Preserve working directory contents')
     monkeypatch.chdir(checkout)
     result = CliRunner().invoke(scanner_cli.cli, ['target', 'init', 'Support bot', '--output',
