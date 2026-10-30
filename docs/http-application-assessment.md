@@ -135,7 +135,9 @@ Partial summaries combine acknowledged receipts with finalized check counters
 without counting the same sample twice. Their counts are known minima: a request
 sent after the last acknowledged checkpoint may not be represented yet.
 
-Use `--format sarif` for SARIF. Reports are owner-only. Create a new profile when
+Use `--format sarif` for SARIF. Reports are owner-only. Choose an existing folder
+and a new or regular report file; invalid destinations are refused before probes.
+Create a new profile when
 the mapping, principal, protected fixture or policy changes; use a new public
 context label for a changed fixture or authorization meaning. The public target
 binding distinguishes the endpoint, mapping, principal label and session contract.

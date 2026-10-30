@@ -2222,6 +2222,12 @@ failing real-server modes. Eleven new regressions cover cache ownership, changed
 selectors and metadata, row-specific unmerged IDs, fresh report reads, current
 byte caps and returned-target mutation. Final integrated CI remains required.
 
+The subsequent `bad4d109` CI run `41006249807` passes all 5,865 cases on hosted
+Python 3.10 in 1,316.23 seconds, including both previously failing inventory modes
+under the unchanged deadline. That validates this correction on the affected
+platform. Its Python 3.13 report-path failure is separate and retained below;
+final delivery still requires the complete matrix on the corrected head.
+
 ### Guided HTTP application local acceptance
 
 R2.1a/R2.2a add a complete CLI workflow for an application that accepts a JSON
@@ -2261,13 +2267,15 @@ remains inconclusive/null. Later nondisclosure does not resolve earlier findings
 | Local evidence | Observed result |
 | --- | --- |
 | Initial HTTP coverage gate | 5,843 passed, 1,095.06 seconds, 93% coverage, warnings as errors |
-| Frozen-runtime coverage refresh | 5,853 passed, one permission-fixture failure, 1,053.66 seconds, 93% coverage |
+| Coverage refresh before output-preflight correction | 5,853 passed, one permission-fixture failure, 1,053.66 seconds, 93% coverage |
 | Corrected permission fixture | All 32 CLI cases pass under `umask 077`; affected case also passes under `022` |
 | Additional independent cache review | Eleven cases pass after the coverage run's collection |
+| Corrected output preflight | 104 integrated cases pass, including all 45 CLI cases; seven additional independent path cases pass |
 | Combined focused integration | 249 passed, two full workflow modes separately deselected |
 | Independent policy/fixture cases | 125 fast cases pass after the final coverage/status guards |
 | Both public CLI modes in the coverage refresh | All eleven assertions; 77 actual POSTs and thirteen recorded CLI exits per mode |
-| Fresh installed-wheel workflow | All eleven assertions, 77 POSTs, 75.919 seconds, empty stderr |
+| Corrected-runtime optimized workflow | All eleven assertions and 77 POSTs; optimization 1 reaches actual CLI children; empty stderr |
+| Fresh installed-wheel workflow | All eleven assertions, 77 POSTs, 75.767 seconds, empty stderr |
 | Packaging/static checks | Fresh build, Twine, Ruff and configured Bandit pass; all 84 runtime files byte-match both artifacts |
 
 Author core/suite and CLI sets pass 353 and 103 cases, respectively; independent
@@ -2284,9 +2292,23 @@ The refreshed invocation runs under `umask 077`. Its sole failure assumes that
 preserves. The fixture now explicitly sets its intended `0755` mode before the
 wizard, retaining all permission assertions and production behavior. That CLI
 file passes all 32 cases under `077`, and the affected case passes under `022`.
-The eleven later independent review cases pass separately. Required CI collects
-the final 5,865 cases; the failed local invocation is not presented as a clean
+The eleven later independent review cases pass separately. The failed local
+invocation is not presented as a clean
 full-suite pass or combined arithmetically with overlapping reruns.
+
+The later macOS and Linux Python 3.13 jobs each pass 5,864 cases and fail the
+report-path loop case. Non-strict path resolution no longer raises for symlink
+loops in [Python 3.13](https://docs.python.org/3.13/library/pathlib.html#pathlib.Path.resolve),
+so the old guard allowed requests before the private writer refused the output.
+The correction strictly resolves the existing parent and checks the leaf without
+following symlinks before private preparation or execution. New and existing
+regular reports and canonical ancestor aliases remain supported. Symlinks,
+nonregular leaves and invalid parents fail with a static private error. Plan
+mode performs no destination check. This is a read-only preflight, not an atomic
+reservation against later filesystem changes; the private writer remains final.
+Both the fresh installed normal workflow and actual optimized checkout workflow
+pass afterward. Earlier coverage figures describe the preceding runtime; final
+CI collects all 5,885 cases on the corrected source.
 
 The earlier two-parent-mode fixture run did not propagate optimization to child
 CLIs; it proves normal CLI behavior only. This validation gap remains recorded.
@@ -2299,22 +2321,22 @@ outside the repository. The installed interpreter runs its actual CLI children
 there; module origins are checked beneath the fresh environment's site-packages.
 No scanner function is replaced and no checkout scanner module is available in
 that directory. The real installed console entry point is checked too. The
-ordinary installed discovery/checkpoint smoke also passes. All five new HTTP
-regression files and both inventory reuse files match the refreshed source
-distribution. The wheel remains CLI/library
+ordinary installed discovery/checkpoint smoke also passes. All eight new
+regression files match the source distribution, including independent report-path
+cases. The wheel remains CLI/library
 only, and this does not certify a standalone source-test bundle or publish a
 package.
 
 The reproducible 84-file source fingerprint is
-`fcdbfb4031b7c31c233a6010245e0fa9516b0f3ed066910506d607245e32fdf8`.
+`70299904cb69dafdec45cfe906ff826e095b1df5dab711a54453f3ed28339e48`.
 The existing baseline and protected catalog hashes/pin are unchanged. The local
 wheel SHA-256 is
-`12f75fd96801a8aa225c00c3ca1284ef763b94298cfbda2ac2bdfc086020bee2`;
+`bd3dd6c6b5084ad9ed4730ca4583a157828efa48f0480f56df73821321c87403`;
 the source-distribution SHA-256 is
-`c5b77c3a2e9224075e892a9e75277bfa54436f9ede13cd821ccdfeacc1810440`.
+`0ea04a135058150be45cc4e6f7f762cecbd2cd20ad4b2d056e31abc865542a5e`.
 These identify local validation artifacts before this record's documentation
 edits. The wheel is the exact artifact used for the installed workflow; the
-source distribution was refreshed for all seven final regression files. They
+source distribution matches all eight final regression files. They
 are not signed build or dependency attestations. Delivery CI builds the final tree.
 
 Profile creation is no-clobber and owner-only, including rollback after a late

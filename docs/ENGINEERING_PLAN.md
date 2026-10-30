@@ -260,7 +260,8 @@ The fresh installed wheel passes the complete 77-request fixture workflow outsid
 the checkout. A narrow inventory-reader correction reuses SQL and original
 target identities without weakening per-row binding or work limits. The
 validation record retains the original full pass, refreshed coverage run and
-corrected permission-fixture result separately. Required CI collects 5,865 cases;
+corrected permission-fixture and output-preflight results separately. Required CI
+collects 5,885 cases;
 it and the scoped
 [native operator retest](http-assessment-retest.md) remain delivery gates.
 This closes neither full R2 CLI/API parity nor representative detection accuracy.

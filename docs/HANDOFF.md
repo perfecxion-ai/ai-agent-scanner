@@ -409,11 +409,15 @@ scoring, checkpoints, exports and offline recovery. Quiet output stays
 inconclusive; a supported receipt survives later failure without inventing a
 completed check. See [setup](http-application-assessment.md) and
 [local acceptance](VALIDATION.md#guided-http-application-local-acceptance).
-The initial complete local gate passes 5,843 cases. The corrected runtime's
-coverage refresh records 5,853 passes and one permission-fixture failure at 93%
+The initial complete local gate passes 5,843 cases. The coverage refresh before
+the output-preflight correction records 5,853 passes and one permission-fixture
+failure at 93%
 coverage; the fixture correction then passes all 32 CLI cases under `umask 077`
 and its affected case under `022`. Eleven additional independent cache cases pass
-separately. Final CI collects 5,865 cases. The validation record preserves these
+separately. The later Python 3.13 report-path failure now has an explicit
+read-only output preflight before preparation or probing, 104 integrated cases
+and seven independent path cases. Final CI collects 5,885 cases. The validation
+record preserves these
 distinct runs. Both actual normal/optimized CLI gates pass. A fresh wheel,
 executed outside the checkout, accepts all eleven assertions over 77 HTTP/HTTPS
 requests, including forced-kill recovery without replay.
@@ -421,8 +425,9 @@ requests, including forced-kill recovery without replay.
 An inventory performance follow-up addresses the preceding Python 3.10 CI
 timeout with request-local prepared SQL and grouped-original identity reuse.
 Every row still validates its snapshot and reads fresh bounded source bytes;
-the 10,000-observation fixture and 120-second deadline remain unchanged. Final
-hosted CI must confirm the improvement on Python 3.10.
+the 10,000-observation fixture and 120-second deadline remain unchanged. Hosted
+Python 3.10 passes all 5,865 cases on the preceding `bad4d109` head, including
+both inventory modes. The complete corrected-head matrix remains required.
 
 Complete required delivery CI, then request one pinned
 [native retest](http-assessment-retest.md). Its fixtures need no existing lab
