@@ -118,7 +118,7 @@ def project_stored_risk(report):
 
 
 def snapshot_stored_risk(per_asset_map, snapshot_id, metadata):
-    """Use exactly the public API's explicit alias or snapshot-ID fallback."""
+    """Select legacy scalar caches by alias; public readers also bind saved targets."""
     try:
         if not _bounded(metadata):
             return None, 'unknown'

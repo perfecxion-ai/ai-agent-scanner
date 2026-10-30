@@ -34,7 +34,7 @@ from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVATIONS = 10000
-FORMAT_VERSION = 'inventory-acceptance-v3'
+FORMAT_VERSION = 'inventory-acceptance-v4'
 TARGET_SCHEMA_VERSION = 8
 ORGANIZATIONS = ('inventory-a', 'inventory-b', 'inventory-c')
 CATEGORIES = ('high', 'zero', 'unknown', 'historical')
@@ -56,6 +56,8 @@ REQUIRED_ASSERTIONS = (
     'real_server_exits_and_process_groups_reaped',
     'required_secret_and_log_privacy_checks',
     'private_fixture_and_socket_cleanup',
+    'snapshot_target_mismatches_withhold_risk_and_normalized_endpoint_restores_it',
+    'duplicate_source_members_refused_without_archive_changes',
 )
 
 
@@ -247,6 +249,7 @@ def seed(directory, values):
     from tests.historical_schema import historical_metadata
     database = owned_database(directory)
     expected = {organization: [] for organization in ORGANIZATIONS}
+    sources = {}
     with server.app.app_context():
         engine = server.db.engine
         guard_engine(engine, database)
@@ -260,6 +263,8 @@ def seed(directory, values):
                     for category in CATEGORIES:
                         scan_id = organization + '-' + category
                         output = produce(scan_id, category, values)
+                        require(len(output['agents']) == 1, 'controlled_source_target_count_changed')
+                        sources[scan_id] = output['agents'][0]
                         transaction.execute(metadata.tables['scan_session'].insert().values(
                             id=scan_id, organization_id=organization, scan_name='Synthetic ' + category,
                             scan_type=output['scan_type'], status=output['status'], target_scope={}, scan_config={},
@@ -274,12 +279,14 @@ def seed(directory, values):
                     timestamp = datetime(2019, 1, 1) if index == 0 else datetime(2026, 1, 1) + timedelta(seconds=index // 7)
                     identifier = f'observation-{index:05}'
                     kind = 'assistant' if index % 2 == 0 else 'mcp'
+                    source = sources[scan_id]
                     rows.append(dict(id=identifier, scan_id=scan_id, agent_name='Repeated fixture observation',
-                                     agent_type=kind, provider='fixture', model_name='fixture-model',
+                                     agent_type=kind, provider=source.get('provider'), model_name=source.get('model'),
+                                     endpoint_url=source.get('endpoint'),
                                      discovery_method='synthetic', metadata={'asset_id': scan_id + '-asset'},
                                      risk_score=99, risk_level='critical', discovered_at=timestamp))
                     expected[organization].append({'id': identifier, 'asset_id': scan_id + '-asset',
-                                                  'name': 'Repeated fixture observation', 'provider': 'fixture',
+                                                  'name': 'Repeated fixture observation', 'provider': source.get('provider'),
                                                   'type': kind, 'discovered_at': timestamp.isoformat(), **descriptor(category)})
                 transaction.execute(metadata.tables['discovered_agent'].insert(), rows)
                 transaction.exec_driver_sql(OPERATOR_INDEX)
@@ -532,6 +539,75 @@ def cursor_checks(server, directory):
     return path
 
 
+def source_binding_checks(server, directory, expected):
+    """Changing a snapshot selector cannot borrow its alias's confirmed risk."""
+    owner = ORGANIZATIONS[0]
+    target = expected[owner][0]
+    require(target['risk_level'] == 'high', 'binding_control_not_latest_high')
+    identifier = target['id']
+    with closing(connection(directory)) as database:
+        source = database.execute('SELECT scan_id,provider,model_name,endpoint_url FROM discovered_agent WHERE id=?',
+                                  (identifier,)).fetchone()
+    require(source is not None and all(isinstance(value, str) for value in source),
+            'binding_control_missing_target_selectors')
+    scan_id, provider, model, endpoint = source
+
+    def first(filters=None):
+        status, value = server.request('/api/agents?' + urlencode({'limit': 1, **(filters or {})}),
+                                       organization=owner)
+        require(status == 200 and value.get('success') is True and len(value.get('agents', [])) == 1,
+                'binding_control_page_failed')
+        return value['agents'][0]
+
+    def verdict(row, wanted):
+        require(row['id'] == identifier and all(row.get(key) == value for key, value in wanted.items()),
+                'binding_control_verdict_mismatch')
+
+    verdict(first(), descriptor('high'))
+    try:
+        for statement, value in (
+                ('UPDATE discovered_agent SET provider=? WHERE id=?', 'mismatched-provider'),
+                ('UPDATE discovered_agent SET model_name=? WHERE id=?', 'mismatched-model'),
+                ('UPDATE discovered_agent SET endpoint_url=? WHERE id=?', 'http://192.0.2.1/different-resource')):
+            with closing(connection(directory, write=True)) as database, database:
+                database.execute(statement, (value, identifier))
+            verdict(first(), descriptor('historical'))
+            verdict(first({'risk_level': 'unknown'}), descriptor('historical'))
+            require(first({'risk_level': 'high'})['id'] != identifier, 'mismatched_target_retained_high')
+            with closing(connection(directory, write=True)) as database, database:
+                database.execute('UPDATE discovered_agent SET provider=?,model_name=?,endpoint_url=? WHERE id=?',
+                                 (provider, model, endpoint, identifier))
+            verdict(first(), descriptor('high'))
+        require(endpoint == 'http://192.0.2.1/resource', 'binding_control_endpoint_changed')
+        with closing(connection(directory, write=True)) as database, database:
+            database.execute('UPDATE discovered_agent SET endpoint_url=? WHERE id=?',
+                             ('http://192.0.2.1:80/resource', identifier))
+        verdict(first(), descriptor('high'))
+    finally:
+        with closing(connection(directory, write=True)) as database, database:
+            database.execute('UPDATE discovered_agent SET provider=?,model_name=?,endpoint_url=? WHERE id=?',
+                             (provider, model, endpoint, identifier))
+    assertions = [REQUIRED_ASSERTIONS[13]]
+    with closing(connection(directory)) as database:
+        original = database.execute('SELECT result FROM scan_result WHERE scan_id=?', (scan_id,)).fetchone()[0]
+    require(isinstance(original, str) and original.startswith('{') and json.loads(original)['schema_version'] == '1.0',
+            'binding_control_archive_shape_changed')
+    try:
+        with closing(connection(directory, write=True)) as database, database:
+            database.execute('UPDATE scan_result SET result=? WHERE scan_id=?',
+                             ('{"schema_version":"1.0",' + original[1:], scan_id))
+        for filters in ({}, {'risk_level': 'critical'}):
+            status, value = server.request('/api/agents?' + urlencode({'limit': 1, **filters}), organization=owner)
+            require(status == 503 and value.get('code') == 'inventory_projection_unavailable',
+                    'duplicate_source_member_accepted')
+    finally:
+        with closing(connection(directory, write=True)) as database, database:
+            database.execute('UPDATE scan_result SET result=? WHERE scan_id=?', (original, scan_id))
+    verdict(first(), descriptor('high'))
+    assertions.append(REQUIRED_ASSERTIONS[14])
+    return assertions
+
+
 def no_work(directory):
     with closing(connection(directory)) as database:
         require(database.execute("SELECT count(*) FROM scan_job WHERE status!='completed'").fetchone() == (0,),
@@ -600,6 +676,7 @@ def execute(directory, environment, listener, values, output, deadline):
         counts = traverse_all(first, expected)
         output['traversal_counts'] = counts
         output['assertions'].append(REQUIRED_ASSERTIONS[3])
+        output['_binding_assertions'] = source_binding_checks(first, directory, expected)
         restart_cursor = cursor_checks(first, directory)
         output['assertions'].extend(REQUIRED_ASSERTIONS[4:7])
         require(archive(directory) == original, 'original_rows_or_archived_json_changed')
@@ -728,6 +805,7 @@ def main(argv=None):
                 os.umask(previous_mask)
             except Exception:
                 failures.append('permission_mask_cleanup_failed')
+    output['assertions'].extend(output.pop('_binding_assertions', []))
     if not failures and output['assertions'] != list(REQUIRED_ASSERTIONS):
         failures.append('missing_required_assertions')
     output['accepted'] = not failures

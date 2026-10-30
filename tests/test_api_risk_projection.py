@@ -36,9 +36,14 @@ def seed(module, value, *, scan_id='fixture', tenant='tenant-a', alias='stable-a
     module.db.session.add(module.ScanSession(
         id=scan_id, organization_id=tenant, scan_name='Fixture', scan_type='full',
         status='completed', target_scope={}, scan_config={}, overall_risk_score=db_score))
+    agents = value.get('agents') if isinstance(value, dict) else None
+    matching = [agent for agent in agents if isinstance(agent, dict)
+                and agent.get('id') == (alias or scan_id + '-snapshot')] if isinstance(agents, list) else []
+    target = matching[0] if len(matching) == 1 else {}
     module.db.session.add(module.DiscoveredAgentModel(
         id=scan_id + '-snapshot', scan_id=scan_id, agent_name='Fixture', agent_type='assistant',
         discovery_method='fixture', risk_score=db_score, risk_level='critical',
+        provider=target.get('provider'), model_name=target.get('model'), endpoint_url=target.get('endpoint'),
         metadata_json={'asset_id': alias, 'security_status': 'failed'} if alias else {}))
     if value is not None:
         module.db.session.add(module.ScanResult(scan_id=scan_id, result=value))

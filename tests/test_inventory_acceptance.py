@@ -319,6 +319,9 @@ def policy_upgraded_fixture(monkeypatch):
                         transaction.execute(old.tables['discovered_agent'].insert().values(
                             id=observation, scan_id=identifier, agent_name='Owned cache lifecycle',
                             agent_type='assistant', discovery_method='synthetic', risk_score=99, risk_level='critical',
+                            provider=report['agents'][0].get('provider'),
+                            model_name=report['agents'][0].get('model'),
+                            endpoint_url=report['agents'][0].get('endpoint'),
                             metadata={'asset_id': identifier + '-asset'}))
                         expected[organization].append({'id': observation, **gate.descriptor(category)})
                 transaction.exec_driver_sql(gate.OPERATOR_INDEX)
@@ -336,6 +339,37 @@ def test_policy_upgrade_is_checked_before_original_stale_caches_are_restored(pol
     assert outcome == {'scan_caches_reconciled': 12, 'observation_caches_reconciled': 12,
                        'original_stale_scan_caches_restored': 12, 'original_stale_observation_caches_restored': 12}
     assert gate.archive(directory) == original
+
+
+@pytest.mark.parametrize('fault', [None, 'provider', 'model', 'endpoint', 'duplicate-source'])
+def test_binding_controls_reject_incorrect_verdicts_and_restore_original_sources(policy_upgraded_fixture, fault):
+    directory, _, _, expected, _, _ = policy_upgraded_fixture
+    before = gate.archive(directory)
+    target = expected[gate.ORGANIZATIONS[0]][0]
+    high = {'id': target['id'], **gate.descriptor('high')}
+    unknown = {'id': target['id'], **gate.descriptor('historical')}
+    another = {'id': 'another-high-observation', **gate.descriptor('high')}
+    def page(row):
+        return 200, {'success': True, 'agents': [row]}
+    responses = [page(high)]
+    for _ in range(3):
+        responses.extend([page(unknown), page(unknown), page(another), page(high)])
+    responses.append(page(high))
+    responses.extend([(503, {'code': 'inventory_projection_unavailable'})] * 2)
+    responses.append(page(high))
+    if fault is not None:
+        position = {'provider': 1, 'model': 5, 'endpoint': 9, 'duplicate-source': 14}[fault]
+        responses[position] = page(high)
+    server = Mock()
+    server.request.side_effect = responses
+    if fault is None:
+        assert gate.source_binding_checks(server, directory, expected) == list(gate.REQUIRED_ASSERTIONS[13:])
+        assert server.request.call_count == 17
+    else:
+        code = 'duplicate_source_member_accepted' if fault == 'duplicate-source' else 'binding_control_verdict_mismatch'
+        with pytest.raises(gate.GateFailure, match='^' + code + '$'):
+            gate.source_binding_checks(server, directory, expected)
+    assert gate.archive(directory) == before
 
 
 @pytest.mark.parametrize('statement,code', [

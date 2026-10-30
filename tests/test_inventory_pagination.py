@@ -21,7 +21,8 @@ def stored():
     observations = Table('observations', metadata,
                          Column('id', String, primary_key=True), Column('scan_id', String),
                          Column('agent_name', String), Column('agent_type', String),
-                         Column('provider', String), Column('discovered_at', DateTime), Column('metadata', Text))
+                         Column('provider', String), Column('model_name', String), Column('endpoint_url', Text),
+                         Column('discovered_at', DateTime), Column('metadata', Text))
     scans = Table('scans', metadata, Column('id', String, primary_key=True), Column('organization_id', String))
     reports = Table('reports', metadata, Column('scan_id', String, primary_key=True), Column('result', Text))
     generations = Table('generations', metadata,
@@ -45,7 +46,7 @@ def add(stored, count, *, scan_id='scan', tenant='tenant-a', kind='assistant', v
         if value is not None:
             session.execute(reports.insert().values(scan_id=scan_id, result=json.dumps(value)))
     session.execute(observations.insert(), [dict(
-        id=f'{scan_id}-{index:04}', scan_id=scan_id, agent_name='Fixture', agent_type=kind, provider='fixture',
+        id=f'{scan_id}-{index:04}', scan_id=scan_id, agent_name='Fixture', agent_type=kind, provider=None,
         discovered_at=datetime(2020, 1, 1) + timedelta(seconds=index // 3), metadata='{}',
     ) for index in range(start, start + count)])
     session.commit()
@@ -219,8 +220,8 @@ def test_changed_generation_requires_restart(stored):
 def test_reports_are_projected_once_and_missing_reports_also_bound_work(stored, monkeypatch):
     add(stored, 99, value={})
     calls = []
-    actual = inventory.project_report_risk
-    monkeypatch.setattr(inventory, 'project_report_risk', lambda value: (calls.append(value), actual(value))[1])
+    actual = inventory.ReportSource.from_value
+    monkeypatch.setattr(inventory.ReportSource, 'from_value', lambda value: (calls.append(value), actual(value))[1])
     assert len(page(stored)['agents']) == 99
     assert len(calls) == 1
     for index in range(33):

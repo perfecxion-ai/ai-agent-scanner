@@ -15,7 +15,7 @@ does not make a currently unknown group match
 `risk_level=high`; that confirmation remains in its history. History rejects risk
 filters. Duplicate parameters, unsupported levels, type/coverage filters and other
 parameters are rejected. The existing `/api/agents` endpoint still lists individual
-observations with its original eligibility, IDs and exhaustive traversal.
+observations with its original IDs and exhaustive traversal.
 
 A group has a credential-free public target, its latest observation, an
 `observation_count`, and `confirmation_history`. Its `latest_observation_risk`
@@ -24,9 +24,11 @@ An unassessed score remains null. A newer assessed zero or discovery observation
 can change the latest risk without deleting an earlier supported confirmation.
 `remediation_status` remains `not_evaluated`.
 
-Group risk also requires the snapshot selectors to match its saved target. The
-observation endpoint retains its existing alias-based eligibility, so a mismatched
-historical snapshot can remain assessed there while its group is unknown.
+Both APIs require the same unique report alias and matching snapshot provider,
+model and endpoint selectors before assigning risk. A mismatched historical
+snapshot remains available with null risk and `unknown`; its original report and
+earlier findings remain unchanged. This is not remediation or resolution. Valid
+bound evidence can retain risk even when its public target cannot be grouped.
 
 History entries identify the scan, observation, original asset, and finding
 ordinal. They distinguish `supported_confirmation` from `archived_claim`.

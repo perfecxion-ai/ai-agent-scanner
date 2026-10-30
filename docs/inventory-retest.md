@@ -4,9 +4,10 @@ Use the exact merged revision supplied with the handoff in a disposable clean
 checkout. Make that revision available through the normal code-transfer path.
 The public gate creates its own private schema-4 database, upgrades it through
 real single-worker Gunicorn, and exercises 10,000 observations across three
-synthetic organizations. Version 3 of the gate checks schema 4 to 8 cache
+synthetic organizations. Version 4 of the gate checks schema 4 to 8 cache
 reconciliation, then deliberately restores the owned fixture's stale caches
-before traversal. These are repeated observations of 12 synthetic assets,
+before traversal. Snapshot selectors come from each actual produced target;
+matching an alias alone cannot attach a different target's risk. These are repeated observations of 12 synthetic assets,
 not 10,000 deployments or a model-sensitivity measurement.
 
 The command accepts no operator database or configuration paths. It clears
@@ -62,7 +63,7 @@ root, revision = Path(sys.argv[1]), sys.argv[2]
 for mode in ('normal', 'optimized'):
     value = json.loads((root / ('inventory-' + mode + '.json')).read_text())
     valid = (value.get('accepted') is True
-             and value.get('format_version') == 'inventory-acceptance-v3'
+             and value.get('format_version') == 'inventory-acceptance-v4'
              and value.get('observation_count') == 10000
              and value.get('schema_before') == 4
              and value.get('schema_after') == 8
@@ -93,6 +94,14 @@ recognized generation definitions, and absence of admitted work. Before restorin
 stale test caches it checks canonical risk for all 12 scan summaries and 10,000
 observations. It then proves exact original stale rows, archive preservation and
 unchanged schema-8 restart, so traversal still exercises contradictory caches.
+Temporary provider, model and endpoint mismatches on the newest confirmed
+observation must withhold its risk and move it from the high filter to unknown.
+Exact restoration returns the supported high verdict; a normalized default-port
+HTTP endpoint retains it too. A saved report with duplicate JSON members must
+return the static unavailable response, including for an otherwise empty risk
+filter. These controls restore the exact original rows and archive bytes before
+restart. All fifteen assertion names must match the pinned script. The original
+10,000-observation oracle, filter counts and 120-second shared deadline remain.
 
 Real process exits and final assertion identities are part of the result. Privacy
 checks cover the mandatory synthetic/runtime secret set, HTTP response bodies and
