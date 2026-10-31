@@ -412,17 +412,26 @@ class JobDispatcher:
         self._wake.set()
 
     def stop(self, timeout=5):
+        """Return True only once work stopped and dispatcher ownership released."""
         self._stop.set()
         if self.service:
             self.service.stop()
         self._wake.set()
         if self._thread:
             self._thread.join(timeout)
+        pending = set()
+        futures = [future for future, _ in self._active.values()]
+        service_future = getattr(self.service, 'future', None) if self.service else None
+        if service_future is not None:
+            futures.append(service_future)
+        if futures:
+            _, pending = wait(futures, timeout=timeout)
         if self._executor:
-            _, pending = wait([future for future, _ in self._active.values()], timeout=timeout)
             self._executor.shutdown(wait=False, cancel_futures=True)
-            if not pending and (not self._thread or not self._thread.is_alive()):
-                self._ownership.release()
+        if pending or (self._thread is not None and self._thread.is_alive()):
+            return False
+        self._ownership.release()
+        return self._ownership.handle is None
 
     def _work(self, scan_id, cancelled):
         error = None

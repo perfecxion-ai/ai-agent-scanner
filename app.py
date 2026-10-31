@@ -1319,7 +1319,9 @@ def start_job_dispatcher():
 
 def stop_job_dispatcher():
     if _job_dispatcher:
-        _job_dispatcher.stop()
+        if _job_dispatcher.stop() is not True:
+            raise RuntimeError('Server dispatcher shutdown incomplete')
+    return True
 
 
 def _execute_job(scan_id, cancelled):

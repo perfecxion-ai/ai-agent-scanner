@@ -6,8 +6,15 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
+from unittest.mock import Mock
 
 import pytest
+
+from src.core.jobs import JobDispatcher
+from src.core.schedules import ScheduleService
+from tests.test_api_auth import api as api
+from tests.test_jobs import complete, enqueue, store as store
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,6 +63,7 @@ def stop():
     events.append('stop')
     if stop_failure == 'yes':
         raise RuntimeError('owned-private-dispatcher-failure')
+    return True
 def invoke(pid):
     def info(message,*args):
         events.append('ack')
@@ -146,3 +154,101 @@ def test_master_hook_never_imports_app_or_closes_parent_listener(kind, listener_
     assert result.returncode == 0, result.stderr
     assert result.stderr == ''
     assert json.loads(result.stdout)['closed'] == [False, False]
+
+
+def test_incomplete_worker_stop_retains_lock_until_actual_work_finishes(api, store, monkeypatch):
+    module, _ = api
+    started, release = threading.Event(), threading.Event()
+    def run(scan_id, cancelled):
+        started.set()
+        assert release.wait(5)
+        complete(store, scan_id)
+    enqueue(store, 'owned-blocked-worker')
+    dispatcher = JobDispatcher(store, run, workers=1, poll_seconds=0.01)
+    replacement = JobDispatcher(store, Mock(), workers=1, poll_seconds=0.01)
+    stop = dispatcher.stop
+    try:
+        dispatcher.start()
+        assert started.wait(2)
+        monkeypatch.setattr(dispatcher, 'stop', lambda: stop(timeout=0.01))
+        monkeypatch.setattr(module, '_job_dispatcher', dispatcher)
+        with pytest.raises(RuntimeError, match='^Server dispatcher shutdown incomplete$'):
+            module.stop_job_dispatcher()
+        assert dispatcher._ownership.handle is not None
+        assert any(not future.done() for future, _ in dispatcher._active.values())
+        with pytest.raises(RuntimeError):
+            replacement.start()
+        release.set()
+        assert stop(timeout=2) is True
+        assert dispatcher._ownership.handle is None
+        assert all(future.done() for future, _ in dispatcher._active.values())
+        assert dispatcher._thread.is_alive() is False
+        replacement.start()
+        assert replacement.stop(timeout=2) is True
+    finally:
+        release.set()
+        stop(timeout=2)
+        replacement.stop(timeout=2)
+
+
+def test_dispatcher_stop_before_start_is_a_completed_noop(store):
+    dispatcher = JobDispatcher(store, Mock(), workers=1)
+    assert dispatcher.stop(timeout=0.01) is True
+    assert dispatcher._thread is None and dispatcher._ownership.handle is None
+
+
+def test_pending_schedule_preflight_retains_dispatcher_ownership_until_finished(store):
+    started, release = threading.Event(), threading.Event()
+    admitted = []
+    candidates = iter([{'id': 'owned-preflight'}, None])
+    def preflight(candidate):
+        started.set()
+        assert release.wait(5)
+        return {'ready': True}
+    service = ScheduleService(lambda: next(candidates, None), preflight,
+        lambda *args: admitted.append(True), lambda: None)
+    dispatcher = JobDispatcher(store, Mock(), workers=1, poll_seconds=0.01, service=service)
+    replacement = JobDispatcher(store, Mock(), workers=1, poll_seconds=0.01)
+    try:
+        dispatcher.start()
+        assert started.wait(2)
+        assert dispatcher.stop(timeout=0.01) is False
+        assert service.future.done() is False
+        assert dispatcher._ownership.handle is not None
+        with pytest.raises(RuntimeError):
+            replacement.start()
+        release.set()
+        assert dispatcher.stop(timeout=2) is True
+        assert service.future.done() is True and dispatcher._ownership.handle is None
+        assert admitted == []
+        replacement.start()
+        assert replacement.stop(timeout=2) is True
+    finally:
+        release.set()
+        dispatcher.stop(timeout=2)
+        replacement.stop(timeout=2)
+
+
+def test_schedule_dispatcher_stop_before_start_is_a_completed_noop(store):
+    service = ScheduleService(Mock(), Mock(), Mock(), Mock())
+    dispatcher = JobDispatcher(store, Mock(), workers=1, service=service)
+    assert dispatcher.stop(timeout=0.01) is True
+    assert service.future is None and dispatcher._ownership.handle is None
+
+
+@pytest.mark.parametrize('result', [False, None, 1, 'yes'])
+def test_app_shutdown_requires_explicit_completed_dispatcher_result(api, monkeypatch, result):
+    module, _ = api
+    stopper = Mock(return_value=result)
+    monkeypatch.setattr(module, '_job_dispatcher', type('OwnedDispatcher', (), {'stop': staticmethod(stopper)})())
+    with pytest.raises(RuntimeError, match='^Server dispatcher shutdown incomplete$'):
+        module.stop_job_dispatcher()
+    stopper.assert_called_once_with()
+
+
+def test_app_shutdown_accepts_completed_or_absent_dispatcher(api, monkeypatch):
+    module, _ = api
+    monkeypatch.setattr(module, '_job_dispatcher', None)
+    assert module.stop_job_dispatcher() is True
+    monkeypatch.setattr(module, '_job_dispatcher', type('OwnedDispatcher', (), {'stop': lambda self: True})())
+    assert module.stop_job_dispatcher() is True

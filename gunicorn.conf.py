@@ -34,7 +34,8 @@ def worker_exit(server, worker):
     failures = []
     try:
         from app import stop_job_dispatcher
-        stop_job_dispatcher()
+        if stop_job_dispatcher() is not True:
+            raise RuntimeError('Server dispatcher shutdown incomplete')
     except BaseException:
         failures.append('dispatcher')
     finally:
