@@ -2535,6 +2535,66 @@ incomplete retry into passes. Existing HTTP receipts remain scoped to the
 unchanged scanner runtime. Server HTTP target admission, stateful sessions,
 representative detection sensitivity and the remaining roadmap remain open.
 
+### Server HTTP reference workflow local acceptance
+
+The server now accepts one operator-configured HTTP JSON target through an
+authenticated, revision-pinned one-shot scan. Registry schema `2.0` adds
+tenant-owned HTTP references while schema `1.0` provider registries retain their
+contract. No database migration, template/schedule capability, model placeholder
+or discovery prerequisite is introduced. See
+[operator configuration](server-http-assessment.md) and the
+[synthetic gate](server-http-acceptance.md).
+
+The final local actual-process gate passes all fifteen exact assertions in
+95.795 seconds on Python 3.10.20, aiohttp 3.14.5 and Gunicorn 26.2.0, with warnings
+treated as errors. Its genuine exit is zero and stderr is empty. The authenticated
+API uses an owned private Unix HTTP socket; assessed fixtures use actual loopback
+HTTP and verified HTTPS, including Bearer credentials and an untrusted-CA control.
+The receipt binds library source `2894b47f93ce9f7db25aeb3cfba27678bf706291323e3c12feb5b19f93553ce6`,
+raw app `f6766e99415c71a24e32e79e0a26492dbbdc53fc947f4d07a4d26859da5a6f36`,
+driver `4fa4cf33d48a7d9d4ee8b6d5c32c939a9ca90ebd1be4e94c2411fd00fd49cf93`
+and separately checked Gunicorn hook
+`0f04f4003098751ddef9c0b8add1fb3fc310913f62d1b49536f90bf1082a943d`.
+
+- Tenant-scoped previews and refused raw/mixed/forged inputs make no target POST.
+  Source/unit cases separately enforce the stronger no-DNS/no-database preview
+  contract. Templates and schedules refuse HTTP target selections.
+- Independent HTTP and HTTPS disclosures each make 35 requests and retain
+  canonical 70/high evidence across saved results, API, inventory, JSON and SARIF.
+  The defended target makes 35 requests and remains null/inconclusive. Off-pointer
+  output makes one request; untrusted TLS makes no accepted target POST. Neither
+  can establish a pass.
+- Cancellation, outer deadline and real worker SIGKILL retain acknowledged
+  disclosure receipts. Each reaches two fixture POSTs, with no replay after
+  recovery. A verified fresh worker identity replaces the killed worker.
+- Removed queued references and tightened current policy are refused before a
+  target POST. Three actual master waits return zero. Every observed normal
+  worker has a successful cleanup acknowledgement; only the one recorded
+  intentional SIGKILL is exempt. No forced cleanup, unknown process probes,
+  lifecycle failures or resource/runtime warnings remain.
+- The private-value check covers 25 known values/references and their supported
+  encoded forms across owned public API/export, raw log and SQLite surfaces.
+  Private fixtures are removed. This is not arbitrary-secret absence.
+
+Review corrected cross-family private-input persistence, redundant synchronous
+DNS outside worker deadlines, and dispatcher ownership release while a scheduled
+preflight future remained active. Shutdown now requires explicit completed work
+and closes worker-owned listeners. The driver rejects swallowed cleanup-hook
+exceptions, missing acknowledgements and the graceful-shutdown boundary; its
+clock starts before termination. Reproduced cancelled TLS transport warnings
+required bounded post-work event-loop drainage and public connector cleanup on
+affected Python versions. No work deadline, cleanup allowance, warning rule or
+resource assertion was relaxed. Earlier failed process receipts remain failures.
+
+The final connector/lifecycle increment passes 69 targeted tests; a separate
+affected HTTP/evidence/scope run passes 552 cases. Those runs overlap broader
+validation and are not pooled. The delivery PR records final full-suite,
+packaging, independent review and required eight-job PR/main CI results.
+The one remaining external gate is the pinned native server process workflow.
+Installed CLI smoke is separate from source-server acceptance. These deterministic
+fixtures do not measure live-model sensitivity, independent server state,
+TCP/reverse-proxy deployment, team authorization or enterprise readiness.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose
