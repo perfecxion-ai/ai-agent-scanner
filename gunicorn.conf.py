@@ -25,6 +25,22 @@ def post_worker_init(worker):
     start_job_dispatcher()
 
 
+def _close_worker_database(application, database):
+    failed = False
+    with application.app_context():
+        try:
+            database.session.remove()
+        except BaseException:
+            failed = True
+        for engine in database.engines.values():
+            try:
+                engine.dispose()
+            except BaseException:
+                failed = True
+    if failed:
+        raise RuntimeError('Server database shutdown incomplete')
+
+
 def worker_exit(server, worker):
     # Gunicorn can invoke this hook in the master after an ESRCH result. Only
     # the actual worker may import the app, stop its dispatcher or close its
@@ -33,11 +49,16 @@ def worker_exit(server, worker):
         return
     failures = []
     try:
-        from app import stop_job_dispatcher
+        from app import app, db, stop_job_dispatcher
         if stop_job_dispatcher() is not True:
             raise RuntimeError('Server dispatcher shutdown incomplete')
     except BaseException:
         failures.append('dispatcher')
+    else:
+        try:
+            _close_worker_database(app, db)
+        except BaseException:
+            failures.append('database')
     finally:
         for listener in worker.sockets:
             try:
