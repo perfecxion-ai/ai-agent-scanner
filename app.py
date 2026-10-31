@@ -1412,6 +1412,8 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
                         cancelled=None):
     """Run scan in a background thread with its own event loop."""
     loop = asyncio.new_event_loop()
+    budget = None
+    http_transport_grace = None
     try:
         asyncio.set_event_loop(loop)
         budget = ScanBudget(
@@ -1429,6 +1431,10 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
                 networks = _evidence_profiles.http_targets.scope(
                     scan_config['http_target_profile'], current.organization_id,
                     scan_config['http_target_revision'], app.config, resolve=False)
+                profile = _evidence_profiles.http_targets.token(
+                    scan_config['http_target_profile'], current.organization_id,
+                    scan_config['http_target_revision']).profile
+                http_transport_grace = (0.250 if profile.descriptor['endpoint'].startswith('https://') else 0)
             budget = ScanBudget(allowed_networks=networks,
                 allow_loopback=app.config['SCAN_ALLOW_LOOPBACK'],
                 max_requests=scan_config['max_requests'], max_response_bytes=scan_config['max_response_bytes'],
@@ -1453,9 +1459,17 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
         app.logger.error("Scan thread failed")
         _record_terminal(scan_id, "failed", "Scan worker failed")
     finally:
-        loop.close()
-        with _scans_lock:
-            _active_scans.pop(scan_id, None)
+        try:
+            if http_transport_grace is not None and budget is not None and budget.requests:
+                # Closed aiohttp sessions can still have transport-close
+                # callbacks queued. Keep this worker's loop alive for bounded
+                # cleanup after the unchanged active work deadline.
+                # https://docs.aiohttp.org/en/stable/client_advanced.html#graceful-shutdown
+                loop.run_until_complete(asyncio.sleep(http_transport_grace))
+        finally:
+            loop.close()
+            with _scans_lock:
+                _active_scans.pop(scan_id, None)
 
 
 async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_config: dict):

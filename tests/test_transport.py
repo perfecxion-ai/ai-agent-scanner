@@ -1,14 +1,26 @@
 """Transport tests run against a synthetic loopback server."""
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import aiohttp
 from aiohttp import web
 import pytest
 
+from src.core import transport
 from src.core.transport import (PolicyResolver, SafeSession, ScanBudget, TransportPolicyError,
                                 model_request_timeout, scan_transport)
+
+
+@pytest.mark.parametrize('version,required', [
+    ((3, 10, 20), True), ((3, 11, 14), True), ((3, 12, 6), True),
+    ((3, 12, 7), True), ((3, 12, 8), False), ((3, 12, 9), False),
+    ((3, 13, 0), True), ((3, 13, 1), False), ((3, 14, 0), False),
+])
+def test_ssl_cleanup_avoids_ignored_option_on_fixed_python(monkeypatch, version, required):
+    monkeypatch.setattr(transport, 'sys', SimpleNamespace(version_info=version))
+    assert transport._ssl_cleanup_closed_required() is required
 
 
 @pytest.fixture

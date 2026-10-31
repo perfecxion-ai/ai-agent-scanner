@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import socket
+import sys
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -193,6 +194,12 @@ class BoundedResponse:
         return json.loads(await self.text())
 
 
+def _ssl_cleanup_closed_required():
+    # https://github.com/python/cpython/pull/118960 shipped in 3.12.8 and 3.13.1.
+    # Boundary: https://github.com/aio-libs/aiohttp/blob/v3.14.5/aiohttp/connector.py
+    return sys.version_info < (3, 12, 8) or (3, 13, 0) <= sys.version_info < (3, 13, 1)
+
+
 class SafeSession:
     """ClientSession subset used by probes, with redirects and proxies disabled."""
 
@@ -204,7 +211,10 @@ class SafeSession:
 
     async def __aenter__(self):
         self.resolver = PolicyResolver(self.budget)
-        connector = aiohttp.TCPConnector(resolver=self.resolver, limit=20)
+        # Keep cancelled SSL transports available for close to abort a stalled peer.
+        connector = aiohttp.TCPConnector(
+            resolver=self.resolver, limit=20,
+            enable_cleanup_closed=_ssl_cleanup_closed_required())
         options = dict(self.kwargs)
         options['timeout'] = _bounded_timeout(options.get('timeout'), self.budget.request_timeout_seconds)
         trace = aiohttp.TraceConfig()
