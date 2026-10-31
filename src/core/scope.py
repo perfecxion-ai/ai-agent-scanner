@@ -215,6 +215,9 @@ def validate_request(data, config, resolver=None):
     options = data.get("scan_config", {})
     if not isinstance(scope, dict) or not isinstance(options, dict):
         raise ScopeValidationError("target_scope and scan_config must be JSON objects")
+    if set(options) & {'http_target_profile', 'http_target_revision'}:
+        from src.core.server_http_profiles import http_scan_options
+        return name.strip(), scan_type, {}, http_scan_options(data, config)
     if set(options) - {"source_scan_id", "timeout_seconds", "model_overrides", "evidence_profiles", "prompt_suite"}:
         raise ScopeValidationError("Unsupported scan_config field")
     if "prompt_suite" in options:

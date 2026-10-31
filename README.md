@@ -80,6 +80,7 @@ explicit allowlists and enforce their own configured budgets.
 | --- | --- | --- |
 | Discovery | Looks for service signatures, code integrations, supported traffic records, and optional cloud inventory | Complete asset inventory or exploitability |
 | Active security probes | Sends prompt, access-control, and privacy probes to configured endpoints | Successful testing when the provider rejects requests or the adapter is unsupported |
+| Configured HTTP application assessment | Runs seven protected prompt checks through a private CLI profile or a reviewed server target reference | A full application assessment, server-side session resets, or a passed check from quiet responses |
 | Passive MCP review | Inspects local configuration and saved tool schemas; emits JSON or SARIF | Live MCP authorization, sandbox enforcement, or tool exploitation |
 | Read-only live MCP inventory | Collects bounded public tool schemas from an explicitly scoped, already-running MCP endpoint | Authorization/Origin enforcement, tool execution, or complete MCP interoperability |
 | Controlled MCP policy checks | Compares protected inventory against an explicit fixture policy with an authenticated positive control | Browser exploitation, tool-execution authorization, or an overall security pass |
@@ -191,6 +192,10 @@ dashboard supports scan history, cancellation, authenticated exports, and
 regions support keyboard scrolling and final-page focus
 recovery. Terminal feedback distinguishes scan completion from security evidence.
 For security-only runs, select a completed source scan and [models for its assets](docs/source-model-selection.md).
+The [configured HTTP target API](docs/server-http-assessment.md) also supports a
+one-shot application assessment without discovery or a model placeholder. Review
+its offline plan before submitting a target reference; credentials and protected
+canaries stay in the server's private environment.
 The [global inventory API](docs/inventory.md) traverses saved observations with
 canonical risk filters and bounded cursors. Follow every continuation to complete
 a search. A [public owned-fixture gate](docs/inventory-retest.md) checks a native
