@@ -2535,6 +2535,95 @@ incomplete retry into passes. Existing HTTP receipts remain scoped to the
 unchanged scanner runtime. Server HTTP target admission, stateful sessions,
 representative detection sensitivity and the remaining roadmap remain open.
 
+### Server HTTP reference workflow local acceptance
+
+The server now accepts one operator-configured HTTP JSON target through an
+authenticated, revision-pinned one-shot scan. Registry schema `2.0` adds
+tenant-owned HTTP references while schema `1.0` provider registries retain their
+contract. No database migration, template/schedule capability, model placeholder
+or discovery prerequisite is introduced. See
+[operator configuration](server-http-assessment.md) and the
+[synthetic gate](server-http-acceptance.md).
+
+The final modern local process gate passes all fifteen exact assertions in
+94.807 seconds on Python 3.13.14, aiohttp 3.14.5 and Gunicorn 26.2.0, with warnings
+treated as errors. Its genuine exit is zero and stderr is empty. The authenticated
+API uses an owned private Unix HTTP socket; assessed fixtures use actual loopback
+HTTP and verified HTTPS, including Bearer credentials and an untrusted-CA control.
+The receipt binds library source `0312b21582ca4edd58accedc0e06f6bb72cadd81a560d303bd329914d29bb0ee`,
+raw app `f6766e99415c71a24e32e79e0a26492dbbdc53fc947f4d07a4d26859da5a6f36`,
+driver `4fa4cf33d48a7d9d4ee8b6d5c32c939a9ca90ebd1be4e94c2411fd00fd49cf93`
+and separately checked Gunicorn hook
+`3e0c96b012f6b89e830d93d8a840c848aeb1db005862aaa0b1ab18a42d40395c`.
+
+The same frozen production source also passes all fifteen assertions on Python
+3.10.20 in 95.461 seconds, with genuine exit zero and empty stderr. Both receipts
+have identical producer identities and three clean actual master exits.
+
+- Tenant-scoped previews and refused raw/mixed/forged inputs make no target POST.
+  Source/unit cases separately enforce the stronger no-DNS/no-database preview
+  contract. Templates and schedules refuse HTTP target selections.
+- Independent HTTP and HTTPS disclosures each make 35 requests and retain
+  canonical 70/high evidence across saved results, API, inventory, JSON and SARIF.
+  The defended target makes 35 requests and remains null/inconclusive. Off-pointer
+  output makes one request; untrusted TLS makes no accepted target POST. Neither
+  can establish a pass.
+- Cancellation, outer deadline and real worker SIGKILL retain acknowledged
+  disclosure receipts. Each reaches two fixture POSTs, with no replay after
+  recovery. A verified fresh worker identity replaces the killed worker.
+- Removed queued references and tightened current policy are refused before a
+  target POST. Three actual master waits return zero. Every observed normal
+  worker has a successful cleanup acknowledgement; only the one recorded
+  intentional SIGKILL is exempt. No forced cleanup, unknown process probes,
+  lifecycle failures or resource/runtime warnings remain.
+- The private-value check covers 25 known values/references and their supported
+  encoded forms across owned public API/export, raw log and SQLite surfaces.
+  Private fixtures are removed. This is not arbitrary-secret absence.
+
+Review corrected cross-family private-input persistence, redundant synchronous
+DNS outside worker deadlines, and dispatcher ownership release while a scheduled
+preflight future remained active. Shutdown now requires explicit completed work
+and closes worker-owned listeners. The driver rejects swallowed cleanup-hook
+exceptions, missing acknowledgements and the graceful-shutdown boundary; its
+clock starts before termination. Reproduced cancelled TLS transport warnings
+required bounded post-work event-loop drainage and session ownership of returned
+SSL transports through the documented connector API. Owned transports are
+aborted on close even when upstream request cancellation/timeouts have released
+them. Retention is bounded by existing request limits; no child request task or
+private upstream attribute is introduced. Worker shutdown also removes its
+database session and attempts disposal of every pool before acknowledging cleanup.
+No work deadline, cleanup allowance, Python warning rule or resource assertion was
+relaxed. Earlier failed process receipts remain failures.
+The aiohttp dependency floor is now 3.14.5, matching the tested release's corrected
+Python-version cleanup boundary. Older allowed releases treated Python 3.12.7
+differently; this change removes that declared compatibility gap without claiming
+the earliest corrected release or every historical dependency combination.
+
+The corrected pre-modern-fix Python 3.10 full gate passes 6,026 tests with warnings
+as errors and 93% coverage. That result did not clear the separate Python
+3.12/3.13 transport and SQLite warnings reproduced in CI and actual owned workers.
+The modern baseline fails with thirteen workflow assertions; a database-only
+correction removes SQLite warnings but remains failed for TLS warnings. Only the
+combined correction achieves all fifteen assertions on the modern runtime.
+No earlier failure is reclassified. Actual held-peer cancellation plus header/body request timeout and
+overall timeout cases pass on Python 3.10, 3.12 and 3.13 with unchanged two-POST,
+one-receipt evidence. Independent ownership/disposal failure tests verify static
+errors, all cleanup attempts and withheld acknowledgements.
+Overlapping validation counts are not pooled. The delivery PR records final full-suite,
+packaging, independent review and required eight-job PR/main CI results.
+Covered hosted runs also exhausted two functional fixtures' artificial 45/60-second
+budgets. Independent profiles show continuous receipt progress and roughly three
+times the uninstrumented runtime, without reproducing a hang. Only full-sample
+functional fixtures now use the supported 180-second work budget and a bounded
+185-second observer. Dedicated short-timeout/cancel checks, production limits and
+the actual-process 240-second work/20-second cleanup gate are unchanged. This is
+a fixture contract correction, not a production latency improvement; earlier
+failed CI runs remain failed and final CI is required.
+The one remaining external gate is the pinned native server process workflow.
+Installed CLI smoke is separate from source-server acceptance. These deterministic
+fixtures do not measure live-model sensitivity, independent server state,
+TCP/reverse-proxy deployment, team authorization or enterprise readiness.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose

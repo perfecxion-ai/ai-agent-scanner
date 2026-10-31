@@ -95,14 +95,21 @@ class _Profile:
 class EvidenceProfiles:
     """Immutable public bindings; protected values are read only for validation/use."""
 
-    def __init__(self, profiles=None):
+    def __init__(self, profiles=None, http_targets=None):
+        from src.core.server_http_profiles import ServerHTTPProfiles
         self._profiles = MappingProxyType(dict(profiles or {}))
+        self.http_targets = http_targets if http_targets is not None else ServerHTTPProfiles()
 
     @classmethod
-    def from_document(cls, document):
+    def from_document(cls, document, *, private_path=None):
         try:
-            if (not isinstance(document, dict) or set(document) != {"schema_version", "profiles"}
-                    or document["schema_version"] != "1.0" or not isinstance(document["profiles"], dict)
+            if not isinstance(document, dict):
+                raise EvidenceProfileError()
+            version = document.get('schema_version')
+            expected = ({'schema_version', 'profiles', 'http_targets'} if version == '2.0'
+                        else {'schema_version', 'profiles'})
+            if (set(document) != expected or version not in {'1.0', '2.0'}
+                    or not isinstance(document['profiles'], dict)
                     or len(document["profiles"]) > MAX_PROFILES):
                 raise EvidenceProfileError()
             profiles = {}
@@ -121,9 +128,21 @@ class EvidenceProfiles:
                 public = {**entry, "endpoint": canonical_endpoint(entry["endpoint"])}
                 revision = hashlib.sha256(json.dumps(public, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
                 profiles[identifier] = _Profile(**public, revision=revision)
-            registry = cls(profiles)
+            from src.core.server_http_profiles import ServerHTTPProfiles
+            http_targets = ServerHTTPProfiles.from_document(document.get('http_targets', {}),
+                                                           private_path=private_path)
+            if len(profiles) + len(http_targets._entries) > MAX_PROFILES:
+                raise EvidenceProfileError()
+            registry = cls(profiles, http_targets)
             for identifier in profiles:
                 registry._marker(identifier)
+            if http_targets._entries:
+                http_targets.validate_startup(
+                    extra_public=[{'id': identifier, 'revision': profiles[identifier].revision,
+                                   **{key: value for key, value in entry.items()
+                                      if key != 'system_prompt_canary_env'}}
+                                  for identifier, entry in document['profiles'].items()],
+                    extra_protected=registry.http_private_values())
             return registry
         except (KeyError, TypeError, ValueError, UnicodeError):
             raise EvidenceProfileError() from None
@@ -148,6 +167,14 @@ class EvidenceProfiles:
         if any(marker in value for value in _FIELDS | {PIN_FIELD, "evidence_profiles", "evidence_profile_revisions"}):
             raise EvidenceProfileError()
         return marker
+
+    def http_private_values(self):
+        """Only explicitly configured provider references join HTTP privacy guards."""
+        values = []
+        for profile in self._profiles.values():
+            values.extend((profile.system_prompt_canary_env,
+                           os.environ.get(profile.system_prompt_canary_env)))
+        return tuple(value for value in values if isinstance(value, str) and value)
 
     def validate_public_definition(self, definition, references):
         """Do not persist selected markers in operator-supplied public labels/IDs."""
@@ -250,7 +277,7 @@ def load_evidence_profiles(path):
             raise EvidenceProfileError()
         document = json.loads(content.decode("utf-8"), object_pairs_hook=_unique_object,
                               parse_constant=lambda _: (_ for _ in ()).throw(EvidenceProfileError()))
-        return EvidenceProfiles.from_document(document)
+        return EvidenceProfiles.from_document(document, private_path=path)
     except (OSError, ValueError, TypeError, RecursionError, UnicodeError):
         raise EvidenceProfileError() from None
     finally:

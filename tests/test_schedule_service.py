@@ -61,11 +61,14 @@ def test_blocked_preflight_preserves_cancellation_and_no_old_enqueue_after_resta
         assert started.wait(3) and worker_started.wait(3)
         assert store.cancel("active") == "cancel_requested"
         until(lambda: state(store, "active") == "cancelled")
-        dispatcher.stop(timeout=0.1)
+        assert dispatcher.stop(timeout=0.1) is False
         second = JobDispatcher(store, lambda scan_id, cancelled: None, poll_seconds=0.01)
-        second.start()
+        with pytest.raises(RuntimeError, match='Another dispatcher owns this database'):
+            second.start()
         release.set()
         service.future.result(timeout=3)
+        assert dispatcher.stop(timeout=1) is True
+        second.start()
         service.tick(threading.Event())
         admitted.assert_not_called()
         assert second.ready

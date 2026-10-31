@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import socket
+import sys
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -193,6 +194,77 @@ class BoundedResponse:
         return json.loads(await self.text())
 
 
+class _OwnedSSLConnector(aiohttp.TCPConnector):
+    """Retain only transports returned by the public connector ownership API."""
+
+    def __init__(self, *, ownership_limit, **kwargs):
+        super().__init__(**kwargs)
+        self._ownership_limit = ownership_limit
+        self._owned_ssl_transports = {}
+
+    def _retire_closing(self):
+        failed = False
+        for identity, transport in tuple(self._owned_ssl_transports.items()):
+            try:
+                if transport.is_closing():
+                    transport.abort()
+                    del self._owned_ssl_transports[identity]
+            except Exception:
+                failed = True
+        if failed:
+            raise TransportPolicyError('HTTP transport ownership failed') from None
+
+    async def connect(self, *args, **kwargs):
+        connection = await super().connect(*args, **kwargs)
+        transport = None
+        try:
+            transport = connection.transport
+            self._retire_closing()
+            if self.closed:
+                raise TransportPolicyError('HTTP transport ownership failed')
+            if transport is not None and transport.get_extra_info('sslcontext') is not None:
+                if id(transport) not in self._owned_ssl_transports:
+                    if len(self._owned_ssl_transports) >= self._ownership_limit:
+                        raise TransportPolicyError('HTTP transport ownership failed')
+                    self._owned_ssl_transports[id(transport)] = transport
+            return connection
+        except Exception:
+            if transport is not None:
+                try:
+                    transport.abort()
+                except Exception:
+                    pass
+            try:
+                connection.close()
+            except Exception:
+                pass
+            raise TransportPolicyError('HTTP transport ownership failed') from None
+
+    async def close(self, *args, **kwargs):
+        transports, self._owned_ssl_transports = self._owned_ssl_transports, {}
+        failed = False
+        for transport in transports.values():
+            try:
+                transport.abort()
+            except Exception:
+                failed = True
+        try:
+            await super().close(*args, **kwargs)
+        except Exception:
+            failed = True
+        finally:
+            if failed:
+                logging.getLogger(__name__).error('HTTP transport cleanup failed')
+        if failed:
+            raise TransportPolicyError('HTTP transport cleanup failed') from None
+
+
+def _ssl_cleanup_closed_required():
+    # https://github.com/python/cpython/pull/118960 shipped in 3.12.8 and 3.13.1.
+    # Boundary: https://github.com/aio-libs/aiohttp/blob/v3.14.5/aiohttp/connector.py
+    return sys.version_info < (3, 12, 8) or (3, 13, 0) <= sys.version_info < (3, 13, 1)
+
+
 class SafeSession:
     """ClientSession subset used by probes, with redirects and proxies disabled."""
 
@@ -204,7 +276,11 @@ class SafeSession:
 
     async def __aenter__(self):
         self.resolver = PolicyResolver(self.budget)
-        connector = aiohttp.TCPConnector(resolver=self.resolver, limit=20)
+        # Keep cancelled SSL transports available for close to abort a stalled peer.
+        connector = _OwnedSSLConnector(
+            ownership_limit=2 * self.budget.max_requests + 20,
+            resolver=self.resolver, limit=20,
+            enable_cleanup_closed=_ssl_cleanup_closed_required())
         options = dict(self.kwargs)
         options['timeout'] = _bounded_timeout(options.get('timeout'), self.budget.request_timeout_seconds)
         trace = aiohttp.TraceConfig()

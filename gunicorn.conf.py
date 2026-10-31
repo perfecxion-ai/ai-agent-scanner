@@ -25,6 +25,51 @@ def post_worker_init(worker):
     start_job_dispatcher()
 
 
+def _close_worker_database(application, database):
+    failed = False
+    with application.app_context():
+        try:
+            database.session.remove()
+        except BaseException:
+            failed = True
+        for engine in database.engines.values():
+            try:
+                engine.dispose()
+            except BaseException:
+                failed = True
+    if failed:
+        raise RuntimeError('Server database shutdown incomplete')
+
+
 def worker_exit(server, worker):
-    from app import stop_job_dispatcher
-    stop_job_dispatcher()
+    # Gunicorn can invoke this hook in the master after an ESRCH result. Only
+    # the actual worker may import the app, stop its dispatcher or close its
+    # inherited descriptors. The master's listener and pathname remain owned.
+    if os.getpid() != getattr(worker, 'pid', None):
+        return
+    failures = []
+    try:
+        from app import app, db, stop_job_dispatcher
+        if stop_job_dispatcher() is not True:
+            raise RuntimeError('Server dispatcher shutdown incomplete')
+    except BaseException:
+        failures.append('dispatcher')
+    else:
+        try:
+            _close_worker_database(app, db)
+        except BaseException:
+            failures.append('database')
+    finally:
+        for listener in worker.sockets:
+            try:
+                # Close this process's raw descriptor. A wrapper's close may
+                # unlink a Unix pathname still used by the master process.
+                descriptor = getattr(listener, 'sock', listener)
+                if descriptor is not None:
+                    descriptor.close()
+            except BaseException:
+                if 'listener' not in failures:
+                    failures.append('listener')
+    if failures:
+        raise RuntimeError('Server worker cleanup failed: ' + ', '.join(failures)) from None
+    worker.log.info('Scan worker cleanup ok pid=%s', os.getpid())

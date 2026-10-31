@@ -469,6 +469,30 @@ server HTTP target admission and execution, retaining tenant binding, revision
 pins, private values and current-policy revalidation. This fixture acceptance
 does not establish general model sensitivity or enterprise readiness.
 
+R2.1b/R2.2b now add one-shot server HTTP assessment through private startup
+references. Authenticated tenant-scoped list/plan routes expose public mappings
+and reviewed revisions without DNS, target requests or admission writes.
+`security_only` jobs retain only the target reference, revision and bounded
+options; workers recheck ownership, current scope and private prerequisites.
+Templates and schedules reject this capability. See
+[operator setup](server-http-assessment.md) and
+[local acceptance](VALIDATION.md#server-http-reference-workflow-local-acceptance).
+
+The actual Gunicorn/dispatcher gate passes all fifteen assertions, including
+independent HTTP/HTTPS contexts, null defended results, retained 70/high evidence
+through cancellation/deadline/worker SIGKILL, and queued policy/reference changes.
+Three real master exits and normal-worker cleanup acknowledgements are checked;
+there are no resource warnings or forced cleanup. Its API uses private Unix HTTP
+sockets while application targets use actual HTTP and verified HTTPS.
+The exact modern gate passes on Python 3.13.14 with aiohttp 3.14.5 and Gunicorn
+26.2.0. Sessions retain their own TLS transports through cancellation/timeouts;
+worker shutdown disposes database pools before its positive acknowledgement.
+Earlier Python 3.10 passes did not close these modern-runtime cleanup gaps.
+Full-suite, packaging, independent review and all eight PR/main CI results belong
+to the delivery PR. One narrow pinned native process gate remains; no broad model,
+inventory or backup repeat is needed. Stateful sessions, dashboard setup, logical
+findings and representative detection accuracy remain open.
+
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
 operator retest only when a merged runtime change needs real-service validation,

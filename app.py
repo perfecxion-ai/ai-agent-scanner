@@ -60,6 +60,11 @@ from src.core.schema import initialize_schema, SCHEMA_VERSION
 from src.core.templates import project_template, template_revision
 from src.core.schedules import ScheduleService, schedule_definition
 from src.core.evidence_profiles import EvidenceProfileError, PIN_FIELD, load_evidence_profiles
+from src.core.http_application_policy import HTTP_OBJECTIVE, http_public_fields, is_http_agent
+from src.core.http_application_runtime import http_application_context
+from src.core.server_http_profiles import (
+    HTTP_SELECTION, ServerHTTPProfileError, ServerHTTPProfileNotFound,
+)
 from src.security.prompt_suites import (
     PIN_FIELD as PROMPT_SUITE_PIN_FIELD, PromptSuiteError, prompt_suite_pin,
     validate_prompt_suite, validate_prompt_suite_agents,
@@ -357,7 +362,8 @@ def list_scans():
 def start_scan():
     """Persist a scan and queue entry in one transaction."""
     try:
-        definition = _prepare_scan(request.get_json(silent=True), g.user["organization_id"])
+        definition = _prepare_scan(request.get_json(silent=True), g.user["organization_id"],
+                                   allow_http_targets=True)
         db.session.rollback()
         with _admission_lock:
             scan_id = _queue_scan(definition, g.user["organization_id"],
@@ -376,8 +382,11 @@ def start_scan():
         return jsonify({"success": False, "error": "Failed to start scan"}), 500
 
 
-def _prepare_scan(data, tenant, *, retain_declaration=True, trusted_definition=False):
+def _prepare_scan(data, tenant, *, retain_declaration=True, trusted_definition=False,
+                  allow_http_targets=False):
     """Validate current policy while retaining declared DNS and path intent."""
+    if not trusted_definition:
+        _validate_http_public(data)
     pins = None
     suite_pin = None
     had_suite_pin = False
@@ -387,6 +396,23 @@ def _prepare_scan(data, tenant, *, retain_declaration=True, trusted_definition=F
         had_suite_pin = PROMPT_SUITE_PIN_FIELD in data["scan_config"]
         suite_pin = data["scan_config"].pop(PROMPT_SUITE_PIN_FIELD, None)
     name, mode, scope, options = validate_request(data, app.config)
+    if HTTP_SELECTION & set(options):
+        if not allow_http_targets:
+            raise ScopeValidationError('HTTP target assessments are supported only by one-shot scan admission')
+        if pins is not None or had_suite_pin:
+            raise ServerHTTPProfileError()
+        definition = {'scan_name': name, 'scan_type': mode, 'target_scope': {}, 'scan_config': options}
+        identifier, revision = options['http_target_profile'], options['http_target_revision']
+        profiles = _evidence_profiles.http_targets
+        # Only execution preparation resolves protected values in a worker.
+        if not trusted_definition:
+            profiles.validate_public(identifier, tenant, revision, definition,
+                                     extra_private=_evidence_profiles.http_private_values())
+        try:
+            profiles.scope(identifier, tenant, revision, app.config, resolve=not trusted_definition)
+        except ValueError:
+            raise ServerHTTPProfileError() from None
+        return definition
     if "prompt_suite" in options:
         current_suite_pin = prompt_suite_pin()
         if trusted_definition and (not had_suite_pin or suite_pin != current_suite_pin):
@@ -399,6 +425,8 @@ def _prepare_scan(data, tenant, *, retain_declaration=True, trusted_definition=F
         if source is None:
             raise NotFound("Source scan not found")
         source_agents, aliases = _source_inventory(source)
+        if any(is_http_agent(agent) for agent in source_agents):
+            raise ScopeValidationError('HTTP targets require an explicit one-shot target profile')
         try:
             options["model_overrides"] = canonical_model_overrides(
                 source_agents, options.get("model_overrides", {}), aliases)
@@ -422,7 +450,16 @@ def _prepare_scan(data, tenant, *, retain_declaration=True, trusted_definition=F
     definition = {"scan_name": name, "scan_type": mode, "target_scope": scope, "scan_config": options}
     if options.get("evidence_profiles"):
         _evidence_profiles.validate_public_definition(definition, options["evidence_profiles"])
+    if not trusted_definition:
+        _validate_http_public(definition)
     return definition
+
+
+def _validate_http_public(value):
+    if _evidence_profiles.http_targets.enabled is not True:
+        return
+    _evidence_profiles.http_targets.validate_global_public(
+        value, extra_private=_evidence_profiles.http_private_values())
 
 
 def _check_prompt_suite_pin(options):
@@ -529,12 +566,28 @@ def _queue_scan(definition, tenant, actor, user_ip, *, before_commit=None):
     if ScanJob.query.filter_by(status="queued").count() >= app.config["SCAN_MAX_QUEUED"]:
         raise TooManyRequests("Scan queue is full")
     scan_id = generate_scan_id()
+    _validate_http_public({'definition': definition, 'scan_id': scan_id, 'organization_id': tenant,
+                          'created_by': actor, 'user_ip': user_ip, 'status': 'queued'})
+    if HTTP_SELECTION & set(definition['scan_config']):
+        options = definition['scan_config']
+        _evidence_profiles.http_targets.validate_public(
+            options['http_target_profile'], tenant, options['http_target_revision'],
+            {'definition': definition, 'scan_id': scan_id, 'organization_id': tenant,
+             'created_by': actor, 'user_ip': user_ip, 'status': 'queued'},
+            extra_private=_evidence_profiles.http_private_values())
     db.session.add(ScanSession(id=scan_id, organization_id=tenant, **deepcopy(definition),
                               created_by=actor, user_ip=user_ip, status="queued"))
     db.session.add(ScanJob(scan_id=scan_id))
     db.session.add(AuditEvent(scan_id=scan_id, organization_id=tenant, event="admitted", status="queued"))
     if before_commit is not None:
         before_commit(scan_id)
+        _validate_http_public({'definition': definition, 'scan_id': scan_id, 'organization_id': tenant,
+                              'created_by': actor, 'user_ip': user_ip, 'status': 'queued'})
+        if HTTP_SELECTION & set(definition['scan_config']):
+            options = definition['scan_config']
+            _evidence_profiles.http_targets.validate_public(
+                options['http_target_profile'], tenant, options['http_target_revision'], definition,
+                extra_private=_evidence_profiles.http_private_values())
     db.session.commit()
     if _job_dispatcher:
         _job_dispatcher.wake()
@@ -589,6 +642,28 @@ def _prepare_template(data, tenant, *, trusted_definition=False):
     return definition
 
 
+@app.route('/api/http-targets')
+@require_auth
+@_template_api
+def list_http_targets():
+    plans = _evidence_profiles.http_targets.plans(
+        g.user['organization_id'], app.config, extra_private=_evidence_profiles.http_private_values())
+    return jsonify({'success': True, 'targets': plans})
+
+
+@app.route('/api/http-targets/<profile_id>/plan')
+@require_auth
+@_template_api
+def plan_http_target(profile_id):
+    try:
+        plans = _evidence_profiles.http_targets.plans(
+            g.user['organization_id'], app.config, profile_id,
+            extra_private=_evidence_profiles.http_private_values())
+    except ServerHTTPProfileNotFound:
+        raise NotFound('HTTP target not found') from None
+    return jsonify({'success': True, 'target': plans[0]})
+
+
 @app.route("/api/templates", methods=["GET", "POST"])
 @require_auth
 @_template_api
@@ -613,6 +688,8 @@ def templates_collection():
         _check_prompt_suite_pin(definition["scan_config"])
         row = ScanTemplate(id=uuid.uuid4().hex, organization_id=tenant,
                            created_by=g.user.get("user_id"), **definition)
+        _validate_http_public({'definition': definition, 'id': row.id, 'organization_id': tenant,
+                               'created_by': row.created_by})
         db.session.add(row)
         db.session.commit()
         return jsonify({"success": True, "template": _template_json(row)}), 201
@@ -647,6 +724,8 @@ def template_item(template_id):
             db.session.commit()
             return jsonify({"success": True})
         _check_prompt_suite_pin(definition["scan_config"])
+        _validate_http_public({'definition': definition, 'id': template_id, 'organization_id': tenant,
+                               'created_by': row.created_by})
         changed = db.session.execute(update(ScanTemplate).where(
             ScanTemplate.id == template_id, ScanTemplate.organization_id == tenant,
             ScanTemplate.revision == revision,
@@ -1240,7 +1319,9 @@ def start_job_dispatcher():
 
 def stop_job_dispatcher():
     if _job_dispatcher:
-        _job_dispatcher.stop()
+        if _job_dispatcher.stop() is not True:
+            raise RuntimeError('Server dispatcher shutdown incomplete')
+    return True
 
 
 def _execute_job(scan_id, cancelled):
@@ -1253,7 +1334,8 @@ def _execute_job(scan_id, cancelled):
         definition = _prepare_scan({
             "scan_type": scan.scan_type, "scan_name": scan.scan_name,
             "target_scope": scan.target_scope, "scan_config": scan.scan_config,
-        }, scan.organization_id, retain_declaration=False, trusted_definition=True)
+        }, scan.organization_id, retain_declaration=False, trusted_definition=True,
+            allow_http_targets=True)
     _run_scan_in_thread(scan_id, definition["scan_type"], definition["target_scope"],
                         definition["scan_config"], cancelled)
 
@@ -1279,6 +1361,7 @@ def _snapshot_rows(scan_id, result, discovered_at):
     for ordinal, agent in enumerate(result['agents']):
         metadata = {**agent.get('metadata', {}), 'asset_id': agent['id'],
                     'security_status': agent['security_status']}
+        metadata.update(http_public_fields(agent))
         identifier = snapshot_id(scan_id, ordinal)
         score, level = snapshot_stored_risk(projected, identifier, metadata)
         rows.append(dict(
@@ -1329,6 +1412,8 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
                         cancelled=None):
     """Run scan in a background thread with its own event loop."""
     loop = asyncio.new_event_loop()
+    budget = None
+    http_transport_grace = None
     try:
         asyncio.set_event_loop(loop)
         budget = ScanBudget(
@@ -1338,6 +1423,22 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
             max_response_bytes=app.config["SCAN_MAX_RESPONSE_BYTES"],
             request_timeout_seconds=app.config["SCAN_REQUEST_TIMEOUT_SECONDS"],
         )
+        if HTTP_SELECTION & set(scan_config):
+            with app.app_context():
+                current = db.session.get(ScanSession, scan_id)
+                if current is None:
+                    raise ServerHTTPProfileError()
+                networks = _evidence_profiles.http_targets.scope(
+                    scan_config['http_target_profile'], current.organization_id,
+                    scan_config['http_target_revision'], app.config, resolve=False)
+                profile = _evidence_profiles.http_targets.token(
+                    scan_config['http_target_profile'], current.organization_id,
+                    scan_config['http_target_revision']).profile
+                http_transport_grace = (0.250 if profile.descriptor['endpoint'].startswith('https://') else 0)
+            budget = ScanBudget(allowed_networks=networks,
+                allow_loopback=app.config['SCAN_ALLOW_LOOPBACK'],
+                max_requests=scan_config['max_requests'], max_response_bytes=scan_config['max_response_bytes'],
+                request_timeout_seconds=scan_config['request_timeout_seconds'])
         with scan_transport(budget):
             loop.run_until_complete(
                 _await_scan(scan_id, scan_type, target_scope, scan_config, cancelled)
@@ -1358,12 +1459,46 @@ def _run_scan_in_thread(scan_id: str, scan_type: str, target_scope: dict, scan_c
         app.logger.error("Scan thread failed")
         _record_terminal(scan_id, "failed", "Scan worker failed")
     finally:
-        loop.close()
-        with _scans_lock:
-            _active_scans.pop(scan_id, None)
+        try:
+            if http_transport_grace is not None and budget is not None and budget.requests:
+                # Closed aiohttp sessions can still have transport-close
+                # callbacks queued. Keep this worker's loop alive for bounded
+                # cleanup after the unchanged active work deadline.
+                # https://docs.aiohttp.org/en/stable/client_advanced.html#graceful-shutdown
+                loop.run_until_complete(asyncio.sleep(http_transport_grace))
+        finally:
+            loop.close()
+            with _scans_lock:
+                _active_scans.pop(scan_id, None)
 
 
 async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_config: dict):
+    """Keep each HTTP target's resolved private context inside its worker task."""
+    if not HTTP_SELECTION & set(scan_config):
+        return await _execute_scan_impl(scan_id, scan_type, target_scope, scan_config)
+    try:
+        with app.app_context():
+            _require_claim(scan_id)
+            current = db.session.get(ScanSession, scan_id)
+            if current is None:
+                raise ServerHTTPProfileError()
+            prepared = _evidence_profiles.http_targets.prepare(
+                scan_config['http_target_profile'], current.organization_id,
+                scan_config['http_target_revision'],
+                {'scan_id': scan_id, 'scan_name': current.scan_name, 'scan_type': scan_type,
+                 'scan_config': scan_config, 'organization_id': current.organization_id,
+                 'created_by': current.created_by, 'user_ip': current.user_ip},
+                extra_private=_evidence_profiles.http_private_values())
+        with http_application_context(prepared):
+            return await _execute_scan_impl(scan_id, scan_type, target_scope, scan_config,
+                                            http_prepared=prepared)
+    except Exception:
+        app.logger.error('Scan execution failed')
+        _record_terminal(scan_id, 'failed', 'Scan execution failed')
+
+
+async def _execute_scan_impl(scan_id: str, scan_type: str, target_scope: dict, scan_config: dict,
+                             *, http_prepared=None):
     """Execute the full scan pipeline."""
 
     try:
@@ -1395,7 +1530,9 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
 
         source_agents = None
         source_coverage = None
-        if scan_type == "security_only":
+        if http_prepared is not None:
+            source_agents = [http_prepared.agent]
+        elif scan_type == "security_only":
             with app.app_context():
                 current = db.session.get(ScanSession, scan_id)
                 source = ScanSession.query.filter_by(
@@ -1419,7 +1556,9 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
                 if source.status == "partial":
                     source_coverage["warning"] = "Source inventory coverage is incomplete; only saved validated assets were tested"
         execution_engine = security_engine
-        if "prompt_suite" in scan_config:
+        if http_prepared is not None:
+            execution_engine = SecurityTestEngine(assessment_objective=HTTP_OBJECTIVE)
+        elif "prompt_suite" in scan_config:
             try:
                 validate_prompt_suite_agents(source_agents)
             except PromptSuiteError as exc:
@@ -1453,7 +1592,8 @@ async def _execute_scan(scan_id: str, scan_type: str, target_scope: dict, scan_c
 
         result = await run_pipeline(discovery_engine, execution_engine, risk_assessor,
                                     scope, scan_type, agents=source_agents,
-                                    agent_validator=lambda agents: validate_agent_endpoints(agents, app.config),
+                                    agent_validator=(None if http_prepared is not None else
+                                        lambda agents: validate_agent_endpoints(agents, app.config)),
                                     early_agent_validator=_reject_server_tenant_inputs,
                                     checkpoint_callback=checkpoint, producer_component='server')
         result = _enrich_report(scan_id, result, source_coverage)
