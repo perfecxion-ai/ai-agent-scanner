@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
+from src.core import transport
 from src.core.contracts import TenantObservation
 from src.core.tenant_probe_policy import TENANT_CONTROL_PROMPT, tenant_target
 from src.core.transport import SafeSession
@@ -88,11 +89,11 @@ def trusted_tenant_tls(ca_file):
     """Trust only the fixture CA while retaining certificate and host verification."""
     context = ssl.create_default_context(cafile=str(ca_file))
     assert context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
-    original = aiohttp.TCPConnector
+    original = transport._OwnedSSLConnector
     def connector(*args, **kwargs):
         kwargs['ssl'] = context
         return original(*args, **kwargs)
-    with patch.object(aiohttp, 'TCPConnector', connector):
+    with patch.object(transport, '_OwnedSSLConnector', connector):
         yield
 
 
