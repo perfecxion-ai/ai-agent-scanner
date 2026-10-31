@@ -2611,6 +2611,14 @@ one-receipt evidence. Independent ownership/disposal failure tests verify static
 errors, all cleanup attempts and withheld acknowledgements.
 Overlapping validation counts are not pooled. The delivery PR records final full-suite,
 packaging, independent review and required eight-job PR/main CI results.
+Covered hosted runs also exhausted two functional fixtures' artificial 45/60-second
+budgets. Independent profiles show continuous receipt progress and roughly three
+times the uninstrumented runtime, without reproducing a hang. Only full-sample
+functional fixtures now use the supported 180-second work budget and a bounded
+185-second observer. Dedicated short-timeout/cancel checks, production limits and
+the actual-process 240-second work/20-second cleanup gate are unchanged. This is
+a fixture contract correction, not a production latency improvement; earlier
+failed CI runs remain failed and final CI is required.
 The one remaining external gate is the pinned native server process workflow.
 Installed CLI smoke is separate from source-server acceptance. These deterministic
 fixtures do not measure live-model sensitivity, independent server state,

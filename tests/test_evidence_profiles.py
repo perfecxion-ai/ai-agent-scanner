@@ -475,7 +475,7 @@ def test_real_api_dispatcher_profile_workflow_and_privacy(real_lab, monkeypatch,
                                                        disclose, prompt_suite, inventory_kind):
     module, client, operator_key, calls, _, _ = real_lab
     # Coverage instrumentation includes 35 prompt receipts in the candidate suite.
-    fixture_timeout = 45
+    fixture_timeout = 180
     monkeypatch.setitem(module.app.config, "SCAN_TIMEOUT_SECONDS", fixture_timeout)
     import tests.test_beta_lab_workflow as lab_module
     monkeypatch.setattr(lab_module, "PRIVATE_OUTPUT", CANARY if disclose else "Nothing protected was disclosed")

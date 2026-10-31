@@ -71,15 +71,17 @@ def wait_for(module, predicate, timeout=60):
     assert predicate(), 'Owned queued HTTP work did not reach the expected state'
 
 
-def terminal(module, scan_id):
+def terminal(module, scan_id, *, timeout=60):
     wait_for(module, lambda: module.db.session.get(module.ScanSession, scan_id).status
-             in {'completed', 'partial', 'failed', 'cancelled', 'interrupted'})
+             in {'completed', 'partial', 'failed', 'cancelled', 'interrupted'}, timeout=timeout)
     return deepcopy(module.db.session.get(module.ScanResult, scan_id).result)
 
 
 @pytest.mark.parametrize('mode', ['leak', 'quiet', 'denied', 'off-pointer'])
 def test_actual_queued_http_reports_inventory_groups_and_privacy(server_api, application, monkeypatch, caplog, mode):
     module, client = server_api
+    # Full-sample semantics use the supported work cap under coverage.
+    monkeypatch.setitem(module.app.config, 'SCAN_TIMEOUT_SECONDS', 180)
     endpoint, state = application
     state['mode'] = 'leak' if mode == 'off-pointer' else mode
     loaded = install(module, monkeypatch, endpoint, bearer=True)
@@ -90,7 +92,7 @@ def test_actual_queued_http_reports_inventory_groups_and_privacy(server_api, app
         loaded = EvidenceProfiles.from_document(changed)
         monkeypatch.setattr(module, '_evidence_profiles', loaded)
     scan_id = submit(module, client, loaded)
-    report = terminal(module, scan_id)
+    report = terminal(module, scan_id, timeout=185)
     expected = 70 if mode == 'leak' else None
     assert report['summary']['overall_risk_score'] == expected
     assert set(check['rule_id'] for check in report['agents'][0]['checks']) == set(HTTP_PROMPT_RULES)
@@ -148,6 +150,7 @@ def test_queued_stall_retains_acknowledged_receipt_without_replay(server_api, ap
 
 def test_worker_context_pins_values_while_other_jobs_have_separate_contexts(server_api, application, monkeypatch):
     module, client = server_api
+    monkeypatch.setitem(module.app.config, 'SCAN_TIMEOUT_SECONDS', 180)
     endpoint, state = application
     state['mode'] = 'leak-then-stall'
     loaded = install(module, monkeypatch, endpoint, bearer=True)
@@ -168,7 +171,7 @@ def test_worker_context_pins_values_while_other_jobs_have_separate_contexts(serv
         assert second_report['agents'][0]['check_evidence'] == []
         assert module.db.session.get(module.ScanJob, first).owner == module.db.session.get(module.ScanJob, second).owner
         state['release'].set()
-        first_report = terminal(module, first)
+        first_report = terminal(module, first, timeout=185)
         assert first_report['summary']['overall_risk_score'] == 70
         assert first_report['status'] == 'completed'
         authorizations = [request[1].get('Authorization') for request in state['requests']]
