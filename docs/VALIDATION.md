@@ -2463,6 +2463,78 @@ copies with explicit original/shared hashes. This changes the cleanup protocol
 prospectively and cannot reclassify the original failed run as passed. The
 instrumented native result remains required.
 
+### Supplied native focused-cleanup retest at e484920
+
+The supplied `aiscan-http-cleanup-e484920.tar.gz` closes the focused native
+process-cleanup gate at `e4849206525f71674f982c1b30ea304e900ed2b8`. Its SHA-256 is
+`5273170ce1970442d08e52d9e82b84af032e1a502f4e75ede50cb0a48e9abbe4`.
+Two independent data-only reviews compare the returned bytes with the
+expectations frozen before execution, whose SHA-256 is
+`91049bbcffb648d22b85ff7e5fcd2a8c30a438cd4154dced37d9c630462a7525`.
+No supplied script, model, operator configuration, environment secrets or
+database was executed or loaded for this review.
+
+| Returned evidence | Verified result |
+| --- | --- |
+| Revision and mode | Exact merged `e484920` pin, `focused-cleanup` in the three v2 documents |
+| Runtime | Linux, Python 3.11.2, SQLite 3.40.1, identical to the original baseline |
+| Source and helper | Original 84-file scanner identity and pinned watchdog SHA-256 match |
+| Main captures | All 41 required files; mandatory `source-status.log` present and empty |
+| Raw capture inventory | All 40 entries match returned byte counts and SHA-256; inventory excludes itself |
+| Job captures | All four required files, including separate block and enclosing-job exits |
+| Actual exits | All eight steps, driver, pinned block, enclosing-job trap and lab runner are zero |
+| Reconciliation | All fourteen exact check names are present and true |
+| Focused pytest | 852 passed, two separately accepted public modes deselected, 193.45 seconds; no failures, skips or warnings |
+| Process diagnostics | 31 tracked child identities, 106 events, all terminal states gone; no forced kills, probe errors or failure codes |
+| Cleanup | Owned work-directory removal is recorded as successful |
+
+The focused cleanup takes 0.00137 seconds within the existing five-second total
+budget. All 31 identities are already gone at their first natural-cleanup probe;
+this run does not establish that the new natural-exit allowance was needed.
+Tracking is unavailable only for source-venv and source-install, before
+the isolated psutil dependency is loaded; the other six steps enable it. Some
+children have transient zombie observations during testing, but all end gone.
+These observations do not diagnose the earlier failed run. The new report's
+description of that failure as a reaping race remains unsupported.
+
+The runner used retained first-full-run captures rather than the prepared local
+baseline bundle, and did not receive the local frozen-expectations file. This
+does not prevent comparison here: all four baseline revision/runtime/dependency/
+source identity hashes match the frozen originals exactly. Both dependency
+inventories contain 89 packages. The only version difference is filelock 4.2.4
+to 4.2.5, recorded as `dependency_inventory_changed`, not an identical-environment
+claim or gate failure.
+
+All 41 main raw captures are returned unchanged. The three job captures available
+before finalization were copied unchanged; the enclosing-job trap wrote the
+fourth at exit. Two separate sanitized text copies, source-install.log and
+pinned-block.stdout, match the raw/shared hashes in their manifests. The outer
+helper removes its original capture directory after retaining the complete raw
+copy. This run therefore preserves the bytes needed for review. The jobloop log
+is a separate sanitized output without a returned original/hash manifest.
+
+The private harness still has unchecked setup/copy/permission/listing/removal
+commands and a best-effort exit-trap write. Its captured critical gate exits and
+complete raw evidence support this scoped acceptance; they do not prove every
+outer command propagated failures. Exported file modes do not prove the original
+runner's capture permissions. All 67 AppleDouble files are packaging metadata.
+
+The on-runner privacy sweep covers 51 files before several final outputs exist.
+Its nine labels represent four populated lab-secret values, two static reference
+names and three PII patterns, not nine populated secrets. Encoded forms omit
+hexadecimal, and private path-prefix checking is not configured. Later report,
+driver, final job-log/exit and packaging bytes are outside that initial sweep.
+Review pattern screens find no apparent credentials or personal private values;
+literal test patterns in driver source are intentional. These are bounded
+privacy observations, not proof that arbitrary secrets are absent.
+
+PR #93 and its merged revision pass all eight required CI jobs, including 5,912
+tests per platform. This later native focused run is separate evidence: it does
+not rerun HTTP modes, build/install a wheel or turn the first full failure and
+incomplete retry into passes. Existing HTTP receipts remain scoped to the
+unchanged scanner runtime. Server HTTP target admission, stateful sessions,
+representative detection sensitivity and the remaining roadmap remain open.
+
 ### Protected-access request-provenance prerequisite
 
 Read-only source audit and owned loopback HTTP reproductions at `6af7fa2` expose

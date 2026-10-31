@@ -43,8 +43,8 @@ proposed calls and observed actions are distinct outcomes.
 | R1.3 | Database score columns retain unknown as `0.0`; historical evidence also needs current eligibility guards | Shared canonical eligibility rejects unsupported historical control semantics without rewriting reports; versioned migration preserves legitimate assessed zero, rejects unsupported layouts, and passes rollback plus backup/restore fixtures | Merged in PR #72 with all local, independent, and eight PR/post-merge CI gates passed; scoped native reconstructed-fixture upgrade/restart accepted with recorded qualifications |
 | R1.4 | Risk filtering considers only the newest 100 inventory records | Stable asset identity is separate from observations; indexed filters and cursor pagination are exhaustive and tenant-scoped; a 10,000-observation synthetic fixture has no missing/duplicate pages | R1.4a traversal, R1.4b1 grouping and R1.4b2a group risk indexes have qualified native acceptance. R1.4b2b1 shares strict observation/group risk attribution and passes the 5,563-case local gate. Observation-index acceleration is deferred behind the guided HTTP workflow; dashboard groups and logical findings remain separate |
 | R1.5 | Main is far beyond the public release but still identifies itself as `1.1.0` | Release/development identity includes reproducible source and catalog provenance; artifacts have tested install/upgrade paths, checksums, and an SBOM; publication remains separately authorized | R1.5a development/content identity passes local and independent gates; required delivery CI is recorded on its PR. Release checksums, SBOM, dependency/build attestation and deployed upgrade acceptance remain open |
-| R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | R2.1a merged in PR #92 with all eight PR/post-merge checks. Scoped native HTTP behavior is supported; the first complete native wrapper failed its descendant watchdog and the retry lacks 46 mandatory captures. Focused process-cleanup acceptance remains open; server admission, stateful sessions and broader extension contracts remain open |
-| R2.2 | Advanced model/evidence/suite setup depends on manual identifiers and JSON | Guided discovery-to-assessment flow and CLI setup/diagnostics/preview expose ready, unsupported, missing, and inapplicable prerequisites; secret references never become ordinary saved values | R2.2a implements guided private target setup, an offline target/scope/readiness preview and active assessment without manual agent JSON or asset IDs. Local and installed-wheel acceptance pass; native, dashboard and server configuration gates remain open |
+| R2.1 | Hardwired testers and provider formats limit application coverage | Versioned target, scenario, evidence-evaluator, and shared-budget contracts support a custom HTTP/session adapter; a reference extension needs no route or orchestrator edits | R2.1a merged in PR #92; PR #93 and its merged revision pass all eight CI checks with 5,912 tests per platform. Scoped native HTTP behavior and the separate 852-case focused-cleanup gate are accepted. The first full failure and incomplete retry remain recorded. Reference-only server admission/execution is next; stateful sessions and broader extension contracts remain open |
+| R2.2 | Advanced model/evidence/suite setup depends on manual identifiers and JSON | Guided discovery-to-assessment flow and CLI setup/diagnostics/preview expose ready, unsupported, missing, and inapplicable prerequisites; secret references never become ordinary saved values | R2.2a implements guided private target setup, an offline target/scope/readiness preview and active assessment without manual agent JSON or asset IDs. Local, installed-wheel and scoped native CLI acceptance pass; dashboard and server configuration gates remain open |
 | R2.3 | Findings and exits need clearer remediation and policy meaning | Logical findings preserve occurrences, explain boundary/evidence/control/verification, and avoid uncalibrated numeric confidence; offline CI evaluation distinguishes policy violations, missing required coverage, and invalid reports | Planned |
 | R3.1 | Private, narrow cohorts do not establish general detection performance | Public reproducible vulnerable/defended pairs, held-out targets, fixed budgets, executed-driver identities, preserved captures, real exit codes, and explicit model/state provenance; no pooled heterogeneous accuracy | Planned |
 | R3.2 | Offline replay and MCP inventory do not test live retrieval or actions | Add one deeply supported agent integration and controlled MCP actions with per-objective positive/negative fixtures; missing traces cannot prove defenses; no uncontrolled external effects | Planned |
@@ -262,11 +262,19 @@ target identities without weakening per-row binding or work limits. The
 validation record retains the original full pass, refreshed coverage run and
 corrected permission-fixture and output-preflight results separately. Required CI
 passes 5,885 cases on the PR and merged revision. The supplied native bundle
-supports scoped HTTP behavior but preserves a failed descendant watchdog and
-an incomplete retry. The [focused process-cleanup retest](http-assessment-retest.md)
-remains a native gate; see the
-[qualified record](VALIDATION.md#supplied-native-http-application-retest-at-5a9ab35).
-This closes neither full R2 CLI/API parity nor representative detection accuracy.
+supports scoped HTTP behavior while preserving its failed descendant watchdog
+and incomplete retry. PR #93 adds bounded process diagnostics without changing
+the scanner runtime or public HTTP driver. All eight PR and all eight main
+checks pass with 5,912 tests per platform. The separate focused native gate at
+`e484920` now passes 852 cases with two public modes deselected and complete
+41-main/four-job captures. All raw inventory hashes, baseline hashes, actual
+exits and process diagnostics match the frozen expectations; filelock version
+drift remains qualified. See the
+[scoped acceptance](VALIDATION.md#supplied-native-focused-cleanup-retest-at-e484920).
+No further cleanup retest is needed. Next is reference-only server HTTP target
+admission/execution with current-policy revalidation and private runtime inputs.
+Full R2 CLI/API parity, stateful sessions and representative detection accuracy
+remain open.
 
 R1.5a uses canonical `1.2.0.dev0`, scoped deterministic source/catalog hashes,
 immutable new-run producer stamps and distinct exporter identity. Historical raw
