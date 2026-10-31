@@ -93,7 +93,9 @@ try:
         child = os.fork()
         if child == 0:
             os.close(read_end)
-            sys.modules['app'] = SimpleNamespace(stop_job_dispatcher=stop)
+            sys.modules['app'] = SimpleNamespace(stop_job_dispatcher=stop,
+                app=SimpleNamespace(app_context=lambda: __import__('contextlib').nullcontext()),
+                db=SimpleNamespace(session=SimpleNamespace(remove=lambda: None), engines={}))
             result = invoke(os.getpid())
             os.write(write_end,json.dumps(result).encode())
             os.close(write_end)
@@ -259,6 +261,8 @@ import gc,json,os,runpy,secrets,ssl,sys,threading,time
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 root,directory = Path(sys.argv[1]),Path(sys.argv[2])
+mode = sys.argv[3] if len(sys.argv) > 3 else 'cancel'
+assert mode in ('cancel','headers_timeout','body_timeout','overall_timeout')
 sys.path.insert(0,str(root))
 helper = runpy.run_path(str(root/'scripts/acceptance-http-assessment.py'))
 context,ca = helper['certificate'](directory)
@@ -276,8 +280,16 @@ class Handler(BaseHTTPRequestHandler):
         assert set(body) == {'question'}
         requests.append(body)
         if len(requests) == 2:
+            if mode == 'body_timeout':
+                self.send_response(200)
+                self.send_header('Content-Type','application/json')
+                self.send_header('Content-Length','128')
+                self.end_headers()
+                self.wfile.flush()
             stalled.set()
             assert release.wait(10)
+            if mode == 'body_timeout':
+                return
         raw = json.dumps({'answer':marker}).encode()
         try:
             self.send_response(200)
@@ -316,8 +328,12 @@ try:
     token = client.post('/api/auth/token',json={'api_key':operator}).json['token']
     headers = {'Authorization':'Bearer '+token}
     plan = client.get('/api/http-targets/cancel/plan',headers=headers).json['target']
-    response = client.post('/api/scans',headers=headers,json={'scan_type':'security_only',
-        'scan_config':{'http_target_profile':'cancel','http_target_revision':plan['revision'],'max_requests':2}})
+    options = {'http_target_profile':'cancel','http_target_revision':plan['revision'],'max_requests':2}
+    if mode in ('headers_timeout','body_timeout'):
+        options['request_timeout_seconds'] = 1
+    if mode == 'overall_timeout':
+        options['timeout_seconds'] = 3
+    response = client.post('/api/scans',headers=headers,json={'scan_type':'security_only','scan_config':options})
     assert response.status_code == 202
     scan_id = response.json['scan_id']
     assert stalled.wait(5)
@@ -325,14 +341,19 @@ try:
     assert initial['summary']['overall_risk_score'] == 70
     acknowledged = initial['agents'][0]['check_evidence']
     assert len(acknowledged) == 1 and len(requests) == 2
-    assert client.post('/api/scans/'+scan_id+'/cancel',headers=headers).status_code == 202
+    if mode == 'cancel':
+        assert client.post('/api/scans/'+scan_id+'/cancel',headers=headers).status_code == 202
     stop = time.monotonic()+5
     while time.monotonic() < stop:
         result = client.get('/api/scans/'+scan_id+'/report?format=json',headers=headers).json
-        if result['status'] == 'cancelled':
+        terminal = client.get('/api/scans/'+scan_id+'/status',headers=headers).json['status']
+        if terminal in ('completed','partial','failed','cancelled'):
             break
         time.sleep(0.02)
-    assert result['status'] == 'cancelled' and result['summary']['overall_risk_score'] == 70
+    expected = 'cancelled' if mode == 'cancel' else 'failed' if mode == 'overall_timeout' else 'partial'
+    assert terminal == expected
+    result = client.get('/api/scans/'+scan_id+'/report?format=json',headers=headers).json
+    assert result['status'] == expected and result['summary']['overall_risk_score'] == 70
     assert result['agents'][0]['check_evidence'] == acknowledged
     assert module.stop_job_dispatcher() is True
     for _ in range(3):
@@ -340,25 +361,35 @@ try:
     assert not release.is_set()
     assert len(requests) == 2
     print(json.dumps({'status':result['status'],'score':result['summary']['overall_risk_score'],
-        'receipts':len(acknowledged),'posts':len(requests),'stopped':True}))
+        'receipts':len(acknowledged),'posts':len(requests),'stopped':True,'job_status':terminal}))
 finally:
     release.set()
     try:
         if module is not None:
-            module.stop_job_dispatcher()
+            assert module.stop_job_dispatcher() is True
+            with module.app.app_context():
+                module.db.session.remove()
+                for engine in module.db.engines.values():
+                    engine.dispose()
     finally:
         helper['stop_server'](server,thread)
 gc.collect()
 '''
 
 
-def test_actual_verified_https_cancel_closes_worker_transports_without_warnings(listener_directory):
-    result = subprocess.run([sys.executable, '-Werror', '-c', TLS_CANCEL_PROGRAM, str(ROOT), str(listener_directory)],
+@pytest.mark.parametrize('mode', ['cancel', 'headers_timeout', 'body_timeout', 'overall_timeout'])
+def test_actual_verified_https_cancel_closes_worker_transports_without_warnings(listener_directory, mode):
+    result = subprocess.run([sys.executable, '-Werror', '-c', TLS_CANCEL_PROGRAM, str(ROOT), str(listener_directory), mode],
         capture_output=True, text=True, timeout=30, check=False,
         env={'PATH': os.defpath, 'HOME': str(listener_directory), 'TMPDIR': str(listener_directory),
              'PYTHONNOUSERSITE': '1', 'PYTHONUTF8': '1',
              'SCAN_EVIDENCE_PROFILES_FILE': '/tmp/aiscan-operator-registry-must-not-exist.json'})
     assert result.returncode == 0, result.stderr
-    assert not any(value in result.stderr for value in ('ResourceWarning', 'RuntimeWarning', 'Traceback', 'Exception ignored'))
-    assert all(line.startswith('INFO:src.') for line in result.stderr.splitlines()), result.stderr
-    assert json.loads(result.stdout) == {'status': 'cancelled', 'score': 70, 'receipts': 1, 'posts': 2, 'stopped': True}
+    assert not any(value in result.stderr for value in ('ResourceWarning', 'RuntimeWarning', 'Traceback', 'Exception ignored')), result.stderr
+    expected_warning = 'WARNING:src.core.transport:HTTP transport failed: request or response I/O'
+    lines = result.stderr.splitlines()
+    assert lines.count(expected_warning) == (1 if mode in ('headers_timeout', 'body_timeout') else 0), result.stderr
+    assert all(line.startswith('INFO:src.') or line == expected_warning for line in lines), result.stderr
+    expected = 'cancelled' if mode == 'cancel' else 'failed' if mode == 'overall_timeout' else 'partial'
+    assert json.loads(result.stdout) == {'status': expected, 'score': 70, 'receipts': 1, 'posts': 2,
+                                       'stopped': True, 'job_status': expected}
