@@ -64,6 +64,7 @@ def test_failed_projection_does_not_disable_scan_queue_or_schedule_ticks(store, 
     attempted = threading.Event()
     service = Mock()
     service.healthy = True
+    service.future = None
 
     def maintenance(stop):
         attempted.set()
@@ -82,7 +83,7 @@ def test_failed_projection_does_not_disable_scan_queue_or_schedule_ticks(store, 
         assert 'Background inventory maintenance failed' in caplog.text
         assert 'synthetic-private-projection-error' not in caplog.text
     finally:
-        dispatcher.stop()
+        assert dispatcher.stop() is True
 
 
 def test_uncooperative_maintenance_cannot_release_live_dispatcher_ownership(store):
