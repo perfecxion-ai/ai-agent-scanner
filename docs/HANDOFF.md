@@ -449,14 +449,25 @@ collects 5,912 cases. The new focused native mode requires complete evidence,
 including separate pinned-block and enclosing-job exits. It does not replace
 the old failed gate or establish its cause.
 
-The next [native task](http-assessment-retest.md) is the focused process-cleanup
-gate with diagnostics and complete raw capture retention. Existing HTTP evidence
-remains scoped to the unchanged runtime; no broad model or HTTP-mode repeat is
-required for the watchdog follow-up. Its fixtures need no existing lab models or
-operator configuration. R1.4 indexing, dashboard groups, logical
-findings, server target setup, stateful adapters and the broader roadmap remain
-open. This fixture acceptance does not establish general model sensitivity or
-enterprise readiness.
+PR #93 merged as `e4849206525f71674f982c1b30ea304e900ed2b8` with all eight PR
+and all eight main checks passing, including 5,912 tests per platform. The
+supplied focused native cleanup run is accepted against the frozen expectations:
+852 tests pass with two public HTTP modes deselected, all 41 main and four job
+captures are present, all 40 raw inventory entries hash-match, and the eight
+step, driver, pinned-block, enclosing-job and runner exits are zero. Its 31
+tracked child identities end gone with no forced kills or cleanup errors.
+All four original baseline hashes match. The sole dependency version change,
+filelock 4.2.4 to 4.2.5, remains an explicit environment qualification. See the
+[scoped acceptance](VALIDATION.md#supplied-native-focused-cleanup-retest-at-e484920).
+
+This closes the focused process-cleanup gate. The original full failure and
+incomplete retry remain recorded; their cause is still unknown. No further
+cleanup or broad HTTP/model repeat is needed for this slice. R1.4 indexing,
+dashboard groups, logical findings, server target setup, stateful adapters and
+the broader roadmap remain open. The next product slice is reference-only
+server HTTP target admission and execution, retaining tenant binding, revision
+pins, private values and current-policy revalidation. This fixture acceptance
+does not establish general model sensitivity or enterprise readiness.
 
 Do not ask for another broad GCP run merely for this roadmap update. Use isolated
 local fixtures for the initial correctness slices. Request a scoped, pinned
