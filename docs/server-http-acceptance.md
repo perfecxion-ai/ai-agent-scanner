@@ -22,6 +22,8 @@ successful command or a receipt from a different source revision.
 A zero master exit cannot establish a clean worker exit. The gate also requires
 one successful production cleanup-hook acknowledgement per observed normal
 worker and checks bounded boot, signal, nonzero-exit, timeout and exception logs.
+That acknowledgement follows completed dispatcher shutdown, owned database
+session/pool disposal and listener closure; any failed cleanup withholds it.
 Only the single fresh-identity worker deliberately killed by this invocation
 may omit its acknowledgement, with exactly its one matching SIGKILL event.
 Duplicate, unowned or additional signals remain failures. Reaching the configured

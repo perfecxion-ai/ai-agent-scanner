@@ -2545,16 +2545,20 @@ or discovery prerequisite is introduced. See
 [operator configuration](server-http-assessment.md) and the
 [synthetic gate](server-http-acceptance.md).
 
-The final local actual-process gate passes all fifteen exact assertions in
-95.795 seconds on Python 3.10.20, aiohttp 3.14.5 and Gunicorn 26.2.0, with warnings
+The final modern local process gate passes all fifteen exact assertions in
+94.807 seconds on Python 3.13.14, aiohttp 3.14.5 and Gunicorn 26.2.0, with warnings
 treated as errors. Its genuine exit is zero and stderr is empty. The authenticated
 API uses an owned private Unix HTTP socket; assessed fixtures use actual loopback
 HTTP and verified HTTPS, including Bearer credentials and an untrusted-CA control.
-The receipt binds library source `2894b47f93ce9f7db25aeb3cfba27678bf706291323e3c12feb5b19f93553ce6`,
+The receipt binds library source `0312b21582ca4edd58accedc0e06f6bb72cadd81a560d303bd329914d29bb0ee`,
 raw app `f6766e99415c71a24e32e79e0a26492dbbdc53fc947f4d07a4d26859da5a6f36`,
 driver `4fa4cf33d48a7d9d4ee8b6d5c32c939a9ca90ebd1be4e94c2411fd00fd49cf93`
 and separately checked Gunicorn hook
-`0f04f4003098751ddef9c0b8add1fb3fc310913f62d1b49536f90bf1082a943d`.
+`3e0c96b012f6b89e830d93d8a840c848aeb1db005862aaa0b1ab18a42d40395c`.
+
+The same frozen production source also passes all fifteen assertions on Python
+3.10.20 in 95.461 seconds, with genuine exit zero and empty stderr. Both receipts
+have identical producer identities and three clean actual master exits.
 
 - Tenant-scoped previews and refused raw/mixed/forged inputs make no target POST.
   Source/unit cases separately enforce the stronger no-DNS/no-database preview
@@ -2582,17 +2586,30 @@ preflight future remained active. Shutdown now requires explicit completed work
 and closes worker-owned listeners. The driver rejects swallowed cleanup-hook
 exceptions, missing acknowledgements and the graceful-shutdown boundary; its
 clock starts before termination. Reproduced cancelled TLS transport warnings
-required bounded post-work event-loop drainage and public connector cleanup on
-affected Python versions. No work deadline, cleanup allowance, warning rule or
-resource assertion was relaxed. Earlier failed process receipts remain failures.
+required bounded post-work event-loop drainage and session ownership of returned
+SSL transports through the documented connector API. Owned transports are
+aborted on close even when upstream request cancellation/timeouts have released
+them. Retention is bounded by existing request limits; no child request task or
+private upstream attribute is introduced. Worker shutdown also removes its
+database session and attempts disposal of every pool before acknowledging cleanup.
+No work deadline, cleanup allowance, Python warning rule or resource assertion was
+relaxed. Earlier failed process receipts remain failures.
 The aiohttp dependency floor is now 3.14.5, matching the tested release's corrected
 Python-version cleanup boundary. Older allowed releases treated Python 3.12.7
 differently; this change removes that declared compatibility gap without claiming
 the earliest corrected release or every historical dependency combination.
 
-The final connector/lifecycle increment passes 69 targeted tests; a separate
-affected HTTP/evidence/scope run passes 552 cases. Those runs overlap broader
-validation and are not pooled. The delivery PR records final full-suite,
+The corrected pre-modern-fix Python 3.10 full gate passes 6,026 tests with warnings
+as errors and 93% coverage. That result did not clear the separate Python
+3.12/3.13 transport and SQLite warnings reproduced in CI and actual owned workers.
+The modern baseline fails with thirteen workflow assertions; a database-only
+correction removes SQLite warnings but remains failed for TLS warnings. Only the
+combined correction achieves all fifteen assertions on the modern runtime.
+No earlier failure is reclassified. Actual held-peer cancellation plus header/body request timeout and
+overall timeout cases pass on Python 3.10, 3.12 and 3.13 with unchanged two-POST,
+one-receipt evidence. Independent ownership/disposal failure tests verify static
+errors, all cleanup attempts and withheld acknowledgements.
+Overlapping validation counts are not pooled. The delivery PR records final full-suite,
 packaging, independent review and required eight-job PR/main CI results.
 The one remaining external gate is the pinned native server process workflow.
 Installed CLI smoke is separate from source-server acceptance. These deterministic

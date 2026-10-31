@@ -65,8 +65,10 @@ a static error. File changes require an orderly server stop and restart; queued
 jobs retain their reviewed revisions and refuse changed definitions.
 
 Install current project dependencies, including aiohttp 3.14.5 or later. That
-tested minimum keeps SSL cleanup's Python-version boundary consistent with the
-worker cancellation path; older allowed releases used a different boundary.
+tested minimum supports the public connector ownership contract used for TLS
+cleanup. Each session retains its own SSL transports through cancellation and
+request timeouts, then aborts them before connector shutdown. No work deadline
+or TLS verification setting is changed.
 
 ## Review the offline plan
 

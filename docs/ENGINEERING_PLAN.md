@@ -275,7 +275,9 @@ No further cleanup retest is needed. Reference-only server HTTP target
 admission/execution now has local actual-process acceptance: fifteen assertions
 cover private startup references, tenant/revision binding, current-policy
 revalidation, conservative results, interruption and worker recovery without
-replay. Read-only list/plan routes require no model or discovery identifiers.
+replay. The exact Python 3.13.14 process gate includes owned TLS transport and
+database-pool cleanup without warnings; earlier failed modern receipts remain
+failed. Read-only list/plan routes require no model or discovery identifiers.
 The delivery PR records full-suite, package, independent review and eight-job
 PR/main gates. After delivery, request only the narrow pinned native server gate
 in [the acceptance guide](server-http-acceptance.md).

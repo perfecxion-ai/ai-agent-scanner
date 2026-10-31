@@ -484,7 +484,10 @@ through cancellation/deadline/worker SIGKILL, and queued policy/reference change
 Three real master exits and normal-worker cleanup acknowledgements are checked;
 there are no resource warnings or forced cleanup. Its API uses private Unix HTTP
 sockets while application targets use actual HTTP and verified HTTPS.
-The aiohttp minimum is 3.14.5, matching the tested connector cleanup boundary.
+The exact modern gate passes on Python 3.13.14 with aiohttp 3.14.5 and Gunicorn
+26.2.0. Sessions retain their own TLS transports through cancellation/timeouts;
+worker shutdown disposes database pools before its positive acknowledgement.
+Earlier Python 3.10 passes did not close these modern-runtime cleanup gaps.
 Full-suite, packaging, independent review and all eight PR/main CI results belong
 to the delivery PR. One narrow pinned native process gate remains; no broad model,
 inventory or backup repeat is needed. Stateful sessions, dashboard setup, logical
