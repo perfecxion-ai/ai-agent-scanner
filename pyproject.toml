@@ -29,7 +29,7 @@ classifiers = [
     "Topic :: Software Development :: Testing",
 ]
 dependencies = [
-    "aiohttp>=3.9.0",
+    "aiohttp>=3.14.5",
     "certifi>=2026.10.19",
     "click>=8.0.0",
     "dnspython>=2.4.0",

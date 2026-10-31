@@ -2585,6 +2585,10 @@ clock starts before termination. Reproduced cancelled TLS transport warnings
 required bounded post-work event-loop drainage and public connector cleanup on
 affected Python versions. No work deadline, cleanup allowance, warning rule or
 resource assertion was relaxed. Earlier failed process receipts remain failures.
+The aiohttp dependency floor is now 3.14.5, matching the tested release's corrected
+Python-version cleanup boundary. Older allowed releases treated Python 3.12.7
+differently; this change removes that declared compatibility gap without claiming
+the earliest corrected release or every historical dependency combination.
 
 The final connector/lifecycle increment passes 69 targeted tests; a separate
 affected HTTP/evidence/scope run passes 552 cases. Those runs overlap broader
